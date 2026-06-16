@@ -4,7 +4,8 @@ import './GangSheet.css';
 const SHEET_WIDTH_INCHES = 22;
 const DPI = 300;
 
-function calculateLayout(artworks, sheetWidth, cuttingGap, margins = { top: 0, bottom: 0, left: 0, right: 0 }) {
+function calculateLayout(artworks, sheetWidth, cuttingGap, margins, tightPack = false) {
+  const marg = margins || { top: 0.5, bottom: 0.5, left: 0.5, right: 0.5 };
   const items = [];
   for (const art of artworks) {
     for (let i = 0; i < art.repetitions; i++) {
@@ -12,38 +13,138 @@ function calculateLayout(artworks, sheetWidth, cuttingGap, margins = { top: 0, b
     }
   }
 
-  // Sort by height descending for better packing
-  items.sort((a, b) => b.h - a.h);
+  if (items.length === 0) return { items: [], totalHeight: 0 };
 
-  // Available width = sheet width minus left and right margins
-  const availableWidth = sheetWidth - margins.left - margins.right;
+  const availableWidth = sheetWidth - marg.left - marg.right;
 
+  if (!tightPack) {
+    // Simple row-by-row packing
+    items.sort((a, b) => b.h - a.h);
+    const placed = [];
+    let currentY = marg.top;
+    let rowX = marg.left;
+    let rowMaxH = 0;
+
+    for (const item of items) {
+      if (rowX > marg.left && rowX + item.w > sheetWidth - marg.right) {
+        currentY += rowMaxH + cuttingGap;
+        rowX = marg.left;
+        rowMaxH = 0;
+      }
+      placed.push({ ...item, x: rowX, y: currentY, rotated: false });
+      rowX += item.w + cuttingGap;
+      rowMaxH = Math.max(rowMaxH, item.h);
+    }
+    currentY += rowMaxH + marg.bottom;
+    return { items: placed, totalHeight: currentY };
+  }
+
+  // TIGHT PACK: 2D free-rectangle bin packing with rotation
+  // Uses maxrects algorithm - maintains a list of free rectangles
+  items.sort((a, b) => Math.max(b.w, b.h) - Math.max(a.w, a.h));
+
+  let freeRects = [{ x: marg.left, y: marg.top, w: availableWidth, h: 10000 }]; // start with huge height
   const placed = [];
-  let currentY = margins.top;
-  let rowItems = [];
-  let rowX = margins.left;
-  let rowMaxH = 0;
+  let maxY = marg.top;
 
   for (const item of items) {
-    if (rowX + item.w > sheetWidth - margins.right && rowItems.length > 0) {
-      placed.push(...rowItems);
-      currentY += rowMaxH + cuttingGap;
-      rowItems = [];
-      rowX = margins.left;
-      rowMaxH = 0;
+    let bestScore = Infinity;
+    let bestRect = -1;
+    let bestX = 0, bestY = 0;
+    let bestW = item.w, bestH = item.h;
+    let bestRotated = false;
+
+    // Try fitting in each free rectangle (normal + rotated)
+    for (let ri = 0; ri < freeRects.length; ri++) {
+      const rect = freeRects[ri];
+
+      // Try normal orientation
+      if (item.w + cuttingGap <= rect.w + 0.001 && item.h + cuttingGap <= rect.h + 0.001) {
+        // Score: prefer positions closer to top-left (shorter y, then shorter x)
+        const score = rect.y * 1000 + rect.x;
+        if (score < bestScore) {
+          bestScore = score;
+          bestRect = ri;
+          bestX = rect.x;
+          bestY = rect.y;
+          bestW = item.w;
+          bestH = item.h;
+          bestRotated = false;
+        }
+      }
+
+      // Try rotated (90 degrees)
+      if (item.h + cuttingGap <= rect.w + 0.001 && item.w + cuttingGap <= rect.h + 0.001) {
+        const score = rect.y * 1000 + rect.x;
+        if (score < bestScore) {
+          bestScore = score;
+          bestRect = ri;
+          bestX = rect.x;
+          bestY = rect.y;
+          bestW = item.h; // swapped
+          bestH = item.w; // swapped
+          bestRotated = true;
+        }
+      }
     }
-    rowItems.push({ ...item, x: rowX, y: currentY });
-    rowX += item.w + cuttingGap;
-    rowMaxH = Math.max(rowMaxH, item.h);
-  }
-  if (rowItems.length > 0) {
-    placed.push(...rowItems);
-    currentY += rowMaxH;
+
+    if (bestRect >= 0) {
+      // Place the item
+      placed.push({ ...item, x: bestX, y: bestY, w: bestW, h: bestH, rotated: bestRotated });
+      maxY = Math.max(maxY, bestY + bestH);
+
+      // Split free rectangles around the placed item
+      const placedRect = { x: bestX, y: bestY, w: bestW + cuttingGap, h: bestH + cuttingGap };
+      const newFreeRects = [];
+
+      for (const fr of freeRects) {
+        // Check if this free rect overlaps with placed item
+        if (placedRect.x >= fr.x + fr.w || placedRect.x + placedRect.w <= fr.x ||
+            placedRect.y >= fr.y + fr.h || placedRect.y + placedRect.h <= fr.y) {
+          // No overlap, keep as is
+          newFreeRects.push(fr);
+          continue;
+        }
+
+        // Split into up to 4 remaining rectangles
+        // Left portion
+        if (placedRect.x > fr.x) {
+          newFreeRects.push({ x: fr.x, y: fr.y, w: placedRect.x - fr.x, h: fr.h });
+        }
+        // Right portion
+        if (placedRect.x + placedRect.w < fr.x + fr.w) {
+          newFreeRects.push({ x: placedRect.x + placedRect.w, y: fr.y, w: (fr.x + fr.w) - (placedRect.x + placedRect.w), h: fr.h });
+        }
+        // Top portion
+        if (placedRect.y > fr.y) {
+          newFreeRects.push({ x: fr.x, y: fr.y, w: fr.w, h: placedRect.y - fr.y });
+        }
+        // Bottom portion
+        if (placedRect.y + placedRect.h < fr.y + fr.h) {
+          newFreeRects.push({ x: fr.x, y: placedRect.y + placedRect.h, w: fr.w, h: (fr.y + fr.h) - (placedRect.y + placedRect.h) });
+        }
+      }
+
+      // Remove free rects that are fully contained in another
+      freeRects = [];
+      for (let i = 0; i < newFreeRects.length; i++) {
+        let contained = false;
+        for (let j = 0; j < newFreeRects.length; j++) {
+          if (i === j) continue;
+          const a = newFreeRects[i], b = newFreeRects[j];
+          if (a.x >= b.x && a.y >= b.y && a.x + a.w <= b.x + b.w && a.y + a.h <= b.y + b.h) {
+            contained = true;
+            break;
+          }
+        }
+        if (!contained && newFreeRects[i].w > 0.5 && newFreeRects[i].h > 0.5) {
+          freeRects.push(newFreeRects[i]);
+        }
+      }
+    }
   }
 
-  currentY += margins.bottom;
-
-  return { items: placed, totalHeight: currentY };
+  return { items: placed, totalHeight: maxY + marg.bottom };
 }
 
 function GangSheet({ sharedArtwork }) {
@@ -65,9 +166,9 @@ function GangSheet({ sharedArtwork }) {
 
   // Recalculate layout when artworks or settings change
   useEffect(() => {
-    const newLayout = calculateLayout(artworks, SHEET_WIDTH_INCHES, cuttingGap, margins);
+    const newLayout = calculateLayout(artworks, SHEET_WIDTH_INCHES, cuttingGap, margins, tightPack);
     setLayout(newLayout);
-  }, [artworks, cuttingGap, margins]);
+  }, [artworks, cuttingGap, margins, tightPack]);
 
   // Draw canvas
   const drawCanvas = useCallback(() => {
@@ -129,7 +230,16 @@ function GangSheet({ sharedArtwork }) {
 
       const img = imageCache.current[item.dataUrl];
       if (img && img.complete) {
-        ctx.drawImage(img, x, y, w, h);
+        if (item.rotated) {
+          // Draw rotated 90° clockwise
+          ctx.save();
+          ctx.translate(x + w, y);
+          ctx.rotate(Math.PI / 2);
+          ctx.drawImage(img, 0, 0, h, w); // swap w/h for drawing
+          ctx.restore();
+        } else {
+          ctx.drawImage(img, x, y, w, h);
+        }
       } else {
         // Placeholder
         ctx.fillStyle = '#f1f5f9';
@@ -196,15 +306,14 @@ function GangSheet({ sharedArtwork }) {
         img.onload = () => {
           const id = nextId.current++;
           const aspect = img.naturalWidth / img.naturalHeight;
-          // Default: fit within 4" wide
-          let widthInches = Math.min(4, SHEET_WIDTH_INCHES);
-          let heightInches = widthInches / aspect;
-          if (heightInches > 10) {
-            heightInches = 10;
-            widthInches = heightInches * aspect;
+          // Use actual image size at 300 DPI
+          let widthInches = parseFloat((img.naturalWidth / DPI).toFixed(2));
+          let heightInches = parseFloat((img.naturalHeight / DPI).toFixed(2));
+          // Cap to sheet width if wider
+          if (widthInches > SHEET_WIDTH_INCHES - 1) {
+            widthInches = SHEET_WIDTH_INCHES - 1;
+            heightInches = parseFloat((widthInches / aspect).toFixed(2));
           }
-          widthInches = parseFloat(widthInches.toFixed(2));
-          heightInches = parseFloat(heightInches.toFixed(2));
 
           setArtworks((prev) => [
             ...prev,
@@ -234,10 +343,12 @@ function GangSheet({ sharedArtwork }) {
     img.onload = () => {
       const id = nextId.current++;
       const aspect = img.naturalWidth / img.naturalHeight;
-      let widthInches = Math.min(4, SHEET_WIDTH_INCHES);
-      let heightInches = widthInches / aspect;
-      widthInches = parseFloat(widthInches.toFixed(2));
-      heightInches = parseFloat(heightInches.toFixed(2));
+      let widthInches = parseFloat((img.naturalWidth / DPI).toFixed(2));
+      let heightInches = parseFloat((img.naturalHeight / DPI).toFixed(2));
+      if (widthInches > SHEET_WIDTH_INCHES - 1) {
+        widthInches = SHEET_WIDTH_INCHES - 1;
+        heightInches = parseFloat((widthInches / aspect).toFixed(2));
+      }
 
       setArtworks((prev) => [
         ...prev,
@@ -599,7 +710,7 @@ function GangSheet({ sharedArtwork }) {
           </div>
 
           <button className="gs-btn-recalc" onClick={() => {
-            const newLayout = calculateLayout(artworks, SHEET_WIDTH_INCHES, cuttingGap, margins);
+            const newLayout = calculateLayout(artworks, SHEET_WIDTH_INCHES, cuttingGap, margins, tightPack);
             setLayout(newLayout);
           }}>
             ↻ Recalculate Layout
