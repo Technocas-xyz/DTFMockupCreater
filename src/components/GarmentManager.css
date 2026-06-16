@@ -1,0 +1,526 @@
+.garment-manager {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.garment-manager-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  background: white;
+  border-bottom: 1px solid var(--border);
+}
+
+.garment-manager-header-left h1 {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.garment-manager-header-left p {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.garment-manager-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Left Panel - Upload */
+.gm-left-panel {
+  width: 280px;
+  flex-shrink: 0;
+  padding: 20px;
+  border-right: 1px solid var(--border);
+  background: white;
+  overflow-y: auto;
+}
+
+.gm-upload-area {
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  padding: 32px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: #f8fafc;
+}
+
+.gm-upload-area:hover,
+.gm-upload-area.drag-over {
+  border-color: var(--primary);
+  background: var(--primary-light);
+}
+
+.gm-upload-area svg {
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+}
+
+.gm-upload-area p {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.gm-upload-area .gm-upload-hint {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 6px;
+}
+
+.gm-error-msg {
+  background: #fef2f2;
+  color: var(--danger);
+  font-size: 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin-top: 12px;
+}
+
+.gm-file-info {
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.gm-file-info p {
+  margin-bottom: 4px;
+}
+
+.gm-file-info p:last-child {
+  margin-bottom: 0;
+}
+
+.gm-trim-controls {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gm-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.gm-toggle {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  background: #cbd5e1;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.gm-toggle.active {
+  background: var(--primary);
+}
+
+.gm-toggle::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+
+.gm-toggle.active::after {
+  transform: translateX(16px);
+}
+
+.gm-btn-trim {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  transition: all 0.2s;
+}
+
+.gm-btn-trim:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+/* Center Panel - Canvas Preview */
+.gm-center-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+  background: #f8fafc;
+  overflow: hidden;
+}
+
+.gm-canvas-controls {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  background: white;
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.gm-canvas-controls button {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: transparent;
+  transition: all 0.2s;
+}
+
+.gm-canvas-controls button:hover {
+  background: #f1f5f9;
+  color: var(--text-primary);
+}
+
+.gm-canvas-wrapper {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background-image:
+    linear-gradient(45deg, #e2e8f0 25%, transparent 25%),
+    linear-gradient(-45deg, #e2e8f0 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #e2e8f0 75%),
+    linear-gradient(-45deg, transparent 75%, #e2e8f0 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+  background-color: #ffffff;
+  cursor: grab;
+}
+
+.gm-canvas-wrapper:active {
+  cursor: grabbing;
+}
+
+.gm-canvas-wrapper canvas {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.gm-canvas-dimensions {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: white;
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+/* Right Panel - Garment Library */
+.gm-right-panel {
+  width: 280px;
+  flex-shrink: 0;
+  padding: 20px;
+  border-left: 1px solid var(--border);
+  background: white;
+  overflow-y: auto;
+}
+
+.gm-right-panel h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.gm-library-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.gm-library-card {
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.gm-library-card:hover {
+  border-color: var(--primary);
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.1);
+}
+
+.gm-library-card.selected {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+.gm-library-card-thumb {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  background-image:
+    linear-gradient(45deg, #f1f5f9 25%, transparent 25%),
+    linear-gradient(-45deg, #f1f5f9 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #f1f5f9 75%),
+    linear-gradient(-45deg, transparent 75%, #f1f5f9 75%);
+  background-size: 10px 10px;
+  background-position: 0 0, 0 5px, 5px -5px, -5px 0px;
+  background-color: #ffffff;
+  padding: 6px;
+}
+
+.gm-library-card-info {
+  padding: 6px 8px;
+  border-top: 1px solid var(--border);
+}
+
+.gm-library-card-name {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gm-type-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 10px;
+  margin-top: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.gm-type-badge.t-shirt { background: #dbeafe; color: #1d4ed8; }
+.gm-type-badge.hoodie { background: #ede9fe; color: #7c3aed; }
+.gm-type-badge.long-sleeve { background: #dcfce7; color: #16a34a; }
+.gm-type-badge.tank-top { background: #ffedd5; color: #ea580c; }
+.gm-type-badge.other { background: #f1f5f9; color: #64748b; }
+
+.gm-library-card-delete {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.9);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.gm-library-card:hover .gm-library-card-delete {
+  opacity: 1;
+}
+
+.gm-library-empty {
+  text-align: center;
+  padding: 24px 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.gm-library-count {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 10px;
+  text-align: center;
+}
+
+/* Bottom Panel - Settings */
+.gm-bottom-panel {
+  padding: 16px 24px;
+  background: white;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: flex-end;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.gm-setting-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gm-setting-group label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.gm-setting-group select,
+.gm-setting-group input[type="text"] {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-primary);
+  min-width: 140px;
+}
+
+.gm-setting-group select:focus,
+.gm-setting-group input[type="text"]:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+.gm-slider-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gm-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gm-slider-row label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  min-width: 90px;
+  text-transform: none;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.gm-slider-row input[type="range"] {
+  flex: 1;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--border);
+  border-radius: 2px;
+  outline: none;
+}
+
+.gm-slider-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--primary);
+  cursor: pointer;
+}
+
+.gm-slider-row span {
+  font-size: 11px;
+  color: var(--text-primary);
+  font-weight: 500;
+  min-width: 32px;
+  text-align: right;
+}
+
+.gm-bottom-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.gm-btn-save {
+  background: var(--primary);
+  color: white;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.2s;
+}
+
+.gm-btn-save:hover {
+  background: var(--primary-hover);
+}
+
+.gm-btn-use {
+  background: var(--success);
+  color: white;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.2s;
+}
+
+.gm-btn-use:hover {
+  background: #059669;
+}
+
+.gm-btn-use:disabled,
+.gm-btn-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Number Input Rows */
+.gm-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.gm-input-row label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  min-width: 60px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.gm-num-input {
+  width: 70px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  text-align: center;
+}
+
+.gm-num-input:focus {
+  border-color: var(--primary);
+  outline: none;
+}

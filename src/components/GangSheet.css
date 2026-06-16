@@ -1,0 +1,495 @@
+.gang-sheet {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.gang-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  background: white;
+  border-bottom: 1px solid var(--border);
+}
+
+.gang-sheet-header-left h1 {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.gang-sheet-header-left p {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.gang-sheet-header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.gs-btn-download {
+  background: var(--primary);
+  color: white;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.2s;
+  border: none;
+  cursor: pointer;
+}
+
+.gs-btn-download:hover {
+  background: var(--primary-hover);
+}
+
+.gs-btn-download:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.gs-btn-pdf {
+  background: white;
+  color: var(--text-primary);
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.gs-btn-pdf:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+/* Body Layout */
+.gang-sheet-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Left Panel - Artwork List */
+.gs-left-panel {
+  width: 300px;
+  flex-shrink: 0;
+  padding: 16px;
+  border-right: 1px solid var(--border);
+  background: white;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.gs-add-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.gs-btn-add {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: white;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.gs-btn-add:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.gs-btn-add.primary {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+.gs-btn-add.primary:hover {
+  background: var(--primary-hover);
+}
+
+/* Artwork List Items */
+.gs-artwork-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.gs-artwork-item {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #f8fafc;
+  position: relative;
+}
+
+.gs-artwork-thumb {
+  width: 56px;
+  height: 56px;
+  border-radius: 6px;
+  object-fit: contain;
+  background: white;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.gs-artwork-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gs-artwork-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gs-artwork-dims {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.gs-artwork-controls {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.gs-artwork-controls label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.gs-artwork-controls input[type="number"] {
+  width: 52px;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 12px;
+  text-align: center;
+  color: var(--text-primary);
+}
+
+.gs-artwork-controls input[type="number"]:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
+.gs-input-group {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.gs-input-group span {
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.gs-artwork-delete {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.9);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.gs-artwork-item:hover .gs-artwork-delete {
+  opacity: 1;
+}
+
+.gs-total-count {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: center;
+  padding: 8px;
+  border-top: 1px solid var(--border);
+}
+
+/* Center Panel - Canvas Preview */
+.gs-center-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px;
+  background: #f8fafc;
+  overflow: hidden;
+}
+
+.gs-canvas-toolbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  align-items: center;
+}
+
+.gs-zoom-btn {
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: white;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.gs-zoom-btn:hover {
+  background: #f1f5f9;
+  color: var(--text-primary);
+}
+
+.gs-zoom-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  min-width: 44px;
+  text-align: center;
+}
+
+.gs-canvas-container {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow: auto;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #e2e8f0;
+  padding: 20px;
+}
+
+.gs-canvas-container canvas {
+  border-radius: 4px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+}
+
+.gs-height-indicator {
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #2563eb;
+}
+
+/* Right Panel - Settings */
+.gs-right-panel {
+  width: 240px;
+  flex-shrink: 0;
+  padding: 16px;
+  border-left: 1px solid var(--border);
+  background: white;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.gs-settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gs-settings-section h3 {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin: 0;
+}
+
+.gs-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.gs-setting-row label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.gs-setting-row input[type="number"] {
+  width: 64px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  text-align: center;
+  color: var(--text-primary);
+}
+
+.gs-setting-row input[type="number"]:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
+.gs-setting-row select {
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.gs-setting-row select:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
+.gs-setting-value {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.gs-setting-value.highlight {
+  color: #2563eb;
+  font-weight: 600;
+}
+
+/* Toggle */
+.gs-toggle {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  background: #cbd5e1;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.2s;
+  border: none;
+}
+
+.gs-toggle.active {
+  background: var(--primary);
+}
+
+.gs-toggle::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+
+.gs-toggle.active::after {
+  transform: translateX(16px);
+}
+
+.gs-btn-recalc {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: white;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: 8px;
+}
+
+.gs-btn-recalc:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+/* Stats */
+.gs-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.gs-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+}
+
+.gs-stat-row label {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.gs-stat-row span {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.gs-stat-row span.highlight {
+  color: #2563eb;
+}
+
+/* Empty state */
+.gs-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.gs-empty-state svg {
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+
+.gs-empty-state p {
+  font-size: 13px;
+}
