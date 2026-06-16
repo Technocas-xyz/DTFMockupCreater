@@ -299,7 +299,7 @@ function GangSheet({ sharedArtwork }) {
   const handleFileSelect = (e) => {
     const files = Array.from(e.target.files);
     for (const file of files) {
-      if (!file.type.startsWith('image/')) continue;
+      if (!file.type.includes('png')) continue; // PNG only
       const reader = new FileReader();
       reader.onload = (ev) => {
         const img = new Image();
@@ -394,71 +394,89 @@ function GangSheet({ sharedArtwork }) {
   const handleDownload = async () => {
     if (layout.items.length === 0) return;
 
-    const exportCanvas = document.createElement('canvas');
+    const MAX_PAGE_HEIGHT = 200; // inches per page
     const exportWidth = SHEET_WIDTH_INCHES * DPI;
-    const exportHeight = layout.totalHeight * DPI;
-    exportCanvas.width = exportWidth;
-    exportCanvas.height = exportHeight;
+    const totalHeightInches = layout.totalHeight;
+    const numPages = Math.ceil(totalHeightInches / MAX_PAGE_HEIGHT);
 
-    const ctx = exportCanvas.getContext('2d');
+    for (let page = 0; page < numPages; page++) {
+      const pageStartY = page * MAX_PAGE_HEIGHT;
+      const pageEndY = Math.min((page + 1) * MAX_PAGE_HEIGHT, totalHeightInches);
+      const pageHeight = pageEndY - pageStartY;
+      const exportHeight = Math.round(pageHeight * DPI);
 
-    if (!bgTransparent) {
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, exportWidth, exportHeight);
-    }
+      const exportCanvas = document.createElement('canvas');
+      exportCanvas.width = exportWidth;
+      exportCanvas.height = exportHeight;
+      const ctx = exportCanvas.getContext('2d');
 
-    // Draw all items at 300 DPI
-    const drawPromises = layout.items.map((item) => {
-      return new Promise((resolve) => {
-        const img = imageCache.current[item.dataUrl];
-        if (img && img.complete) {
-          ctx.drawImage(
-            img,
-            item.x * DPI,
-            item.y * DPI,
-            item.w * DPI,
-            item.h * DPI
-          );
-          resolve();
-        } else {
-          const newImg = new Image();
-          newImg.onload = () => {
-            ctx.drawImage(
-              newImg,
-              item.x * DPI,
-              item.y * DPI,
-              item.w * DPI,
-              item.h * DPI
-            );
+      if (!bgTransparent) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, exportWidth, exportHeight);
+      }
+
+      // Draw items that fall on this page
+      const pageItems = layout.items.filter(item => {
+        const itemBottom = item.y + item.h;
+        return itemBottom > pageStartY && item.y < pageEndY;
+      });
+
+      // Draw items at 300 DPI, offset by page start
+      const drawPromises = pageItems.map((item) => {
+        return new Promise((resolve) => {
+          const drawItem = (img) => {
+            const x = item.x * DPI;
+            const y = (item.y - pageStartY) * DPI;
+            const w = item.w * DPI;
+            const h = item.h * DPI;
+
+            if (item.rotated) {
+              ctx.save();
+              ctx.translate(x + w, y);
+              ctx.rotate(Math.PI / 2);
+              ctx.drawImage(img, 0, 0, h, w);
+              ctx.restore();
+            } else {
+              ctx.drawImage(img, x, y, w, h);
+            }
+
+            // Cut lines
+            if (showCutLines) {
+              ctx.strokeStyle = '#ef4444';
+              ctx.lineWidth = 2;
+              ctx.setLineDash([8, 6]);
+              ctx.strokeRect(x, y, w, h);
+              ctx.setLineDash([]);
+            }
             resolve();
           };
-          newImg.onerror = resolve;
-          newImg.src = item.dataUrl;
-        }
+
+          const img = imageCache.current[item.dataUrl];
+          if (img && img.complete) {
+            drawItem(img);
+          } else {
+            const newImg = new Image();
+            newImg.onload = () => drawItem(newImg);
+            newImg.onerror = resolve;
+            newImg.src = item.dataUrl;
+          }
+        });
       });
-    });
 
-    await Promise.all(drawPromises);
+      await Promise.all(drawPromises);
 
-    // Draw cut lines on export
-    if (showCutLines) {
-      ctx.strokeStyle = '#ef4444';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([8, 6]);
-      for (const item of layout.items) {
-        ctx.strokeRect(
-          item.x * DPI,
-          item.y * DPI,
-          item.w * DPI,
-          item.h * DPI
-        );
+      // Download this page
+      const link = document.createElement('a');
+      const pageLabel = numPages > 1 ? `-page${page + 1}of${numPages}` : '';
+      link.download = `gang-sheet-${SHEET_WIDTH_INCHES}x${pageHeight.toFixed(1)}${pageLabel}-${DPI}dpi.png`;
+      link.href = exportCanvas.toDataURL('image/png');
+      link.click();
+
+      // Small delay between downloads
+      if (numPages > 1 && page < numPages - 1) {
+        await new Promise(r => setTimeout(r, 500));
       }
     }
-
-    const link = document.createElement('a');
-    link.download = `gang-sheet-${SHEET_WIDTH_INCHES}x${layout.totalHeight.toFixed(1)}-${DPI}dpi.png`;
-    link.href = exportCanvas.toDataURL('image/png');
-    link.click();
   };
 
   const totalItemCount = artworks.reduce((sum, a) => sum + a.repetitions, 0);
@@ -506,7 +524,7 @@ function GangSheet({ sharedArtwork }) {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept=".png,image/png"
             multiple
             style={{ display: 'none' }}
             onChange={handleFileSelect}
@@ -706,6 +724,10 @@ function GangSheet({ sharedArtwork }) {
             <div className="gs-stat-row">
               <label>Export Size</label>
               <span>{SHEET_WIDTH_INCHES * DPI} × {Math.round(layout.totalHeight * DPI)} px ({SHEET_WIDTH_INCHES}" × {layout.totalHeight.toFixed(2)}")</span>
+            </div>
+            <div className="gs-stat-row">
+              <label>Pages</label>
+              <span>{Math.ceil(layout.totalHeight / 200)} {layout.totalHeight > 200 ? '(auto-paginated at 200")' : ''}</span>
             </div>
           </div>
 
