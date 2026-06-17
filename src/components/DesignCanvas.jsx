@@ -74,7 +74,8 @@ function DesignCanvas({
     let pxPerInchW, pxPerInchH, pxPerInch, tshirtW, tshirtH, tshirtX, tshirtY;
 
     if (customGarment && tshirtImage) {
-      // Custom garment: display as uploaded, fit to 90% of canvas preserving aspect ratio
+      // Custom garment: display the uploaded image as-is (fit to 90% canvas, keep aspect ratio)
+      // NO size chart calculations — the garment image IS the shirt
       const imgW = tshirtImage.naturalWidth || tshirtImage.width;
       const imgH = tshirtImage.naturalHeight || tshirtImage.height;
       const imgAspect = imgW / imgH;
@@ -89,13 +90,14 @@ function DesignCanvas({
         drawW = drawH * imgAspect;
       }
 
-      // The uploaded garment image width IS the body width
       tshirtW = drawW;
       tshirtH = drawH;
       tshirtX = (CANVAS_WIDTH - drawW) / 2;
       tshirtY = (CANVAS_HEIGHT - drawH) / 2;
-      // pxPerInch based on the garment image width = body width in inches
-      pxPerInch = drawW / bodyWidth;
+
+      // pxPerInch from the garment's own stored shirt width (from Garment Manager input)
+      const garmentBodyWidth = customGarment.bodyMapping?.shirtWidthInches || bodyWidth;
+      pxPerInch = drawW / garmentBodyWidth;
       pxPerInchW = pxPerInch;
       pxPerInchH = pxPerInch;
     } else {
