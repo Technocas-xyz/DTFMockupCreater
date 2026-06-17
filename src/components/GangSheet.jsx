@@ -407,10 +407,39 @@ function GangSheet({ sharedArtwork }) {
   const handleDownload = async () => {
     if (layout.items.length === 0) return;
 
+    // First, ensure all images are loaded and decoded
+    const imageLoadPromises = [];
+    const loadedImages = {};
+    
+    for (const item of layout.items) {
+      if (!loadedImages[item.dataUrl]) {
+        const promise = new Promise((resolve) => {
+          const existing = imageCache.current[item.dataUrl];
+          if (existing && existing.complete && existing.naturalWidth > 0) {
+            loadedImages[item.dataUrl] = existing;
+            resolve();
+          } else {
+            const img = new Image();
+            img.onload = () => {
+              loadedImages[item.dataUrl] = img;
+              resolve();
+            };
+            img.onerror = () => resolve();
+            img.src = item.dataUrl;
+          }
+        });
+        imageLoadPromises.push(promise);
+      }
+    }
+    await Promise.all(imageLoadPromises);
+
     const MAX_PAGE_HEIGHT = 200; // inches per page
     const exportWidth = SHEET_WIDTH_INCHES * DPI;
     const totalHeightInches = layout.totalHeight;
     const numPages = Math.ceil(totalHeightInches / MAX_PAGE_HEIGHT);
+
+    // Max canvas height browsers support (Chrome ~32767, Firefox ~32767, Safari ~16384)
+    const MAX_CANVAS_HEIGHT = 14000; // stay well within safe limits
 
     for (let page = 0; page < numPages; page++) {
       const pageStartY = page * MAX_PAGE_HEIGHT;
@@ -418,84 +447,42 @@ function GangSheet({ sharedArtwork }) {
       const pageHeight = pageEndY - pageStartY;
       const exportHeight = Math.round(pageHeight * DPI);
 
-      // For very large canvases, chunk the rendering to avoid memory issues
-      // Max canvas dimension browsers typically support is ~16384px
-      const MAX_CHUNK_HEIGHT = 16000; // pixels per chunk
-      const totalChunks = Math.ceil(exportHeight / MAX_CHUNK_HEIGHT);
+      const totalChunks = Math.ceil(exportHeight / MAX_CANVAS_HEIGHT);
 
-      // If within browser canvas limits, render as single canvas
-      if (exportHeight <= MAX_CHUNK_HEIGHT) {
+      for (let chunk = 0; chunk < totalChunks; chunk++) {
+        const chunkStartPx = chunk * MAX_CANVAS_HEIGHT;
+        const chunkEndPx = Math.min((chunk + 1) * MAX_CANVAS_HEIGHT, exportHeight);
+        const chunkHeightPx = chunkEndPx - chunkStartPx;
+        const chunkStartInches = pageStartY + (chunkStartPx / DPI);
+        const chunkEndInches = pageStartY + (chunkEndPx / DPI);
+
         const exportCanvas = document.createElement('canvas');
         exportCanvas.width = exportWidth;
-        exportCanvas.height = exportHeight;
+        exportCanvas.height = chunkHeightPx;
         const ctx = exportCanvas.getContext('2d');
+
+        if (!ctx) {
+          console.error('Failed to get canvas context for export');
+          continue;
+        }
 
         if (!bgTransparent) {
           ctx.fillStyle = '#ffffff';
-          ctx.fillRect(0, 0, exportWidth, exportHeight);
+          ctx.fillRect(0, 0, exportWidth, chunkHeightPx);
         }
 
-        // Draw items that fall on this page
-        const pageItems = layout.items.filter(item => {
+        // Draw items that fall in this chunk
+        const chunkItems = layout.items.filter(item => {
           const itemBottom = item.y + item.h;
-          return itemBottom > pageStartY && item.y < pageEndY;
+          return itemBottom > chunkStartInches && item.y < chunkEndInches;
         });
 
-        // Draw items at 300 DPI, offset by page start
-        await drawItemsToContext(ctx, pageItems, pageStartY);
+        for (const item of chunkItems) {
+          const img = loadedImages[item.dataUrl];
+          if (!img) continue;
 
-        // Use toBlob for large files - much more memory efficient than toDataURL
-        await downloadCanvasAsBlob(exportCanvas, page, numPages, pageHeight);
-      } else {
-        // For extremely tall sheets, split into sub-pages within the page
-        for (let chunk = 0; chunk < totalChunks; chunk++) {
-          const chunkStartPx = chunk * MAX_CHUNK_HEIGHT;
-          const chunkEndPx = Math.min((chunk + 1) * MAX_CHUNK_HEIGHT, exportHeight);
-          const chunkHeight = chunkEndPx - chunkStartPx;
-          const chunkStartInches = pageStartY + (chunkStartPx / DPI);
-          const chunkEndInches = pageStartY + (chunkEndPx / DPI);
-
-          const exportCanvas = document.createElement('canvas');
-          exportCanvas.width = exportWidth;
-          exportCanvas.height = chunkHeight;
-          const ctx = exportCanvas.getContext('2d');
-
-          if (!bgTransparent) {
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(0, 0, exportWidth, chunkHeight);
-          }
-
-          // Draw items that fall in this chunk
-          const chunkItems = layout.items.filter(item => {
-            const itemBottom = item.y + item.h;
-            return itemBottom > chunkStartInches && item.y < chunkEndInches;
-          });
-
-          await drawItemsToContext(ctx, chunkItems, chunkStartInches);
-
-          const subLabel = totalChunks > 1 ? `-part${chunk + 1}of${totalChunks}` : '';
-          const pageLabel = numPages > 1 ? `-page${page + 1}of${numPages}` : '';
-          const chunkHeightInches = (chunkHeight / DPI).toFixed(1);
-          await downloadCanvasBlobWithName(exportCanvas, `gang-sheet-${SHEET_WIDTH_INCHES}x${chunkHeightInches}${pageLabel}${subLabel}-${DPI}dpi.png`);
-
-          // Delay between chunk downloads
-          await new Promise(r => setTimeout(r, 600));
-        }
-      }
-
-      // Delay between page downloads
-      if (numPages > 1 && page < numPages - 1) {
-        await new Promise(r => setTimeout(r, 500));
-      }
-    }
-  };
-
-  const drawItemsToContext = async (ctx, items, offsetY) => {
-    const drawPromises = items.map((item) => {
-      return new Promise((resolve) => {
-        const drawItem = (img) => {
           const x = item.x * DPI;
-          const y = (item.y - offsetY) * DPI;
+          const y = (item.y - chunkStartInches) * DPI;
           const w = item.w * DPI;
           const h = item.h * DPI;
 
@@ -509,7 +496,6 @@ function GangSheet({ sharedArtwork }) {
             ctx.drawImage(img, x, y, w, h);
           }
 
-          // Cut lines
           if (showCutLines) {
             ctx.strokeStyle = '#ef4444';
             ctx.lineWidth = 2;
@@ -517,57 +503,71 @@ function GangSheet({ sharedArtwork }) {
             ctx.strokeRect(x, y, w, h);
             ctx.setLineDash([]);
           }
-          resolve();
-        };
-
-        const img = imageCache.current[item.dataUrl];
-        if (img && img.complete) {
-          drawItem(img);
-        } else {
-          const newImg = new Image();
-          newImg.onload = () => drawItem(newImg);
-          newImg.onerror = resolve;
-          newImg.src = item.dataUrl;
         }
-      });
-    });
-    await Promise.all(drawPromises);
-  };
 
-  const downloadCanvasAsBlob = (canvas, page, numPages, pageHeight) => {
-    return new Promise((resolve) => {
-      const pageLabel = numPages > 1 ? `-page${page + 1}of${numPages}` : '';
-      const filename = `gang-sheet-${SHEET_WIDTH_INCHES}x${pageHeight.toFixed(1)}${pageLabel}-${DPI}dpi.png`;
-      canvas.toBlob((blob) => {
-        if (!blob) { resolve(); return; }
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.download = filename;
-        link.href = url;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-        resolve();
-      }, 'image/png');
-    });
-  };
+        // Generate filename
+        const pageLabel = numPages > 1 ? `-page${page + 1}of${numPages}` : '';
+        const chunkLabel = totalChunks > 1 ? `-part${chunk + 1}of${totalChunks}` : '';
+        const heightLabel = totalChunks > 1 
+          ? (chunkHeightPx / DPI).toFixed(1) 
+          : pageHeight.toFixed(1);
+        const filename = `gang-sheet-${SHEET_WIDTH_INCHES}x${heightLabel}${pageLabel}${chunkLabel}-${DPI}dpi.png`;
 
-  const downloadCanvasBlobWithName = (canvas, filename) => {
-    return new Promise((resolve) => {
-      canvas.toBlob((blob) => {
-        if (!blob) { resolve(); return; }
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.download = filename;
-        link.href = url;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-        resolve();
-      }, 'image/png');
-    });
+        // Download using toBlob with fallback to toDataURL
+        await new Promise((resolve) => {
+          try {
+            exportCanvas.toBlob((blob) => {
+              if (blob && blob.size > 0) {
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.download = filename;
+                link.href = url;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                setTimeout(() => URL.revokeObjectURL(url), 2000);
+                resolve();
+              } else {
+                // Fallback to toDataURL if toBlob fails
+                try {
+                  const dataUrl = exportCanvas.toDataURL('image/png');
+                  const link = document.createElement('a');
+                  link.download = filename;
+                  link.href = dataUrl;
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                } catch (err) {
+                  console.error('Export failed:', err);
+                  alert('Export failed. The sheet may be too large. Try reducing repetitions.');
+                }
+                resolve();
+              }
+            }, 'image/png');
+          } catch (err) {
+            // toBlob not supported or canvas tainted — fallback
+            try {
+              const dataUrl = exportCanvas.toDataURL('image/png');
+              const link = document.createElement('a');
+              link.download = filename;
+              link.href = dataUrl;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+            } catch (e) {
+              console.error('Export failed:', e);
+              alert('Export failed. The sheet may be too large.');
+            }
+            resolve();
+          }
+        });
+
+        // Small delay between downloads
+        if (totalChunks > 1 || (numPages > 1 && page < numPages - 1)) {
+          await new Promise(r => setTimeout(r, 600));
+        }
+      }
+    }
   };
 
   const totalItemCount = artworks.reduce((sum, a) => sum + a.repetitions, 0);
