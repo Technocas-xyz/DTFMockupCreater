@@ -4,8 +4,8 @@ import './GangSheet.css';
 const SHEET_WIDTH_INCHES = 22;
 const DPI = 300;
 
-function calculateLayout(artworks, sheetWidth, cuttingGap, margins, tightPack = false) {
-  const marg = margins || { top: 0.5, bottom: 0.5, left: 0.5, right: 0.5 };
+function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = false) {
+  const marg = margins || { top: 0, bottom: 0, left: 0, right: 0 };
   const items = [];
   for (const art of artworks) {
     for (let i = 0; i < art.repetitions; i++) {
@@ -26,13 +26,22 @@ function calculateLayout(artworks, sheetWidth, cuttingGap, margins, tightPack = 
     let rowMaxH = 0;
 
     for (const item of items) {
-      if (rowX > marg.left && rowX + item.w > sheetWidth - marg.right) {
-        currentY += rowMaxH + cuttingGap;
+      // Check if adding this item would exceed the right boundary
+      // Only add cutting gap between items (not after last item in row)
+      const neededWidth = rowX > marg.left ? item.w + hGap : item.w;
+      const endPos = rowX > marg.left ? rowX + hGap + item.w : rowX + item.w;
+
+      if (rowX > marg.left && endPos > sheetWidth - marg.right + 0.01) {
+        // Doesn't fit, wrap to next row
+        currentY += rowMaxH + vGap;
         rowX = marg.left;
         rowMaxH = 0;
       }
-      placed.push({ ...item, x: rowX, y: currentY, rotated: false });
-      rowX += item.w + cuttingGap;
+
+      // Place item (add gap before if not first in row)
+      const placeX = rowX > marg.left ? rowX + hGap : rowX;
+      placed.push({ ...item, x: placeX, y: currentY, rotated: false });
+      rowX = placeX + item.w;
       rowMaxH = Math.max(rowMaxH, item.h);
     }
     currentY += rowMaxH + marg.bottom;
@@ -58,9 +67,10 @@ function calculateLayout(artworks, sheetWidth, cuttingGap, margins, tightPack = 
     for (let ri = 0; ri < freeRects.length; ri++) {
       const rect = freeRects[ri];
 
+      // Item only needs to fit within the free rect (gap is handled during splitting)
       // Try normal orientation first
       let normalFits = false;
-      if (item.w + cuttingGap <= rect.w + 0.001 && item.h + cuttingGap <= rect.h + 0.001) {
+      if (item.w <= rect.w + 0.01 && item.h <= rect.h + 0.01) {
         normalFits = true;
         // Score: prefer positions closer to top-left (shorter y, then shorter x)
         const score = rect.y * 1000 + rect.x;
@@ -76,7 +86,7 @@ function calculateLayout(artworks, sheetWidth, cuttingGap, margins, tightPack = 
       }
 
       // Only try rotated if normal doesn't fit in this rect
-      if (!normalFits && item.h + cuttingGap <= rect.w + 0.001 && item.w + cuttingGap <= rect.h + 0.001) {
+      if (!normalFits && item.h <= rect.w + 0.01 && item.w <= rect.h + 0.01) {
         const score = rect.y * 1000 + rect.x;
         if (score < bestScore) {
           bestScore = score;
@@ -95,8 +105,8 @@ function calculateLayout(artworks, sheetWidth, cuttingGap, margins, tightPack = 
       placed.push({ ...item, x: bestX, y: bestY, w: bestW, h: bestH, rotated: bestRotated });
       maxY = Math.max(maxY, bestY + bestH);
 
-      // Split free rectangles around the placed item
-      const placedRect = { x: bestX, y: bestY, w: bestW + cuttingGap, h: bestH + cuttingGap };
+      // Split free rectangles around the placed item (include cutting gap in the occupied space)
+      const placedRect = { x: bestX, y: bestY, w: bestW + hGap, h: bestH + vGap };
       const newFreeRects = [];
 
       for (const fr of freeRects) {
@@ -151,8 +161,9 @@ function calculateLayout(artworks, sheetWidth, cuttingGap, margins, tightPack = 
 
 function GangSheet({ sharedArtwork }) {
   const [artworks, setArtworks] = useState([]);
-  const [cuttingGap, setCuttingGap] = useState(0.25);
-  const [margins, setMargins] = useState({ top: 0.5, bottom: 0.5, left: 0.5, right: 0.5 });
+  const [hGap, setHGap] = useState(0.5);
+  const [vGap, setVGap] = useState(0.5);
+  const [margins, setMargins] = useState({ top: 0, bottom: 0, left: 0, right: 0 });
   const [arrangement, setArrangement] = useState('auto');
   const [tightPack, setTightPack] = useState(true);
   const [showGrid, setShowGrid] = useState(false);
@@ -168,9 +179,9 @@ function GangSheet({ sharedArtwork }) {
 
   // Recalculate layout when artworks or settings change
   useEffect(() => {
-    const newLayout = calculateLayout(artworks, SHEET_WIDTH_INCHES, cuttingGap, margins, tightPack);
+    const newLayout = calculateLayout(artworks, SHEET_WIDTH_INCHES, hGap, vGap, margins, tightPack);
     setLayout(newLayout);
-  }, [artworks, cuttingGap, margins, tightPack]);
+  }, [artworks, hGap, vGap, margins, tightPack]);
 
   // Draw canvas
   const drawCanvas = useCallback(() => {
@@ -634,14 +645,25 @@ function GangSheet({ sharedArtwork }) {
               <span className="gs-setting-value">{SHEET_WIDTH_INCHES}"</span>
             </div>
             <div className="gs-setting-row">
-              <label>Cutting Gap</label>
+              <label>H Gap (horizontal)</label>
               <input
                 type="number"
                 step="0.05"
                 min="0"
                 max="2"
-                value={cuttingGap}
-                onChange={(e) => setCuttingGap(parseFloat(e.target.value) || 0)}
+                value={hGap}
+                onChange={(e) => setHGap(parseFloat(e.target.value) || 0)}
+              />
+            </div>
+            <div className="gs-setting-row">
+              <label>V Gap (vertical)</label>
+              <input
+                type="number"
+                step="0.05"
+                min="0"
+                max="2"
+                value={vGap}
+                onChange={(e) => setVGap(parseFloat(e.target.value) || 0)}
               />
             </div>
             <div className="gs-setting-row">
@@ -734,7 +756,7 @@ function GangSheet({ sharedArtwork }) {
           </div>
 
           <button className="gs-btn-recalc" onClick={() => {
-            const newLayout = calculateLayout(artworks, SHEET_WIDTH_INCHES, cuttingGap, margins, tightPack);
+            const newLayout = calculateLayout(artworks, SHEET_WIDTH_INCHES, hGap, vGap, margins, tightPack);
             setLayout(newLayout);
           }}>
             ↻ Recalculate Layout
