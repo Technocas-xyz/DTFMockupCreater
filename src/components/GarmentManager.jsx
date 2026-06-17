@@ -73,24 +73,37 @@ function GarmentManager({ onUseAsMockup }) {
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
 
-  // Load library from localStorage
+  // API base URL (same origin for WAMP)
+  const API_URL = '/Tshirt Previewer/api/garments.php';
+  const IMAGE_URL = '/Tshirt Previewer/api/serve-image.php';
+
+  // Load library from server (shared for all users)
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) setLibrary(JSON.parse(stored));
-    } catch (e) {
-      console.warn('Failed to load garment library', e);
-    }
+    fetch(API_URL)
+      .then(res => res.json())
+      .then(data => {
+        // Convert image file references to full URLs
+        const withUrls = data.map(g => ({
+          ...g,
+          dataUrl: g.dataUrl || `${IMAGE_URL}?file=${g.imageFile}`,
+        }));
+        setLibrary(withUrls);
+      })
+      .catch(e => {
+        console.warn('Failed to load from server, trying localStorage', e);
+        try {
+          const stored = localStorage.getItem(STORAGE_KEY);
+          if (stored) setLibrary(JSON.parse(stored));
+        } catch (err) {}
+      });
   }, []);
 
-  // Save library to localStorage
+  // Save library (also saves to localStorage as fallback)
   const saveLibrary = (newLibrary) => {
     setLibrary(newLibrary);
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(newLibrary));
-    } catch (e) {
-      console.warn('Failed to save garment library', e);
-    }
+    } catch (e) {}
   };
 
   // Handle file upload
@@ -226,7 +239,7 @@ function GarmentManager({ onUseAsMockup }) {
       return;
     }
 
-    // Resize image for storage (max 800px to fit localStorage)
+    // Resize image for storage (max 800px)
     const img = new Image();
     img.onload = () => {
       const maxSize = 800;
@@ -243,7 +256,6 @@ function GarmentManager({ onUseAsMockup }) {
       const compressedUrl = canvas.toDataURL('image/png');
 
       const newGarment = {
-        id: Date.now().toString(),
         name: garmentName || 'Untitled',
         type: garmentType,
         size: garmentSize,
@@ -252,14 +264,29 @@ function GarmentManager({ onUseAsMockup }) {
         height: garmentImage.height,
         bodyMapping: { ...bodyMapping },
       };
-      const newLibrary = [...library, newGarment];
-      try {
-        saveLibrary(newLibrary);
-        setSelectedLibraryId(newGarment.id);
-        setErrorMsg('');
-      } catch (e) {
-        setErrorMsg('Failed to save: image too large. Try a smaller image.');
-      }
+
+      // Save to server API
+      fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newGarment),
+      })
+        .then(res => res.json())
+        .then(saved => {
+          saved.dataUrl = compressedUrl;
+          const newLibrary = [...library, saved];
+          saveLibrary(newLibrary);
+          setSelectedLibraryId(saved.id);
+          setErrorMsg('');
+        })
+        .catch(e => {
+          // Fallback to localStorage only
+          newGarment.id = Date.now().toString();
+          const newLibrary = [...library, newGarment];
+          saveLibrary(newLibrary);
+          setSelectedLibraryId(newGarment.id);
+          setErrorMsg('');
+        });
     };
     img.src = garmentImage.dataUrl;
   };
@@ -269,6 +296,13 @@ function GarmentManager({ onUseAsMockup }) {
     const newLibrary = library.filter((g) => g.id !== id);
     saveLibrary(newLibrary);
     if (selectedLibraryId === id) setSelectedLibraryId(null);
+
+    // Delete from server
+    fetch(API_URL, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    }).catch(() => {});
   };
 
   // Select from library
