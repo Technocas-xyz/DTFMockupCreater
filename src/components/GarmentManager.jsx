@@ -343,6 +343,9 @@ function GarmentManager({ onUseAsMockup }) {
             <div className="gm-file-info">
               <p><strong>{garmentImage.fileName}</strong></p>
               <p>{garmentImage.width} × {garmentImage.height} px</p>
+              {garmentSize && TSHIRT_SIZES[garmentSize] && (
+                <p><strong>Shirt Size: {garmentSize} ({TSHIRT_SIZES[garmentSize].bodyWidth}" × {TSHIRT_SIZES[garmentSize].bodyLength}")</strong></p>
+              )}
               {originalDimensions && originalDimensions.width !== garmentImage.width && (
                 <p>Original: {originalDimensions.width} × {originalDimensions.height} px</p>
               )}
@@ -381,7 +384,9 @@ function GarmentManager({ onUseAsMockup }) {
           </div>
           {garmentImage && (
             <div className="gm-canvas-dimensions">
-              {garmentImage.width} × {garmentImage.height} px | Zoom: {Math.round(zoom * 100)}%
+              {garmentImage.width} × {garmentImage.height} px | 
+              {garmentSize && TSHIRT_SIZES[garmentSize] ? ` Body: ${TSHIRT_SIZES[garmentSize].bodyWidth}" × ${TSHIRT_SIZES[garmentSize].bodyLength}" (${garmentSize})` : ' No size tagged'} | 
+              Zoom: {Math.round(zoom * 100)}%
             </div>
           )}
         </div>
