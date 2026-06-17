@@ -61,9 +61,11 @@ function GarmentManager({ onUseAsMockup }) {
   const [garmentType, setGarmentType] = useState('T-Shirt');
   const [garmentSize, setGarmentSize] = useState('XL');
   const [bodyMapping, setBodyMapping] = useState({
-    widthInches: 13,
-    heightInches: 14.5,
-    topOffsetInches: 3,
+    shirtWidthInches: 20,   // actual shirt body width
+    shirtHeightInches: 29,  // actual shirt body height
+    widthInches: 13,        // print area width
+    heightInches: 14.5,     // print area height
+    topOffsetInches: 3,     // print area top offset
   });
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -179,11 +181,9 @@ function GarmentManager({ onUseAsMockup }) {
       ctx.drawImage(img, drawX, drawY, drawW, drawH);
 
       // Draw body mapping overlay (inches-based)
-      // Image width = body width for the tagged size
-      // Image height = body length for the tagged size
-      const sizeData = garmentSize && TSHIRT_SIZES[garmentSize] ? TSHIRT_SIZES[garmentSize] : null;
-      const bodyWidthInches = sizeData ? sizeData.bodyWidth : 24;
-      const bodyLengthInches = sizeData ? sizeData.bodyLength : 31;
+      // Use the manually entered shirt dimensions (not from size tag)
+      const bodyWidthInches = bodyMapping.shirtWidthInches || 20;
+      const bodyLengthInches = bodyMapping.shirtHeightInches || 29;
 
       // Pixels per inch (image = full body)
       const pxPerInchW = drawW / bodyWidthInches;
@@ -377,15 +377,29 @@ function GarmentManager({ onUseAsMockup }) {
             <div className="gm-file-info">
               <p><strong>{garmentImage.fileName}</strong></p>
               <p>Dimensions: {garmentImage.width} × {garmentImage.height} px</p>
-              <p>DPI: ~{garmentSize && TSHIRT_SIZES[garmentSize] ? Math.round(garmentImage.width / TSHIRT_SIZES[garmentSize].bodyWidth) : Math.round(garmentImage.width / 24)}</p>
               <p>Color Mode: RGBA (PNG)</p>
               <p>Aspect Ratio: {(garmentImage.width / garmentImage.height).toFixed(2)}</p>
-              {garmentSize && TSHIRT_SIZES[garmentSize] && (
-                <p><strong>Shirt Size: {garmentSize} — Body: {TSHIRT_SIZES[garmentSize].bodyWidth}" W × {TSHIRT_SIZES[garmentSize].bodyLength}" L</strong></p>
-              )}
-              {garmentSize && TSHIRT_SIZES[garmentSize] && (
-                <p>Print Area (Max): {TSHIRT_SIZES[garmentSize].maxPrintWidth}" × {TSHIRT_SIZES[garmentSize].maxPrintHeight}"</p>
-              )}
+              <div className="gm-input-row" style={{ marginTop: '8px' }}>
+                <label>Shirt W</label>
+                <input
+                  type="number" min="1" max="50" step="0.5"
+                  className="gm-num-input"
+                  value={bodyMapping.shirtWidthInches}
+                  onChange={(e) => setBodyMapping({ ...bodyMapping, shirtWidthInches: parseFloat(e.target.value) || 20 })}
+                />
+                <span style={{ fontSize: '11px', color: '#64748b' }}>in</span>
+              </div>
+              <div className="gm-input-row">
+                <label>Shirt H</label>
+                <input
+                  type="number" min="1" max="50" step="0.5"
+                  className="gm-num-input"
+                  value={bodyMapping.shirtHeightInches}
+                  onChange={(e) => setBodyMapping({ ...bodyMapping, shirtHeightInches: parseFloat(e.target.value) || 29 })}
+                />
+                <span style={{ fontSize: '11px', color: '#64748b' }}>in</span>
+              </div>
+              <p>DPI: ~{Math.round(garmentImage.width / bodyMapping.shirtWidthInches)}</p>
               {originalDimensions && originalDimensions.width !== garmentImage.width && (
                 <p>Before Trim: {originalDimensions.width} × {originalDimensions.height} px</p>
               )}
@@ -425,7 +439,7 @@ function GarmentManager({ onUseAsMockup }) {
           {garmentImage && (
             <div className="gm-canvas-dimensions">
               {garmentImage.width} × {garmentImage.height} px | 
-              {garmentSize && TSHIRT_SIZES[garmentSize] ? ` Body: ${TSHIRT_SIZES[garmentSize].bodyWidth}" × ${TSHIRT_SIZES[garmentSize].bodyLength}" (${garmentSize})` : ' No size tagged'} | 
+              Body: {bodyMapping.shirtWidthInches}" × {bodyMapping.shirtHeightInches}" | 
               Zoom: {Math.round(zoom * 100)}%
             </div>
           )}
