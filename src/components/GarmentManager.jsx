@@ -376,12 +376,18 @@ function GarmentManager({ onUseAsMockup }) {
           {garmentImage && (
             <div className="gm-file-info">
               <p><strong>{garmentImage.fileName}</strong></p>
-              <p>{garmentImage.width} × {garmentImage.height} px</p>
+              <p>Dimensions: {garmentImage.width} × {garmentImage.height} px</p>
+              <p>DPI: ~{garmentSize && TSHIRT_SIZES[garmentSize] ? Math.round(garmentImage.width / TSHIRT_SIZES[garmentSize].bodyWidth) : Math.round(garmentImage.width / 24)}</p>
+              <p>Color Mode: RGBA (PNG)</p>
+              <p>Aspect Ratio: {(garmentImage.width / garmentImage.height).toFixed(2)}</p>
               {garmentSize && TSHIRT_SIZES[garmentSize] && (
-                <p><strong>Shirt Size: {garmentSize} ({TSHIRT_SIZES[garmentSize].bodyWidth}" × {TSHIRT_SIZES[garmentSize].bodyLength}")</strong></p>
+                <p><strong>Shirt Size: {garmentSize} — Body: {TSHIRT_SIZES[garmentSize].bodyWidth}" W × {TSHIRT_SIZES[garmentSize].bodyLength}" L</strong></p>
+              )}
+              {garmentSize && TSHIRT_SIZES[garmentSize] && (
+                <p>Print Area (Max): {TSHIRT_SIZES[garmentSize].maxPrintWidth}" × {TSHIRT_SIZES[garmentSize].maxPrintHeight}"</p>
               )}
               {originalDimensions && originalDimensions.width !== garmentImage.width && (
-                <p>Original: {originalDimensions.width} × {originalDimensions.height} px</p>
+                <p>Before Trim: {originalDimensions.width} × {originalDimensions.height} px</p>
               )}
             </div>
           )}
