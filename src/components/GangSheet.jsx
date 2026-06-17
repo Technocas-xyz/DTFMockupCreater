@@ -58,8 +58,10 @@ function calculateLayout(artworks, sheetWidth, cuttingGap, margins, tightPack = 
     for (let ri = 0; ri < freeRects.length; ri++) {
       const rect = freeRects[ri];
 
-      // Try normal orientation
+      // Try normal orientation first
+      let normalFits = false;
       if (item.w + cuttingGap <= rect.w + 0.001 && item.h + cuttingGap <= rect.h + 0.001) {
+        normalFits = true;
         // Score: prefer positions closer to top-left (shorter y, then shorter x)
         const score = rect.y * 1000 + rect.x;
         if (score < bestScore) {
@@ -73,8 +75,8 @@ function calculateLayout(artworks, sheetWidth, cuttingGap, margins, tightPack = 
         }
       }
 
-      // Try rotated (90 degrees)
-      if (item.h + cuttingGap <= rect.w + 0.001 && item.w + cuttingGap <= rect.h + 0.001) {
+      // Only try rotated if normal doesn't fit in this rect
+      if (!normalFits && item.h + cuttingGap <= rect.w + 0.001 && item.w + cuttingGap <= rect.h + 0.001) {
         const score = rect.y * 1000 + rect.x;
         if (score < bestScore) {
           bestScore = score;
