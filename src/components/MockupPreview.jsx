@@ -131,9 +131,16 @@ function MockupPreview({
         }
         const img = new Image();
         img.onload = () => {
-          // pxPerInch for artwork placement
-          const artPxPerInchW = tshirtW / sizeData.bodyWidth;
-          const artPxPerInchH = tshirtH / sizeData.bodyLength;
+          // pxPerInch for artwork placement — use garment's own dimensions for custom garments
+          let artPxPerInch;
+          if (isCustomGarment && taggedGarment && taggedGarment.bodyMapping) {
+            const garmentBodyWidth = taggedGarment.bodyMapping.shirtWidthInches || sizeData.bodyWidth;
+            artPxPerInch = tshirtW / garmentBodyWidth;
+          } else {
+            artPxPerInch = tshirtW / sizeData.bodyWidth;
+          }
+          const artPxPerInchW = artPxPerInch;
+          const artPxPerInchH = artPxPerInch;
 
           const printW = artworkAreaSettings.width * artPxPerInchW;
           const printH = artworkAreaSettings.height * artPxPerInchH;
@@ -166,6 +173,11 @@ function MockupPreview({
 
           // Draw dimension annotations (only if enabled)
           if (showAnnotations) {
+          const canvasTshirtX = tshirtX;
+          const canvasTshirtY = tshirtY;
+          const canvasTshirtW = tshirtW;
+          const canvasTshirtH = tshirtH;
+          const pxPerInchW = artPxPerInchW;
           const dimFont = 'bold 16px Inter, sans-serif';
           ctx.font = dimFont;
           ctx.textAlign = 'center';
@@ -309,7 +321,7 @@ function MockupPreview({
           ctx.stroke();
           ctx.font = 'bold 12px Inter, sans-serif';
           ctx.textAlign = 'center';
-          ctx.fillText(`Shirt width: ${sizeData.bodyWidth}"`, canvasTshirtX + canvasTshirtW / 2, shirtWidthLineY + 16);
+          ctx.fillText(`Shirt width: ${isCustomGarment && taggedGarment?.bodyMapping?.shirtWidthInches ? taggedGarment.bodyMapping.shirtWidthInches : sizeData.bodyWidth}"`, canvasTshirtX + canvasTshirtW / 2, shirtWidthLineY + 16);
 
           // Shirt height (body length) reference line — left side
           const shirtHeightLineX = canvasTshirtX - 30;
@@ -576,8 +588,17 @@ function MockupCard({ size, artwork, color, artworkDimensions, artworkPosition, 
     if (artwork) {
       const img = new Image();
       img.onload = () => {
-        const pxPerInchW = tshirtW / sizeData.bodyWidth;
-        const pxPerInchH = tshirtH / sizeData.bodyLength;
+        // Use garment's own body width for custom garments
+        let pxPerInch;
+        if (isCustomGarment) {
+          const taggedGarment = garmentLibrary && garmentLibrary.find(g => g.size === size);
+          const garmentBodyWidth = taggedGarment?.bodyMapping?.shirtWidthInches || sizeData.bodyWidth;
+          pxPerInch = tshirtW / garmentBodyWidth;
+        } else {
+          pxPerInch = tshirtW / sizeData.bodyWidth;
+        }
+        const pxPerInchW = pxPerInch;
+        const pxPerInchH = pxPerInch;
 
         // Fixed print area from settings
         const printW = artworkAreaSettings.width * pxPerInchW;
