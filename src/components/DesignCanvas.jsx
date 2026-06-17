@@ -74,33 +74,30 @@ function DesignCanvas({
     let pxPerInchW, pxPerInchH, pxPerInch, tshirtW, tshirtH, tshirtX, tshirtY;
 
     if (customGarment && tshirtImage) {
-      // Custom garment: image fills canvas, body = full image
+      // Custom garment: display as uploaded, fit to 90% of canvas preserving aspect ratio
       const imgW = tshirtImage.naturalWidth || tshirtImage.width;
       const imgH = tshirtImage.naturalHeight || tshirtImage.height;
       const imgAspect = imgW / imgH;
       const canvasAspect = CANVAS_WIDTH / CANVAS_HEIGHT;
 
-      // Calculate max draw size at 90% canvas
-      let maxDrawW, maxDrawH;
+      let drawW, drawH;
       if (imgAspect > canvasAspect) {
-        maxDrawW = CANVAS_WIDTH * 0.9;
-        maxDrawH = maxDrawW / imgAspect;
+        drawW = CANVAS_WIDTH * 0.9;
+        drawH = drawW / imgAspect;
       } else {
-        maxDrawH = CANVAS_HEIGHT * 0.9;
-        maxDrawW = maxDrawH * imgAspect;
+        drawH = CANVAS_HEIGHT * 0.9;
+        drawW = drawH * imgAspect;
       }
 
-      // Compute pxPerInch from both axes and use a single uniform value
-      // This ensures 1 inch on screen = same pixels in both W and H
-      pxPerInchW = maxDrawW / bodyWidth;
-      pxPerInchH = maxDrawH / bodyLength;
-      pxPerInch = Math.min(pxPerInchW, pxPerInchH);
-
-      // Draw shirt at uniform scale
-      tshirtW = bodyWidth * pxPerInch;
-      tshirtH = bodyLength * pxPerInch;
-      tshirtX = (CANVAS_WIDTH - tshirtW) / 2;
-      tshirtY = (CANVAS_HEIGHT - tshirtH) / 2;
+      // The uploaded garment image width IS the body width
+      tshirtW = drawW;
+      tshirtH = drawH;
+      tshirtX = (CANVAS_WIDTH - drawW) / 2;
+      tshirtY = (CANVAS_HEIGHT - drawH) / 2;
+      // pxPerInch based on the garment image width = body width in inches
+      pxPerInch = drawW / bodyWidth;
+      pxPerInchW = pxPerInch;
+      pxPerInchH = pxPerInch;
     } else {
       // Default: use 5XL reference scaling
       const maxBodyWidth = 32;
@@ -117,15 +114,15 @@ function DesignCanvas({
       tshirtY = CANVAS_HEIGHT * 0.20 + (maxTshirtH - tshirtH) / 2;
     }
 
-    // Print area from artwork area settings (use uniform scale for artwork, non-uniform for shirt positioning)
+    // Print area from artwork area settings (uniform pxPerInch)
     const printAreaPxW = artworkAreaSettings.width * pxPerInch;
     const printAreaPxH = artworkAreaSettings.height * pxPerInch;
 
     // Centered horizontally, positioned by top offset
     const printX = tshirtX + (tshirtW - printAreaPxW) / 2;
-    const printY = tshirtY + (artworkAreaSettings.topOffset * pxPerInchH);
+    const printY = tshirtY + (artworkAreaSettings.topOffset * pxPerInch);
 
-    // Artwork at fixed physical size — uniform scale so width/height labels match input
+    // Artwork at fixed physical size
     const artworkPxW = artworkDimensions.width * pxPerInch;
     const artworkPxH = artworkDimensions.height * pxPerInch;
 
@@ -161,12 +158,11 @@ function DesignCanvas({
       const imgAspect = imgW / imgH;
 
       if (customGarment) {
-        // Custom garment from Garment Manager — draw at uniform scale, apply color tint
-        const { tshirtW, tshirtH, tshirtX, tshirtY } = printArea;
-        const drawX = tshirtX;
-        const drawY = tshirtY;
-        const drawW = tshirtW;
-        const drawH = tshirtH;
+        // Custom garment from Garment Manager — draw as uploaded at full size, apply color tint
+        const drawW = printArea.tshirtW;
+        const drawH = printArea.tshirtH;
+        const drawX = printArea.tshirtX;
+        const drawY = printArea.tshirtY;
 
         // Apply color tint using offscreen canvas
         const offscreen = document.createElement('canvas');
