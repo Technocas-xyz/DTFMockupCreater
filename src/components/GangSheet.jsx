@@ -49,76 +49,79 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
   }
 
   // TIGHT PACK: 2D free-rectangle bin packing with rotation
-  // Uses maxrects algorithm - maintains a list of free rectangles
+  // Uses Best Short Side Fit (BSSF) heuristic for minimal waste
   items.sort((a, b) => Math.max(b.w, b.h) - Math.max(a.w, a.h));
 
-  let freeRects = [{ x: marg.left, y: marg.top, w: availableWidth, h: 10000 }]; // start with huge height
+  let freeRects = [{ x: marg.left, y: marg.top, w: availableWidth, h: 10000 }];
   const placed = [];
   let maxY = marg.top;
 
   for (const item of items) {
-    let bestScore = Infinity;
-    let bestRect = -1;
+    let bestScore1 = Infinity;
+    let bestScore2 = Infinity;
     let bestX = 0, bestY = 0;
     let bestW = item.w, bestH = item.h;
     let bestRotated = false;
+    let bestFound = false;
 
-    // Try fitting in each free rectangle (normal + rotated)
     for (let ri = 0; ri < freeRects.length; ri++) {
       const rect = freeRects[ri];
 
-      // Item only needs to fit within the free rect (gap is handled during splitting)
-      // Try normal orientation first
-      let normalFits = false;
+      // Try normal orientation
       if (item.w <= rect.w + 0.01 && item.h <= rect.h + 0.01) {
-        normalFits = true;
-        // Score: prefer positions closer to top-left (shorter y, then shorter x)
-        const score = rect.y * 1000 + rect.x;
-        if (score < bestScore) {
-          bestScore = score;
-          bestRect = ri;
+        // Best Short Side Fit: minimize leftover on the shorter side
+        const leftoverW = rect.w - item.w;
+        const leftoverH = rect.h - item.h;
+        const shortSide = Math.min(leftoverW, leftoverH);
+        const longSide = Math.max(leftoverW, leftoverH);
+
+        if (shortSide < bestScore1 || (shortSide === bestScore1 && longSide < bestScore2)) {
+          bestScore1 = shortSide;
+          bestScore2 = longSide;
           bestX = rect.x;
           bestY = rect.y;
           bestW = item.w;
           bestH = item.h;
           bestRotated = false;
+          bestFound = true;
         }
       }
 
-      // Only try rotated if normal doesn't fit in this rect
-      if (!normalFits && item.h <= rect.w + 0.01 && item.w <= rect.h + 0.01) {
-        const score = rect.y * 1000 + rect.x;
-        if (score < bestScore) {
-          bestScore = score;
-          bestRect = ri;
+      // Try rotated orientation
+      if (item.h <= rect.w + 0.01 && item.w <= rect.h + 0.01) {
+        const leftoverW = rect.w - item.h;
+        const leftoverH = rect.h - item.w;
+        const shortSide = Math.min(leftoverW, leftoverH);
+        const longSide = Math.max(leftoverW, leftoverH);
+
+        if (shortSide < bestScore1 || (shortSide === bestScore1 && longSide < bestScore2)) {
+          bestScore1 = shortSide;
+          bestScore2 = longSide;
           bestX = rect.x;
           bestY = rect.y;
           bestW = item.h; // swapped
           bestH = item.w; // swapped
           bestRotated = true;
+          bestFound = true;
         }
       }
     }
 
-    if (bestRect >= 0) {
-      // Place the item
+    if (bestFound) {
       placed.push({ ...item, x: bestX, y: bestY, w: bestW, h: bestH, rotated: bestRotated });
       maxY = Math.max(maxY, bestY + bestH);
 
-      // Split free rectangles around the placed item (include cutting gap in the occupied space)
+      // Split free rectangles around the placed item (include cutting gap)
       const placedRect = { x: bestX, y: bestY, w: bestW + hGap, h: bestH + vGap };
       const newFreeRects = [];
 
       for (const fr of freeRects) {
-        // Check if this free rect overlaps with placed item
         if (placedRect.x >= fr.x + fr.w || placedRect.x + placedRect.w <= fr.x ||
             placedRect.y >= fr.y + fr.h || placedRect.y + placedRect.h <= fr.y) {
-          // No overlap, keep as is
           newFreeRects.push(fr);
           continue;
         }
 
-        // Split into up to 4 remaining rectangles
         // Left portion
         if (placedRect.x > fr.x) {
           newFreeRects.push({ x: fr.x, y: fr.y, w: placedRect.x - fr.x, h: fr.h });
@@ -137,7 +140,7 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
         }
       }
 
-      // Remove free rects that are fully contained in another
+      // Remove contained free rects
       freeRects = [];
       for (let i = 0; i < newFreeRects.length; i++) {
         let contained = false;
@@ -149,7 +152,7 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
             break;
           }
         }
-        if (!contained && newFreeRects[i].w > 0.5 && newFreeRects[i].h > 0.5) {
+        if (!contained && newFreeRects[i].w > 0.3 && newFreeRects[i].h > 0.3) {
           freeRects.push(newFreeRects[i]);
         }
       }
@@ -407,7 +410,7 @@ function GangSheet({ sharedArtwork }) {
   const handleDownload = async () => {
     if (layout.items.length === 0) return;
 
-    // First, ensure all images are loaded and decoded
+    // Pre-load all images
     const loadedImages = {};
     const uniqueUrls = [...new Set(layout.items.map(i => i.dataUrl))];
     
@@ -425,201 +428,90 @@ function GangSheet({ sharedArtwork }) {
     })));
 
     const exportWidth = SHEET_WIDTH_INCHES * DPI;
-    const totalHeightInches = layout.totalHeight;
-    const totalHeightPx = Math.round(totalHeightInches * DPI);
+    const totalHeightPx = Math.round(layout.totalHeight * DPI);
 
-    // Chrome supports up to ~32767px, Firefox similar. Use 30000 as safe single-canvas limit.
-    const MAX_CANVAS_PX = 30000;
+    // Always single file download
+    const exportCanvas = document.createElement('canvas');
+    exportCanvas.width = exportWidth;
+    exportCanvas.height = totalHeightPx;
+    const ctx = exportCanvas.getContext('2d');
 
-    if (totalHeightPx <= MAX_CANVAS_PX) {
-      // Entire sheet fits in a single canvas — no splitting needed
-      const exportCanvas = document.createElement('canvas');
-      exportCanvas.width = exportWidth;
-      exportCanvas.height = totalHeightPx;
-      const ctx = exportCanvas.getContext('2d');
-      if (!ctx) { alert('Canvas creation failed.'); return; }
+    if (!ctx) {
+      alert('Canvas creation failed. Your browser may not support this size.');
+      return;
+    }
 
-      if (!bgTransparent) {
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, exportWidth, totalHeightPx);
+    if (!bgTransparent) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, exportWidth, totalHeightPx);
+    }
+
+    for (const item of layout.items) {
+      const img = loadedImages[item.dataUrl];
+      if (!img) continue;
+      const x = item.x * DPI;
+      const y = item.y * DPI;
+      const w = item.w * DPI;
+      const h = item.h * DPI;
+
+      if (item.rotated) {
+        ctx.save();
+        ctx.translate(x + w, y);
+        ctx.rotate(Math.PI / 2);
+        ctx.drawImage(img, 0, 0, h, w);
+        ctx.restore();
+      } else {
+        ctx.drawImage(img, x, y, w, h);
       }
 
-      for (const item of layout.items) {
-        const img = loadedImages[item.dataUrl];
-        if (!img) continue;
-        const x = item.x * DPI;
-        const y = item.y * DPI;
-        const w = item.w * DPI;
-        const h = item.h * DPI;
-
-        if (item.rotated) {
-          ctx.save();
-          ctx.translate(x + w, y);
-          ctx.rotate(Math.PI / 2);
-          ctx.drawImage(img, 0, 0, h, w);
-          ctx.restore();
-        } else {
-          ctx.drawImage(img, x, y, w, h);
-        }
-
-        if (showCutLines) {
-          ctx.strokeStyle = '#ef4444';
-          ctx.lineWidth = 2;
-          ctx.setLineDash([8, 6]);
-          ctx.strokeRect(x, y, w, h);
-          ctx.setLineDash([]);
-        }
-      }
-
-      const filename = `gang-sheet-${SHEET_WIDTH_INCHES}x${totalHeightInches.toFixed(1)}-${DPI}dpi.png`;
-      await triggerDownload(exportCanvas, filename);
-
-    } else {
-      // Sheet exceeds single canvas limit — split at row boundaries (never cut an item)
-      // Find unique row Y positions (items on the same row share the same y)
-      const rowBottoms = [];
-      const itemsByRow = {};
-      for (const item of layout.items) {
-        const rowKey = item.y.toFixed(4);
-        if (!itemsByRow[rowKey]) {
-          itemsByRow[rowKey] = [];
-        }
-        itemsByRow[rowKey].push(item);
-      }
-      // Get sorted unique row starts and compute each row's bottom
-      const rowKeys = Object.keys(itemsByRow).sort((a, b) => parseFloat(a) - parseFloat(b));
-      const rows = rowKeys.map(key => {
-        const items = itemsByRow[key];
-        const y = parseFloat(key);
-        const maxBottom = Math.max(...items.map(i => i.y + i.h));
-        return { y, bottom: maxBottom, items };
-      });
-
-      // Group rows into pages that fit within MAX_CANVAS_PX
-      const maxPageInches = MAX_CANVAS_PX / DPI;
-      const pages = [];
-      let pageRows = [];
-      let pageStartInch = 0;
-
-      for (const row of rows) {
-        const rowBottom = row.bottom;
-        const pageHeightIfAdded = rowBottom - pageStartInch;
-
-        if (pageHeightIfAdded * DPI > MAX_CANVAS_PX && pageRows.length > 0) {
-          // Start a new page
-          const pageEnd = pageRows[pageRows.length - 1].bottom;
-          pages.push({ start: pageStartInch, end: pageEnd, items: pageRows.flatMap(r => r.items) });
-          pageStartInch = row.y;
-          pageRows = [row];
-        } else {
-          pageRows.push(row);
-        }
-      }
-      // Last page
-      if (pageRows.length > 0) {
-        const pageEnd = Math.max(pageRows[pageRows.length - 1].bottom, totalHeightInches);
-        pages.push({ start: pageStartInch, end: pageEnd, items: pageRows.flatMap(r => r.items) });
-      }
-
-      for (let pi = 0; pi < pages.length; pi++) {
-        const pg = pages[pi];
-        const pageHeightInches = pg.end - pg.start;
-        const pageHeightPx = Math.round(pageHeightInches * DPI);
-
-        const exportCanvas = document.createElement('canvas');
-        exportCanvas.width = exportWidth;
-        exportCanvas.height = pageHeightPx;
-        const ctx = exportCanvas.getContext('2d');
-        if (!ctx) continue;
-
-        if (!bgTransparent) {
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(0, 0, exportWidth, pageHeightPx);
-        }
-
-        for (const item of pg.items) {
-          const img = loadedImages[item.dataUrl];
-          if (!img) continue;
-          const x = item.x * DPI;
-          const y = (item.y - pg.start) * DPI;
-          const w = item.w * DPI;
-          const h = item.h * DPI;
-
-          if (item.rotated) {
-            ctx.save();
-            ctx.translate(x + w, y);
-            ctx.rotate(Math.PI / 2);
-            ctx.drawImage(img, 0, 0, h, w);
-            ctx.restore();
-          } else {
-            ctx.drawImage(img, x, y, w, h);
-          }
-
-          if (showCutLines) {
-            ctx.strokeStyle = '#ef4444';
-            ctx.lineWidth = 2;
-            ctx.setLineDash([8, 6]);
-            ctx.strokeRect(x, y, w, h);
-            ctx.setLineDash([]);
-          }
-        }
-
-        const pageLabel = pages.length > 1 ? `-page${pi + 1}of${pages.length}` : '';
-        const filename = `gang-sheet-${SHEET_WIDTH_INCHES}x${pageHeightInches.toFixed(1)}${pageLabel}-${DPI}dpi.png`;
-        await triggerDownload(exportCanvas, filename);
-
-        if (pi < pages.length - 1) {
-          await new Promise(r => setTimeout(r, 600));
-        }
+      if (showCutLines) {
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([8, 6]);
+        ctx.strokeRect(x, y, w, h);
+        ctx.setLineDash([]);
       }
     }
-  };
 
-  const triggerDownload = (canvas, filename) => {
-    return new Promise((resolve) => {
-      try {
-        canvas.toBlob((blob) => {
-          if (blob && blob.size > 0) {
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.download = filename;
-            link.href = url;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            setTimeout(() => URL.revokeObjectURL(url), 2000);
-            resolve();
-          } else {
-            // Fallback to toDataURL
-            try {
-              const dataUrl = canvas.toDataURL('image/png');
-              const link = document.createElement('a');
-              link.download = filename;
-              link.href = dataUrl;
-              document.body.appendChild(link);
-              link.click();
-              document.body.removeChild(link);
-            } catch (err) {
-              alert('Export failed. Try fewer repetitions.');
-            }
-            resolve();
-          }
-        }, 'image/png');
-      } catch (err) {
-        try {
-          const dataUrl = canvas.toDataURL('image/png');
-          const link = document.createElement('a');
-          link.download = filename;
-          link.href = dataUrl;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-        } catch (e) {
-          alert('Export failed. Try fewer repetitions.');
-        }
-        resolve();
+    const filename = `gang-sheet-${SHEET_WIDTH_INCHES}x${layout.totalHeight.toFixed(1)}-${DPI}dpi.png`;
+
+    // Download using blob with fallback
+    try {
+      const blob = await new Promise((resolve) => {
+        exportCanvas.toBlob((b) => resolve(b), 'image/png');
+      });
+      if (blob && blob.size > 0) {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = filename;
+        link.href = url;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(url), 2000);
+      } else {
+        // Fallback to dataURL
+        const dataUrl = exportCanvas.toDataURL('image/png');
+        const link = document.createElement('a');
+        link.download = filename;
+        link.href = dataUrl;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
       }
-    });
+    } catch (err) {
+      try {
+        const dataUrl = exportCanvas.toDataURL('image/png');
+        const link = document.createElement('a');
+        link.download = filename;
+        link.href = dataUrl;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } catch (e) {
+        alert('Export failed. Try fewer repetitions.');
+      }
+    }
   };
 
   const totalItemCount = artworks.reduce((sum, a) => sum + a.repetitions, 0);
