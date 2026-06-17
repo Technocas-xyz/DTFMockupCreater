@@ -418,78 +418,156 @@ function GangSheet({ sharedArtwork }) {
       const pageHeight = pageEndY - pageStartY;
       const exportHeight = Math.round(pageHeight * DPI);
 
-      const exportCanvas = document.createElement('canvas');
-      exportCanvas.width = exportWidth;
-      exportCanvas.height = exportHeight;
-      const ctx = exportCanvas.getContext('2d');
+      // For very large canvases, chunk the rendering to avoid memory issues
+      // Max canvas dimension browsers typically support is ~16384px
+      const MAX_CHUNK_HEIGHT = 16000; // pixels per chunk
+      const totalChunks = Math.ceil(exportHeight / MAX_CHUNK_HEIGHT);
 
-      if (!bgTransparent) {
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, exportWidth, exportHeight);
+      // If within browser canvas limits, render as single canvas
+      if (exportHeight <= MAX_CHUNK_HEIGHT) {
+        const exportCanvas = document.createElement('canvas');
+        exportCanvas.width = exportWidth;
+        exportCanvas.height = exportHeight;
+        const ctx = exportCanvas.getContext('2d');
+
+        if (!bgTransparent) {
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, exportWidth, exportHeight);
+        }
+
+        // Draw items that fall on this page
+        const pageItems = layout.items.filter(item => {
+          const itemBottom = item.y + item.h;
+          return itemBottom > pageStartY && item.y < pageEndY;
+        });
+
+        // Draw items at 300 DPI, offset by page start
+        await drawItemsToContext(ctx, pageItems, pageStartY);
+
+        // Use toBlob for large files - much more memory efficient than toDataURL
+        await downloadCanvasAsBlob(exportCanvas, page, numPages, pageHeight);
+      } else {
+        // For extremely tall sheets, split into sub-pages within the page
+        for (let chunk = 0; chunk < totalChunks; chunk++) {
+          const chunkStartPx = chunk * MAX_CHUNK_HEIGHT;
+          const chunkEndPx = Math.min((chunk + 1) * MAX_CHUNK_HEIGHT, exportHeight);
+          const chunkHeight = chunkEndPx - chunkStartPx;
+          const chunkStartInches = pageStartY + (chunkStartPx / DPI);
+          const chunkEndInches = pageStartY + (chunkEndPx / DPI);
+
+          const exportCanvas = document.createElement('canvas');
+          exportCanvas.width = exportWidth;
+          exportCanvas.height = chunkHeight;
+          const ctx = exportCanvas.getContext('2d');
+
+          if (!bgTransparent) {
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, exportWidth, chunkHeight);
+          }
+
+          // Draw items that fall in this chunk
+          const chunkItems = layout.items.filter(item => {
+            const itemBottom = item.y + item.h;
+            return itemBottom > chunkStartInches && item.y < chunkEndInches;
+          });
+
+          await drawItemsToContext(ctx, chunkItems, chunkStartInches);
+
+          const subLabel = totalChunks > 1 ? `-part${chunk + 1}of${totalChunks}` : '';
+          const pageLabel = numPages > 1 ? `-page${page + 1}of${numPages}` : '';
+          const chunkHeightInches = (chunkHeight / DPI).toFixed(1);
+          await downloadCanvasBlobWithName(exportCanvas, `gang-sheet-${SHEET_WIDTH_INCHES}x${chunkHeightInches}${pageLabel}${subLabel}-${DPI}dpi.png`);
+
+          // Delay between chunk downloads
+          await new Promise(r => setTimeout(r, 600));
+        }
       }
 
-      // Draw items that fall on this page
-      const pageItems = layout.items.filter(item => {
-        const itemBottom = item.y + item.h;
-        return itemBottom > pageStartY && item.y < pageEndY;
-      });
-
-      // Draw items at 300 DPI, offset by page start
-      const drawPromises = pageItems.map((item) => {
-        return new Promise((resolve) => {
-          const drawItem = (img) => {
-            const x = item.x * DPI;
-            const y = (item.y - pageStartY) * DPI;
-            const w = item.w * DPI;
-            const h = item.h * DPI;
-
-            if (item.rotated) {
-              ctx.save();
-              ctx.translate(x + w, y);
-              ctx.rotate(Math.PI / 2);
-              ctx.drawImage(img, 0, 0, h, w);
-              ctx.restore();
-            } else {
-              ctx.drawImage(img, x, y, w, h);
-            }
-
-            // Cut lines
-            if (showCutLines) {
-              ctx.strokeStyle = '#ef4444';
-              ctx.lineWidth = 2;
-              ctx.setLineDash([8, 6]);
-              ctx.strokeRect(x, y, w, h);
-              ctx.setLineDash([]);
-            }
-            resolve();
-          };
-
-          const img = imageCache.current[item.dataUrl];
-          if (img && img.complete) {
-            drawItem(img);
-          } else {
-            const newImg = new Image();
-            newImg.onload = () => drawItem(newImg);
-            newImg.onerror = resolve;
-            newImg.src = item.dataUrl;
-          }
-        });
-      });
-
-      await Promise.all(drawPromises);
-
-      // Download this page
-      const link = document.createElement('a');
-      const pageLabel = numPages > 1 ? `-page${page + 1}of${numPages}` : '';
-      link.download = `gang-sheet-${SHEET_WIDTH_INCHES}x${pageHeight.toFixed(1)}${pageLabel}-${DPI}dpi.png`;
-      link.href = exportCanvas.toDataURL('image/png');
-      link.click();
-
-      // Small delay between downloads
+      // Delay between page downloads
       if (numPages > 1 && page < numPages - 1) {
         await new Promise(r => setTimeout(r, 500));
       }
     }
+  };
+
+  const drawItemsToContext = async (ctx, items, offsetY) => {
+    const drawPromises = items.map((item) => {
+      return new Promise((resolve) => {
+        const drawItem = (img) => {
+          const x = item.x * DPI;
+          const y = (item.y - offsetY) * DPI;
+          const w = item.w * DPI;
+          const h = item.h * DPI;
+
+          if (item.rotated) {
+            ctx.save();
+            ctx.translate(x + w, y);
+            ctx.rotate(Math.PI / 2);
+            ctx.drawImage(img, 0, 0, h, w);
+            ctx.restore();
+          } else {
+            ctx.drawImage(img, x, y, w, h);
+          }
+
+          // Cut lines
+          if (showCutLines) {
+            ctx.strokeStyle = '#ef4444';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([8, 6]);
+            ctx.strokeRect(x, y, w, h);
+            ctx.setLineDash([]);
+          }
+          resolve();
+        };
+
+        const img = imageCache.current[item.dataUrl];
+        if (img && img.complete) {
+          drawItem(img);
+        } else {
+          const newImg = new Image();
+          newImg.onload = () => drawItem(newImg);
+          newImg.onerror = resolve;
+          newImg.src = item.dataUrl;
+        }
+      });
+    });
+    await Promise.all(drawPromises);
+  };
+
+  const downloadCanvasAsBlob = (canvas, page, numPages, pageHeight) => {
+    return new Promise((resolve) => {
+      const pageLabel = numPages > 1 ? `-page${page + 1}of${numPages}` : '';
+      const filename = `gang-sheet-${SHEET_WIDTH_INCHES}x${pageHeight.toFixed(1)}${pageLabel}-${DPI}dpi.png`;
+      canvas.toBlob((blob) => {
+        if (!blob) { resolve(); return; }
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = filename;
+        link.href = url;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        resolve();
+      }, 'image/png');
+    });
+  };
+
+  const downloadCanvasBlobWithName = (canvas, filename) => {
+    return new Promise((resolve) => {
+      canvas.toBlob((blob) => {
+        if (!blob) { resolve(); return; }
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = filename;
+        link.href = url;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        resolve();
+      }, 'image/png');
+    });
   };
 
   const totalItemCount = artworks.reduce((sum, a) => sum + a.repetitions, 0);
