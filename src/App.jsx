@@ -75,24 +75,33 @@ function App() {
       setArtwork(e.target.result);
       setArtworkFile(file);
 
-      // Auto-set artwork dimensions to match image aspect ratio within print area
+      // Auto-set artwork dimensions based on actual image DPI size
       const img = new Image();
       img.onload = () => {
+        const DPI = 300;
+        // Calculate actual physical size at 300 DPI
+        let actualW = parseFloat((img.naturalWidth / DPI).toFixed(2));
+        let actualH = parseFloat((img.naturalHeight / DPI).toFixed(2));
         const imgAspect = img.naturalWidth / img.naturalHeight;
         const maxW = artworkAreaSettings.width;
         const maxH = artworkAreaSettings.height;
 
-        let newW, newH;
-        if (imgAspect > maxW / maxH) {
-          // Image is wider — fit to print area width
-          newW = maxW;
-          newH = parseFloat((maxW / imgAspect).toFixed(2));
+        // Only scale down if the actual size exceeds the print area
+        if (actualW <= maxW && actualH <= maxH) {
+          // Fits within print area — use actual DPI-based dimensions
+          setArtworkDimensions({ width: actualW, height: actualH });
         } else {
-          // Image is taller — fit to print area height
-          newH = maxH;
-          newW = parseFloat((maxH * imgAspect).toFixed(2));
+          // Too large — scale down to fit within print area maintaining aspect ratio
+          let newW, newH;
+          if (imgAspect > maxW / maxH) {
+            newW = maxW;
+            newH = parseFloat((maxW / imgAspect).toFixed(2));
+          } else {
+            newH = maxH;
+            newW = parseFloat((maxH * imgAspect).toFixed(2));
+          }
+          setArtworkDimensions({ width: newW, height: newH });
         }
-        setArtworkDimensions({ width: newW, height: newH });
       };
       img.src = e.target.result;
     };
