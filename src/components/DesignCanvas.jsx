@@ -71,7 +71,7 @@ function DesignCanvas({
     const bodyWidth = sizeData.bodyWidth;
     const bodyLength = sizeData.bodyLength;
 
-    let pxPerInchW, pxPerInchH, tshirtW, tshirtH, tshirtX, tshirtY;
+    let pxPerInchW, pxPerInchH, pxPerInch, tshirtW, tshirtH, tshirtX, tshirtY;
 
     if (customGarment && tshirtImage) {
       // Custom garment: image fills 90% of canvas, body = full image
@@ -94,8 +94,10 @@ function DesignCanvas({
       tshirtH = drawH;
       tshirtX = (CANVAS_WIDTH - drawW) / 2;
       tshirtY = (CANVAS_HEIGHT - drawH) / 2;
+      // Use a uniform scale so artwork inches are correct in both directions
       pxPerInchW = drawW / bodyWidth;
       pxPerInchH = drawH / bodyLength;
+      pxPerInch = Math.min(pxPerInchW, pxPerInchH);
     } else {
       // Default: use 5XL reference scaling
       const maxBodyWidth = 32;
@@ -104,6 +106,7 @@ function DesignCanvas({
       const maxTshirtH = CANVAS_HEIGHT * 0.68;
       pxPerInchW = maxTshirtW / maxBodyWidth;
       pxPerInchH = maxTshirtH / maxBodyLength;
+      pxPerInch = Math.min(pxPerInchW, pxPerInchH);
 
       tshirtW = bodyWidth * pxPerInchW;
       tshirtH = bodyLength * pxPerInchH;
@@ -111,17 +114,17 @@ function DesignCanvas({
       tshirtY = CANVAS_HEIGHT * 0.20 + (maxTshirtH - tshirtH) / 2;
     }
 
-    // Print area from artwork area settings (fixed width × height)
-    const printAreaPxW = artworkAreaSettings.width * pxPerInchW;
-    const printAreaPxH = artworkAreaSettings.height * pxPerInchH;
+    // Print area from artwork area settings (use uniform scale for artwork, non-uniform for shirt positioning)
+    const printAreaPxW = artworkAreaSettings.width * pxPerInch;
+    const printAreaPxH = artworkAreaSettings.height * pxPerInch;
 
     // Centered horizontally, positioned by top offset
     const printX = tshirtX + (tshirtW - printAreaPxW) / 2;
     const printY = tshirtY + (artworkAreaSettings.topOffset * pxPerInchH);
 
-    // Artwork at fixed physical size
-    const artworkPxW = artworkDimensions.width * pxPerInchW;
-    const artworkPxH = artworkDimensions.height * pxPerInchH;
+    // Artwork at fixed physical size — uniform scale so width/height labels match input
+    const artworkPxW = artworkDimensions.width * pxPerInch;
+    const artworkPxH = artworkDimensions.height * pxPerInch;
 
     return {
       x: printX,
@@ -130,6 +133,7 @@ function DesignCanvas({
       height: printAreaPxH,
       artworkWidth: artworkPxW,
       artworkHeight: artworkPxH,
+      pxPerInch,
       tshirtX,
       tshirtY,
       tshirtW,
@@ -271,15 +275,15 @@ function DesignCanvas({
         });
       }
 
-      // Dimension labels — show actual rendered size
-      const pxPerInch = printArea.artworkWidth / artworkDimensions.width;
-      const actualW = (artW / pxPerInch).toFixed(1);
-      const actualH = (artH / (printArea.artworkHeight / artworkDimensions.height)).toFixed(1);
-
+      // Dimension labels — show the set artwork dimensions
       ctx.strokeStyle = '#ef4444';
       ctx.fillStyle = '#ef4444';
       ctx.lineWidth = 1.5;
       ctx.setLineDash([]);
+
+      // Calculate actual inches from rendered pixels using uniform pxPerInch
+      const actualW = (artW / printArea.pxPerInch).toFixed(2);
+      const actualH = (artH / printArea.pxPerInch).toFixed(2);
 
       // Width line above artwork
       const dimY = drawY - 14;
