@@ -408,81 +408,140 @@ function GangSheet({ sharedArtwork }) {
     if (layout.items.length === 0) return;
 
     // First, ensure all images are loaded and decoded
-    const imageLoadPromises = [];
     const loadedImages = {};
+    const uniqueUrls = [...new Set(layout.items.map(i => i.dataUrl))];
     
-    for (const item of layout.items) {
-      if (!loadedImages[item.dataUrl]) {
-        const promise = new Promise((resolve) => {
-          const existing = imageCache.current[item.dataUrl];
-          if (existing && existing.complete && existing.naturalWidth > 0) {
-            loadedImages[item.dataUrl] = existing;
-            resolve();
-          } else {
-            const img = new Image();
-            img.onload = () => {
-              loadedImages[item.dataUrl] = img;
-              resolve();
-            };
-            img.onerror = () => resolve();
-            img.src = item.dataUrl;
-          }
-        });
-        imageLoadPromises.push(promise);
+    await Promise.all(uniqueUrls.map(dataUrl => new Promise((resolve) => {
+      const existing = imageCache.current[dataUrl];
+      if (existing && existing.complete && existing.naturalWidth > 0) {
+        loadedImages[dataUrl] = existing;
+        resolve();
+      } else {
+        const img = new Image();
+        img.onload = () => { loadedImages[dataUrl] = img; resolve(); };
+        img.onerror = () => resolve();
+        img.src = dataUrl;
       }
-    }
-    await Promise.all(imageLoadPromises);
+    })));
 
-    const MAX_PAGE_HEIGHT = 200; // inches per page
     const exportWidth = SHEET_WIDTH_INCHES * DPI;
     const totalHeightInches = layout.totalHeight;
-    const numPages = Math.ceil(totalHeightInches / MAX_PAGE_HEIGHT);
+    const totalHeightPx = Math.round(totalHeightInches * DPI);
 
-    // Max canvas height browsers support (Chrome ~32767, Firefox ~32767, Safari ~16384)
-    const MAX_CANVAS_HEIGHT = 14000; // stay well within safe limits
+    // Chrome supports up to ~32767px, Firefox similar. Use 30000 as safe single-canvas limit.
+    const MAX_CANVAS_PX = 30000;
 
-    for (let page = 0; page < numPages; page++) {
-      const pageStartY = page * MAX_PAGE_HEIGHT;
-      const pageEndY = Math.min((page + 1) * MAX_PAGE_HEIGHT, totalHeightInches);
-      const pageHeight = pageEndY - pageStartY;
-      const exportHeight = Math.round(pageHeight * DPI);
+    if (totalHeightPx <= MAX_CANVAS_PX) {
+      // Entire sheet fits in a single canvas — no splitting needed
+      const exportCanvas = document.createElement('canvas');
+      exportCanvas.width = exportWidth;
+      exportCanvas.height = totalHeightPx;
+      const ctx = exportCanvas.getContext('2d');
+      if (!ctx) { alert('Canvas creation failed.'); return; }
 
-      const totalChunks = Math.ceil(exportHeight / MAX_CANVAS_HEIGHT);
+      if (!bgTransparent) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, exportWidth, totalHeightPx);
+      }
 
-      for (let chunk = 0; chunk < totalChunks; chunk++) {
-        const chunkStartPx = chunk * MAX_CANVAS_HEIGHT;
-        const chunkEndPx = Math.min((chunk + 1) * MAX_CANVAS_HEIGHT, exportHeight);
-        const chunkHeightPx = chunkEndPx - chunkStartPx;
-        const chunkStartInches = pageStartY + (chunkStartPx / DPI);
-        const chunkEndInches = pageStartY + (chunkEndPx / DPI);
+      for (const item of layout.items) {
+        const img = loadedImages[item.dataUrl];
+        if (!img) continue;
+        const x = item.x * DPI;
+        const y = item.y * DPI;
+        const w = item.w * DPI;
+        const h = item.h * DPI;
+
+        if (item.rotated) {
+          ctx.save();
+          ctx.translate(x + w, y);
+          ctx.rotate(Math.PI / 2);
+          ctx.drawImage(img, 0, 0, h, w);
+          ctx.restore();
+        } else {
+          ctx.drawImage(img, x, y, w, h);
+        }
+
+        if (showCutLines) {
+          ctx.strokeStyle = '#ef4444';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([8, 6]);
+          ctx.strokeRect(x, y, w, h);
+          ctx.setLineDash([]);
+        }
+      }
+
+      const filename = `gang-sheet-${SHEET_WIDTH_INCHES}x${totalHeightInches.toFixed(1)}-${DPI}dpi.png`;
+      await triggerDownload(exportCanvas, filename);
+
+    } else {
+      // Sheet exceeds single canvas limit — split at row boundaries (never cut an item)
+      // Find unique row Y positions (items on the same row share the same y)
+      const rowBottoms = [];
+      const itemsByRow = {};
+      for (const item of layout.items) {
+        const rowKey = item.y.toFixed(4);
+        if (!itemsByRow[rowKey]) {
+          itemsByRow[rowKey] = [];
+        }
+        itemsByRow[rowKey].push(item);
+      }
+      // Get sorted unique row starts and compute each row's bottom
+      const rowKeys = Object.keys(itemsByRow).sort((a, b) => parseFloat(a) - parseFloat(b));
+      const rows = rowKeys.map(key => {
+        const items = itemsByRow[key];
+        const y = parseFloat(key);
+        const maxBottom = Math.max(...items.map(i => i.y + i.h));
+        return { y, bottom: maxBottom, items };
+      });
+
+      // Group rows into pages that fit within MAX_CANVAS_PX
+      const maxPageInches = MAX_CANVAS_PX / DPI;
+      const pages = [];
+      let pageRows = [];
+      let pageStartInch = 0;
+
+      for (const row of rows) {
+        const rowBottom = row.bottom;
+        const pageHeightIfAdded = rowBottom - pageStartInch;
+
+        if (pageHeightIfAdded * DPI > MAX_CANVAS_PX && pageRows.length > 0) {
+          // Start a new page
+          const pageEnd = pageRows[pageRows.length - 1].bottom;
+          pages.push({ start: pageStartInch, end: pageEnd, items: pageRows.flatMap(r => r.items) });
+          pageStartInch = row.y;
+          pageRows = [row];
+        } else {
+          pageRows.push(row);
+        }
+      }
+      // Last page
+      if (pageRows.length > 0) {
+        const pageEnd = Math.max(pageRows[pageRows.length - 1].bottom, totalHeightInches);
+        pages.push({ start: pageStartInch, end: pageEnd, items: pageRows.flatMap(r => r.items) });
+      }
+
+      for (let pi = 0; pi < pages.length; pi++) {
+        const pg = pages[pi];
+        const pageHeightInches = pg.end - pg.start;
+        const pageHeightPx = Math.round(pageHeightInches * DPI);
 
         const exportCanvas = document.createElement('canvas');
         exportCanvas.width = exportWidth;
-        exportCanvas.height = chunkHeightPx;
+        exportCanvas.height = pageHeightPx;
         const ctx = exportCanvas.getContext('2d');
-
-        if (!ctx) {
-          console.error('Failed to get canvas context for export');
-          continue;
-        }
+        if (!ctx) continue;
 
         if (!bgTransparent) {
           ctx.fillStyle = '#ffffff';
-          ctx.fillRect(0, 0, exportWidth, chunkHeightPx);
+          ctx.fillRect(0, 0, exportWidth, pageHeightPx);
         }
 
-        // Draw items that fall in this chunk
-        const chunkItems = layout.items.filter(item => {
-          const itemBottom = item.y + item.h;
-          return itemBottom > chunkStartInches && item.y < chunkEndInches;
-        });
-
-        for (const item of chunkItems) {
+        for (const item of pg.items) {
           const img = loadedImages[item.dataUrl];
           if (!img) continue;
-
           const x = item.x * DPI;
-          const y = (item.y - chunkStartInches) * DPI;
+          const y = (item.y - pg.start) * DPI;
           const w = item.w * DPI;
           const h = item.h * DPI;
 
@@ -505,69 +564,62 @@ function GangSheet({ sharedArtwork }) {
           }
         }
 
-        // Generate filename
-        const pageLabel = numPages > 1 ? `-page${page + 1}of${numPages}` : '';
-        const chunkLabel = totalChunks > 1 ? `-part${chunk + 1}of${totalChunks}` : '';
-        const heightLabel = totalChunks > 1 
-          ? (chunkHeightPx / DPI).toFixed(1) 
-          : pageHeight.toFixed(1);
-        const filename = `gang-sheet-${SHEET_WIDTH_INCHES}x${heightLabel}${pageLabel}${chunkLabel}-${DPI}dpi.png`;
+        const pageLabel = pages.length > 1 ? `-page${pi + 1}of${pages.length}` : '';
+        const filename = `gang-sheet-${SHEET_WIDTH_INCHES}x${pageHeightInches.toFixed(1)}${pageLabel}-${DPI}dpi.png`;
+        await triggerDownload(exportCanvas, filename);
 
-        // Download using toBlob with fallback to toDataURL
-        await new Promise((resolve) => {
-          try {
-            exportCanvas.toBlob((blob) => {
-              if (blob && blob.size > 0) {
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.download = filename;
-                link.href = url;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                setTimeout(() => URL.revokeObjectURL(url), 2000);
-                resolve();
-              } else {
-                // Fallback to toDataURL if toBlob fails
-                try {
-                  const dataUrl = exportCanvas.toDataURL('image/png');
-                  const link = document.createElement('a');
-                  link.download = filename;
-                  link.href = dataUrl;
-                  document.body.appendChild(link);
-                  link.click();
-                  document.body.removeChild(link);
-                } catch (err) {
-                  console.error('Export failed:', err);
-                  alert('Export failed. The sheet may be too large. Try reducing repetitions.');
-                }
-                resolve();
-              }
-            }, 'image/png');
-          } catch (err) {
-            // toBlob not supported or canvas tainted — fallback
+        if (pi < pages.length - 1) {
+          await new Promise(r => setTimeout(r, 600));
+        }
+      }
+    }
+  };
+
+  const triggerDownload = (canvas, filename) => {
+    return new Promise((resolve) => {
+      try {
+        canvas.toBlob((blob) => {
+          if (blob && blob.size > 0) {
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.download = filename;
+            link.href = url;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            setTimeout(() => URL.revokeObjectURL(url), 2000);
+            resolve();
+          } else {
+            // Fallback to toDataURL
             try {
-              const dataUrl = exportCanvas.toDataURL('image/png');
+              const dataUrl = canvas.toDataURL('image/png');
               const link = document.createElement('a');
               link.download = filename;
               link.href = dataUrl;
               document.body.appendChild(link);
               link.click();
               document.body.removeChild(link);
-            } catch (e) {
-              console.error('Export failed:', e);
-              alert('Export failed. The sheet may be too large.');
+            } catch (err) {
+              alert('Export failed. Try fewer repetitions.');
             }
             resolve();
           }
-        });
-
-        // Small delay between downloads
-        if (totalChunks > 1 || (numPages > 1 && page < numPages - 1)) {
-          await new Promise(r => setTimeout(r, 600));
+        }, 'image/png');
+      } catch (err) {
+        try {
+          const dataUrl = canvas.toDataURL('image/png');
+          const link = document.createElement('a');
+          link.download = filename;
+          link.href = dataUrl;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        } catch (e) {
+          alert('Export failed. Try fewer repetitions.');
         }
+        resolve();
       }
-    }
+    });
   };
 
   const totalItemCount = artworks.reduce((sum, a) => sum + a.repetitions, 0);
