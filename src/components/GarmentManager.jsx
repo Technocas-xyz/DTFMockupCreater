@@ -274,26 +274,34 @@ function GarmentManager({ onUseAsMockup }) {
       };
 
       // Save to server API
+      setErrorMsg('Saving...');
       fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newGarment),
       })
-        .then(res => res.json())
+        .then(res => {
+          if (!res.ok) throw new Error(`Server error: ${res.status} ${res.statusText}`);
+          return res.json();
+        })
         .then(saved => {
+          if (saved.error) throw new Error(saved.error);
           saved.dataUrl = compressedUrl;
           const newLibrary = [...library, saved];
           saveLibrary(newLibrary);
           setSelectedLibraryId(saved.id);
-          setErrorMsg('');
+          setErrorMsg('✓ Saved successfully!');
+          setTimeout(() => setErrorMsg(''), 2000);
         })
         .catch(e => {
-          // Fallback to localStorage only
+          console.error('Server save failed:', e);
+          // Fallback: save locally with a generated ID
           newGarment.id = Date.now().toString();
+          newGarment.imageFile = null;
           const newLibrary = [...library, newGarment];
           saveLibrary(newLibrary);
           setSelectedLibraryId(newGarment.id);
-          setErrorMsg('');
+          setErrorMsg(`⚠️ Saved locally only (server error: ${e.message}). Garment may not persist across sessions.`);
         });
     };
     img.src = garmentImage.dataUrl;
