@@ -37,13 +37,34 @@ function App() {
   const [garmentLibrary, setGarmentLibrary] = useState([]);
   const [selectedGarmentId, setSelectedGarmentId] = useState(null);
 
-  // Load garment library from localStorage
+  // Load garment library from server API (shared for all users), fallback to localStorage
+  const API_URL = '/Tshirt Previewer/api/garments.php';
+  const IMAGE_URL = '/Tshirt Previewer/api/serve-image.php';
+
+  const loadGarmentLibrary = () => {
+    fetch(API_URL)
+      .then(res => res.json())
+      .then(data => {
+        const withUrls = data.map(g => ({
+          ...g,
+          dataUrl: g.dataUrl || `${IMAGE_URL}?file=${g.imageFile}`,
+        }));
+        setGarmentLibrary(withUrls);
+        // Keep localStorage in sync
+        try { localStorage.setItem('garment-library', JSON.stringify(withUrls)); } catch(e) {}
+      })
+      .catch(() => {
+        // Fallback to localStorage
+        try {
+          const stored = localStorage.getItem('garment-library');
+          if (stored) setGarmentLibrary(JSON.parse(stored));
+        } catch (e) {}
+      });
+  };
+
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('garment-library');
-      if (stored) setGarmentLibrary(JSON.parse(stored));
-    } catch (e) {}
-  }, [currentPage]); // Reload when switching pages (in case garments were added)
+    loadGarmentLibrary();
+  }, [currentPage]); // Reload when switching pages
 
   // Handle garment selection change
   const handleGarmentChange = (garmentId) => {
