@@ -9,7 +9,7 @@ import BGRemover from './components/BGRemover';
 import GarmentManager from './components/GarmentManager';
 import GangSheet from './components/GangSheet';
 import { TSHIRT_SIZES, TSHIRT_COLORS, SIZE_ORDER } from './constants/tshirtSizes';
-import { GARMENTS_API, SERVE_IMAGE_URL } from './utils/apiConfig';
+import { GARMENTS_API, SERVE_IMAGE_URL, detectApiBase, getGarmentsUrl, getServeImageUrl } from './utils/apiConfig';
 import './App.css';
 
 function App() {
@@ -39,8 +39,12 @@ function App() {
   const [selectedGarmentId, setSelectedGarmentId] = useState(null);
 
   // Load garment library from server API (shared for all users), fallback to localStorage
-  const loadGarmentLibrary = () => {
-    fetch(GARMENTS_API)
+  const loadGarmentLibrary = async () => {
+    const apiBase = await detectApiBase();
+    const apiUrl = `${apiBase}/garments.php`;
+    const imageUrl = `${apiBase}/serve-image.php`;
+
+    fetch(apiUrl)
       .then(res => {
         if (!res.ok) throw new Error('Server error');
         return res.json();
@@ -49,7 +53,7 @@ function App() {
         if (!Array.isArray(data)) throw new Error('Invalid data');
         const withUrls = data.map(g => ({
           ...g,
-          dataUrl: g.dataUrl || (g.imageFile ? `${SERVE_IMAGE_URL}?file=${g.imageFile}` : null),
+          dataUrl: g.dataUrl || (g.imageFile ? `${imageUrl}?file=${g.imageFile}` : null),
         })).filter(g => g.dataUrl); // only include garments that have a valid image
         setGarmentLibrary(withUrls);
         // Keep localStorage in sync

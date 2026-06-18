@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { TSHIRT_SIZES } from '../constants/tshirtSizes';
-import { GARMENTS_API, SERVE_IMAGE_URL } from '../utils/apiConfig';
+import { GARMENTS_API, SERVE_IMAGE_URL, detectApiBase } from '../utils/apiConfig';
 import './GarmentManager.css';
 
 const GARMENT_TYPES = ['T-Shirt', 'Hoodie', 'Long Sleeve', 'Tank Top', 'Other'];
@@ -77,31 +77,38 @@ function GarmentManager({ onUseAsMockup }) {
   const fileInputRef = useRef(null);
 
   // API base URL — auto-detected for local and remote servers
-  const API_URL = GARMENTS_API;
-  const IMAGE_URL = SERVE_IMAGE_URL;
+  const [API_URL, setApiUrl] = useState(GARMENTS_API);
+  const [IMAGE_URL, setImageUrl] = useState(SERVE_IMAGE_URL);
 
   // Load library from server (shared for all users)
   useEffect(() => {
-    fetch(API_URL)
-      .then(res => {
-        if (!res.ok) throw new Error('Server error');
-        return res.json();
-      })
-      .then(data => {
-        if (!Array.isArray(data)) throw new Error('Invalid data');
-        const withUrls = data.map(g => ({
-          ...g,
-          dataUrl: g.dataUrl || (g.imageFile ? `${IMAGE_URL}?file=${g.imageFile}` : null),
-        })).filter(g => g.dataUrl);
-        setLibrary(withUrls);
-      })
-      .catch(e => {
-        console.warn('Failed to load from server, trying localStorage', e);
-        try {
-          const stored = localStorage.getItem(STORAGE_KEY);
-          if (stored) setLibrary(JSON.parse(stored));
-        } catch (err) {}
-      });
+    detectApiBase().then(base => {
+      const apiUrl = `${base}/garments.php`;
+      const imgUrl = `${base}/serve-image.php`;
+      setApiUrl(apiUrl);
+      setImageUrl(imgUrl);
+
+      fetch(apiUrl)
+        .then(res => {
+          if (!res.ok) throw new Error('Server error');
+          return res.json();
+        })
+        .then(data => {
+          if (!Array.isArray(data)) throw new Error('Invalid data');
+          const withUrls = data.map(g => ({
+            ...g,
+            dataUrl: g.dataUrl || (g.imageFile ? `${imgUrl}?file=${g.imageFile}` : null),
+          })).filter(g => g.dataUrl);
+          setLibrary(withUrls);
+        })
+        .catch(e => {
+          console.warn('Failed to load from server, trying localStorage', e);
+          try {
+            const stored = localStorage.getItem(STORAGE_KEY);
+            if (stored) setLibrary(JSON.parse(stored));
+          } catch (err) {}
+        });
+    });
   }, []);
 
   // Save library (stores metadata only in localStorage as fallback — no images)
