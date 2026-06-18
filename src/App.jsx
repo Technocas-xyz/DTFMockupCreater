@@ -43,21 +43,30 @@ function App() {
 
   const loadGarmentLibrary = () => {
     fetch(API_URL)
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error('Server error');
+        return res.json();
+      })
       .then(data => {
+        if (!Array.isArray(data)) throw new Error('Invalid data');
         const withUrls = data.map(g => ({
           ...g,
-          dataUrl: g.dataUrl || `${IMAGE_URL}?file=${g.imageFile}`,
-        }));
+          dataUrl: g.dataUrl || (g.imageFile ? `${IMAGE_URL}?file=${g.imageFile}` : null),
+        })).filter(g => g.dataUrl); // only include garments that have a valid image
         setGarmentLibrary(withUrls);
         // Keep localStorage in sync
         try { localStorage.setItem('garment-library', JSON.stringify(withUrls)); } catch(e) {}
       })
       .catch(() => {
-        // Fallback to localStorage
+        // Fallback to localStorage — don't clear existing library on failure
         try {
           const stored = localStorage.getItem('garment-library');
-          if (stored) setGarmentLibrary(JSON.parse(stored));
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setGarmentLibrary(parsed);
+            }
+          }
         } catch (e) {}
       });
   };

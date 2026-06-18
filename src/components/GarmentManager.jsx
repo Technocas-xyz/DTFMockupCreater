@@ -82,13 +82,16 @@ function GarmentManager({ onUseAsMockup }) {
   // Load library from server (shared for all users)
   useEffect(() => {
     fetch(API_URL)
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error('Server error');
+        return res.json();
+      })
       .then(data => {
-        // Convert image file references to full URLs
+        if (!Array.isArray(data)) throw new Error('Invalid data');
         const withUrls = data.map(g => ({
           ...g,
-          dataUrl: g.dataUrl || `${IMAGE_URL}?file=${g.imageFile}`,
-        }));
+          dataUrl: g.dataUrl || (g.imageFile ? `${IMAGE_URL}?file=${g.imageFile}` : null),
+        })).filter(g => g.dataUrl);
         setLibrary(withUrls);
       })
       .catch(e => {
@@ -100,12 +103,16 @@ function GarmentManager({ onUseAsMockup }) {
       });
   }, []);
 
-  // Save library (also saves to localStorage as fallback)
+  // Save library (stores metadata only in localStorage as fallback — no images)
   const saveLibrary = (newLibrary) => {
     setLibrary(newLibrary);
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newLibrary));
-    } catch (e) {}
+      // Only store metadata (no dataUrl) to avoid localStorage quota issues
+      const metaOnly = newLibrary.map(({ dataUrl, ...rest }) => rest);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(metaOnly));
+    } catch (e) {
+      // localStorage full — that's OK, server is the primary storage
+    }
   };
 
   // Handle file upload
