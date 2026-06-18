@@ -174,6 +174,8 @@ function GangSheet({ sharedArtwork }) {
   const [bgTransparent, setBgTransparent] = useState(false);
   const [zoom, setZoom] = useState(100);
   const [layout, setLayout] = useState({ items: [], totalHeight: 0 });
+  const [detailsArtwork, setDetailsArtwork] = useState(null); // artwork being shown in details popup
+  const COST_PER_FOOT = 5; // USD per linear foot
 
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -623,6 +625,13 @@ function GangSheet({ sharedArtwork }) {
                   </div>
                 </div>
                 <button
+                  className="gs-artwork-info-btn"
+                  onClick={() => setDetailsArtwork(detailsArtwork?.id === art.id ? null : art)}
+                  title="View artwork details"
+                >
+                  ⓘ
+                </button>
+                <button
                   className="gs-artwork-delete"
                   onClick={() => removeArtwork(art.id)}
                   title="Remove artwork"
@@ -771,11 +780,27 @@ function GangSheet({ sharedArtwork }) {
               <label>Export Size</label>
               <span>{SHEET_WIDTH_INCHES * DPI} × {Math.round(layout.totalHeight * DPI)} px ({SHEET_WIDTH_INCHES}" × {layout.totalHeight.toFixed(2)}")</span>
             </div>
-            <div className="gs-stat-row">
-              <label>Pages</label>
-              <span>{Math.ceil(layout.totalHeight / 200)} {layout.totalHeight > 200 ? '(auto-paginated at 200")' : ''}</span>
-            </div>
           </div>
+
+          {/* Cost Calculation */}
+          {layout.totalHeight > 0 && (
+            <div className="gs-cost-box">
+              <div className="gs-cost-title">💰 Cost Estimate</div>
+              <div className="gs-cost-row">
+                <span>Sheet length</span>
+                <span>{layout.totalHeight.toFixed(2)}" ({(layout.totalHeight / 12).toFixed(2)} ft)</span>
+              </div>
+              <div className="gs-cost-row">
+                <span>Rate</span>
+                <span>${COST_PER_FOOT.toFixed(2)} / linear ft</span>
+              </div>
+              <div className="gs-cost-divider" />
+              <div className="gs-cost-row gs-cost-total">
+                <span>Total</span>
+                <span>${((layout.totalHeight / 12) * COST_PER_FOOT).toFixed(2)} USD</span>
+              </div>
+            </div>
+          )}
 
           <button className="gs-btn-recalc" onClick={() => {
             const newLayout = calculateLayout(artworks, SHEET_WIDTH_INCHES, hGap, vGap, margins, tightPack);
@@ -785,6 +810,66 @@ function GangSheet({ sharedArtwork }) {
           </button>
         </div>
       </div>
+
+      {/* Artwork Details Popup */}
+      {detailsArtwork && (
+        <div className="gs-details-overlay" onClick={() => setDetailsArtwork(null)}>
+          <div className="gs-details-popup" onClick={(e) => e.stopPropagation()}>
+            <div className="gs-details-header">
+              <span>Artwork Details</span>
+              <button className="gs-details-close" onClick={() => setDetailsArtwork(null)}>×</button>
+            </div>
+            <img src={detailsArtwork.dataUrl} alt={detailsArtwork.filename} className="gs-details-preview" />
+            <div className="gs-details-body">
+              <div className="gs-details-row">
+                <label>Filename</label>
+                <span title={detailsArtwork.filename}>{detailsArtwork.filename}</span>
+              </div>
+              <div className="gs-details-row">
+                <label>Pixel Size</label>
+                <span>{detailsArtwork.originalWidth} × {detailsArtwork.originalHeight} px</span>
+              </div>
+              <div className="gs-details-row">
+                <label>Print Size</label>
+                <span>{detailsArtwork.widthInches}" × {detailsArtwork.heightInches}"</span>
+              </div>
+              <div className="gs-details-row">
+                <label>Aspect Ratio</label>
+                <span>
+                  {(() => {
+                    const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
+                    const w = detailsArtwork.originalWidth;
+                    const h = detailsArtwork.originalHeight;
+                    const d = gcd(w, h);
+                    return `${w/d} : ${h/d}`;
+                  })()}
+                  {' '}({(detailsArtwork.originalWidth / detailsArtwork.originalHeight).toFixed(3)})
+                </span>
+              </div>
+              <div className="gs-details-row">
+                <label>DPI</label>
+                <span>~{Math.round(detailsArtwork.originalWidth / detailsArtwork.widthInches)} DPI</span>
+              </div>
+              <div className="gs-details-row">
+                <label>Repetitions</label>
+                <span>{detailsArtwork.repetitions}×</span>
+              </div>
+              <div className="gs-details-row">
+                <label>Area per item</label>
+                <span>{(detailsArtwork.widthInches * detailsArtwork.heightInches / 144).toFixed(3)} sq ft</span>
+              </div>
+              <div className="gs-details-divider" />
+              <div className="gs-details-row gs-details-cost">
+                <label>Cost (all reps)</label>
+                <span>
+                  ${((detailsArtwork.heightInches * detailsArtwork.repetitions / 12) * COST_PER_FOOT).toFixed(2)} USD
+                  <small> ({detailsArtwork.repetitions} × {(detailsArtwork.heightInches / 12).toFixed(2)} ft × ${COST_PER_FOOT}/ft)</small>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -493,3 +493,189 @@
 .gs-empty-state p {
   font-size: 13px;
 }
+
+/* Info button on artwork items */
+.gs-artwork-info-btn {
+  position: absolute;
+  top: 6px;
+  right: 28px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(37, 99, 235, 0.85);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.gs-artwork-item:hover .gs-artwork-info-btn {
+  opacity: 1;
+}
+
+/* Cost box in right panel */
+.gs-cost-box {
+  background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+  border: 1px solid #86efac;
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.gs-cost-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #15803d;
+  margin-bottom: 2px;
+}
+
+.gs-cost-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: #374151;
+}
+
+.gs-cost-row span:last-child {
+  font-weight: 500;
+  color: #111827;
+}
+
+.gs-cost-divider {
+  border-top: 1px solid #86efac;
+  margin: 2px 0;
+}
+
+.gs-cost-total {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.gs-cost-total span {
+  color: #15803d !important;
+  font-size: 15px !important;
+}
+
+/* Artwork Details Popup */
+.gs-details-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gs-details-popup {
+  background: white;
+  border-radius: 14px;
+  width: 360px;
+  max-width: 95vw;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+.gs-details-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: #f8fafc;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.gs-details-close {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #f1f5f9;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.gs-details-close:hover {
+  background: #e2e8f0;
+  color: var(--text-primary);
+}
+
+.gs-details-preview {
+  width: 100%;
+  max-height: 180px;
+  object-fit: contain;
+  background: #f8fafc;
+  padding: 12px;
+}
+
+.gs-details-body {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gs-details-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  font-size: 13px;
+  gap: 8px;
+}
+
+.gs-details-row label {
+  color: var(--text-secondary);
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.gs-details-row span {
+  color: var(--text-primary);
+  font-weight: 500;
+  text-align: right;
+  word-break: break-all;
+}
+
+.gs-details-divider {
+  border-top: 1px solid var(--border);
+  margin: 4px 0;
+}
+
+.gs-details-cost label {
+  color: #15803d;
+  font-weight: 700;
+}
+
+.gs-details-cost span {
+  color: #15803d;
+  font-weight: 700;
+  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.gs-details-cost small {
+  font-size: 10px;
+  color: #64748b;
+  font-weight: 400;
+}
