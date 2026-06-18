@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "8095:80"
+    volumes:
+      # Persist garment data across container rebuilds
+      - garment-data:/var/www/html/api/garment-data
+    restart: unless-stopped
+
+volumes:
+  garment-data:
