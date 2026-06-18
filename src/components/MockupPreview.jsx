@@ -81,12 +81,25 @@ function MockupPreview({
           offscreen.width = W;
           offscreen.height = H;
           const offCtx = offscreen.getContext('2d');
+          const hex = selectedColor.hex.replace('#', '');
+          const cr = parseInt(hex.substring(0, 2), 16);
+          const cg = parseInt(hex.substring(2, 4), 16);
+          const cb = parseInt(hex.substring(4, 6), 16);
+
           offCtx.drawImage(shirtImg, dx, dy, dw, dh);
-          offCtx.globalCompositeOperation = 'multiply';
-          offCtx.fillStyle = selectedColor.hex;
-          offCtx.fillRect(0, 0, W, H);
-          offCtx.globalCompositeOperation = 'destination-in';
-          offCtx.drawImage(shirtImg, dx, dy, dw, dh);
+
+          if (!(cr > 240 && cg > 240 && cb > 240)) {
+            offCtx.globalCompositeOperation = 'source-atop';
+            offCtx.fillStyle = selectedColor.hex;
+            offCtx.globalAlpha = 0.75;
+            offCtx.fillRect(0, 0, W, H);
+            offCtx.globalAlpha = 1;
+            offCtx.globalCompositeOperation = 'multiply';
+            offCtx.globalAlpha = 0.5;
+            offCtx.drawImage(shirtImg, dx, dy, dw, dh);
+            offCtx.globalAlpha = 1;
+            offCtx.globalCompositeOperation = 'source-over';
+          }
           ctx.drawImage(offscreen, 0, 0);
         } else if (shirtImg) {
           // Default t-shirt — scale based on size, apply color tint
@@ -569,12 +582,25 @@ function MockupCard({ size, artwork, color, artworkDimensions, artworkPosition, 
       offscreen.width = W;
       offscreen.height = H;
       const offCtx = offscreen.getContext('2d');
+      const hex2 = color.hex.replace('#', '');
+      const cr2 = parseInt(hex2.substring(0, 2), 16);
+      const cg2 = parseInt(hex2.substring(2, 4), 16);
+      const cb2 = parseInt(hex2.substring(4, 6), 16);
+
       offCtx.drawImage(tshirtImg, dx, dy, dw, dh);
-      offCtx.globalCompositeOperation = 'multiply';
-      offCtx.fillStyle = color.hex;
-      offCtx.fillRect(0, 0, W, H);
-      offCtx.globalCompositeOperation = 'destination-in';
-      offCtx.drawImage(tshirtImg, dx, dy, dw, dh);
+
+      if (!(cr2 > 240 && cg2 > 240 && cb2 > 240)) {
+        offCtx.globalCompositeOperation = 'source-atop';
+        offCtx.fillStyle = color.hex;
+        offCtx.globalAlpha = 0.75;
+        offCtx.fillRect(0, 0, W, H);
+        offCtx.globalAlpha = 1;
+        offCtx.globalCompositeOperation = 'multiply';
+        offCtx.globalAlpha = 0.5;
+        offCtx.drawImage(tshirtImg, dx, dy, dw, dh);
+        offCtx.globalAlpha = 1;
+        offCtx.globalCompositeOperation = 'source-over';
+      }
       ctx.drawImage(offscreen, 0, 0);
     } else {
       tshirtW = W * 0.52;

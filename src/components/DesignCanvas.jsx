@@ -6,6 +6,61 @@ import './DesignCanvas.css';
 const CANVAS_WIDTH = 700;
 const CANVAS_HEIGHT = 850;
 
+// Color tinting utility — replaces hue/saturation but preserves lightness
+// This works correctly on any shirt color (black, white, colored, etc.)
+function applyColorTint(ctx, img, dx, dy, dw, dh, canvasW, canvasH, colorHex) {
+  // If color is white (#ffffff or close), just draw as-is
+  const hex = colorHex.replace('#', '');
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+
+  // Draw original image first
+  const offscreen = document.createElement('canvas');
+  offscreen.width = canvasW;
+  offscreen.height = canvasH;
+  const offCtx = offscreen.getContext('2d');
+  offCtx.drawImage(img, dx, dy, dw, dh);
+
+  // If white is selected, just draw original
+  if (r > 240 && g > 240 && b > 240) {
+    ctx.drawImage(offscreen, 0, 0);
+    return;
+  }
+
+  // For colored tinting: use 'hue' blend which changes hue/sat but keeps luminosity
+  // Step 1: draw original (to get the alpha mask)
+  // Step 2: overlay the color using 'multiply' for dark colors or 'screen' for light
+  // Best approach for garments: draw original, then overlay color at ~60% opacity with 'multiply'
+  // + draw original at low opacity on top to preserve texture
+
+  // Approach: screen blend for light colors, multiply for mid, for dark overlay
+  // Simplest that works well: draw original, then overlay color with 'color' blend mode
+  offCtx.globalCompositeOperation = 'source-atop';
+  offCtx.fillStyle = colorHex;
+  offCtx.globalAlpha = 0.75;
+  offCtx.fillRect(0, 0, canvasW, canvasH);
+  offCtx.globalAlpha = 1;
+
+  // Draw texture back on top using multiply to get shading
+  const texture = document.createElement('canvas');
+  texture.width = canvasW;
+  texture.height = canvasH;
+  const texCtx = texture.getContext('2d');
+  texCtx.drawImage(img, dx, dy, dw, dh);
+  texCtx.globalCompositeOperation = 'multiply';
+  texCtx.globalAlpha = 0.6;
+  texCtx.drawImage(img, dx, dy, dw, dh);
+
+  offCtx.globalCompositeOperation = 'multiply';
+  offCtx.globalAlpha = 0.5;
+  offCtx.drawImage(texture, 0, 0);
+  offCtx.globalAlpha = 1;
+  offCtx.globalCompositeOperation = 'source-over';
+
+  ctx.drawImage(offscreen, 0, 0);
+}
+
 function DesignCanvas({
   artwork,
   selectedSize,
@@ -160,24 +215,13 @@ function DesignCanvas({
       const imgAspect = imgW / imgH;
 
       if (customGarment) {
-        // Custom garment from Garment Manager — draw as uploaded at full size, apply color tint
+        // Custom garment — draw with color tint
         const drawW = printArea.tshirtW;
         const drawH = printArea.tshirtH;
         const drawX = printArea.tshirtX;
         const drawY = printArea.tshirtY;
 
-        // Apply color tint using offscreen canvas
-        const offscreen = document.createElement('canvas');
-        offscreen.width = CANVAS_WIDTH;
-        offscreen.height = CANVAS_HEIGHT;
-        const offCtx = offscreen.getContext('2d');
-        offCtx.drawImage(tshirtImage, drawX, drawY, drawW, drawH);
-        offCtx.globalCompositeOperation = 'multiply';
-        offCtx.fillStyle = selectedColor.hex;
-        offCtx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-        offCtx.globalCompositeOperation = 'destination-in';
-        offCtx.drawImage(tshirtImage, drawX, drawY, drawW, drawH);
-        ctx.drawImage(offscreen, 0, 0);
+        applyColorTint(ctx, tshirtImage, drawX, drawY, drawW, drawH, CANVAS_WIDTH, CANVAS_HEIGHT, selectedColor.hex);
       } else {
         // Default t-shirt image — scale based on size, apply color tint
         const { tshirtW, tshirtH, tshirtX, tshirtY } = printArea;
@@ -188,17 +232,7 @@ function DesignCanvas({
         const shirtImgX = (CANVAS_WIDTH - shirtImgW) / 2;
         const shirtImgY = tshirtY - (shirtImgH - tshirtH) * 0.15;
 
-        const offscreen = document.createElement('canvas');
-        offscreen.width = CANVAS_WIDTH;
-        offscreen.height = CANVAS_HEIGHT;
-        const offCtx = offscreen.getContext('2d');
-        offCtx.drawImage(tshirtImage, shirtImgX, shirtImgY, shirtImgW, shirtImgH);
-        offCtx.globalCompositeOperation = 'multiply';
-        offCtx.fillStyle = selectedColor.hex;
-        offCtx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-        offCtx.globalCompositeOperation = 'destination-in';
-        offCtx.drawImage(tshirtImage, shirtImgX, shirtImgY, shirtImgW, shirtImgH);
-        ctx.drawImage(offscreen, 0, 0);
+        applyColorTint(ctx, tshirtImage, shirtImgX, shirtImgY, shirtImgW, shirtImgH, CANVAS_WIDTH, CANVAS_HEIGHT, selectedColor.hex);
       }
     } else {
       // Fallback: draw vector t-shirt shape

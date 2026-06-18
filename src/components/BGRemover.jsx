@@ -24,6 +24,7 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
   const [processingMode, setProcessingMode] = useState('auto'); // 'auto' | 'manual'
   const [sensitivity, setSensitivity] = useState(40);
   const [feather, setFeather] = useState(0);
+  const [removeInteriorWhite, setRemoveInteriorWhite] = useState(true);
   const [bgRemoved, setBgRemoved] = useState(false);
 
   // Object selection (manual mode)
@@ -143,7 +144,7 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
     setTimeout(async () => {
       try {
         const imgData = await getImageDataFromUrl(originalImage);
-        const processed = removeBackground(imgData, sensitivity, feather);
+        const processed = removeBackground(imgData, sensitivity, feather, removeInteriorWhite);
         setProcessedImageData(processed);
         const url = imageDataToUrl(processed);
         setDisplayUrl(url);
@@ -527,6 +528,20 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
                 onChange={(e) => setFeather(Number(e.target.value))}
                 className="bgr-slider"
               />
+            </div>
+
+            <div className="bgr-control-group">
+              <label className="bgr-label bgr-toggle-label">
+                <span>Remove Interior White</span>
+                <button
+                  className={`bgr-toggle-btn ${removeInteriorWhite ? 'active' : ''}`}
+                  onClick={() => setRemoveInteriorWhite(v => !v)}
+                  title="Also remove white/light areas trapped inside the artwork"
+                >
+                  {removeInteriorWhite ? 'ON' : 'OFF'}
+                </button>
+              </label>
+              <p className="bgr-hint">Removes white gaps trapped inside the design (e.g. between chains, letters)</p>
             </div>
 
             <div className="bgr-button-group">

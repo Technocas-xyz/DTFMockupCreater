@@ -9,9 +9,10 @@
  * @param {ImageData} imageData - source image data
  * @param {number} tolerance - 0-100 color similarity threshold
  * @param {number} feather - 0-5 edge feather radius in pixels
+ * @param {boolean} removeInteriorWhite - also remove white/light interior areas
  * @returns {ImageData} - processed image with transparent background
  */
-export function removeBackground(imageData, tolerance = 30, feather = 0) {
+export function removeBackground(imageData, tolerance = 30, feather = 0, removeInteriorWhite = false) {
   const width = imageData.width;
   const height = imageData.height;
   const data = new Uint8ClampedArray(imageData.data);
@@ -110,6 +111,70 @@ export function removeBackground(imageData, tolerance = 30, feather = 0) {
       if (dist <= toleranceScaled) {
         isBackground[nIdx] = 1;
         queue.push(nIdx);
+      }
+    }
+  }
+
+  // Optional: remove interior white/light areas not connected to the edge
+  // Uses a second pass: flood-fill from any non-background pixel that is white/near-white
+  // Only removes pixels that are clearly white (brightness > 220) and not already removed
+  if (removeInteriorWhite) {
+    const WHITE_THRESHOLD = 220; // pixels brighter than this in all channels are considered white
+    const interiorVisited = new Uint8Array(totalPixels);
+
+    // Mark already-removed (background) pixels as visited so we skip them
+    for (let i = 0; i < totalPixels; i++) {
+      if (isBackground[i]) interiorVisited[i] = 1;
+    }
+
+    // Find all unvisited white pixels and flood-fill them out
+    // These are enclosed white regions (not connected to the already-removed edge background)
+    for (let i = 0; i < totalPixels; i++) {
+      if (interiorVisited[i]) continue;
+      const offset = i * 4;
+      const r = data[offset];
+      const g = data[offset + 1];
+      const b = data[offset + 2];
+
+      // Is this pixel white/near-white?
+      if (r >= WHITE_THRESHOLD && g >= WHITE_THRESHOLD && b >= WHITE_THRESHOLD) {
+        // Flood fill this enclosed white region
+        const wQueue = [i];
+        interiorVisited[i] = 1;
+        const regionPixels = [i];
+
+        let wHead = 0;
+        while (wHead < wQueue.length) {
+          const pIdx = wQueue[wHead++];
+          const px = pIdx % width;
+          const py = Math.floor(pIdx / width);
+
+          const neighbors = [];
+          if (px > 0) neighbors.push(pIdx - 1);
+          if (px < width - 1) neighbors.push(pIdx + 1);
+          if (py > 0) neighbors.push(pIdx - width);
+          if (py < height - 1) neighbors.push(pIdx + width);
+
+          for (const nIdx of neighbors) {
+            if (interiorVisited[nIdx]) continue;
+            interiorVisited[nIdx] = 1;
+            const nOff = nIdx * 4;
+            const nr = data[nOff];
+            const ng = data[nOff + 1];
+            const nb = data[nOff + 2];
+
+            // Continue filling if neighbour is also white/near-white
+            if (nr >= WHITE_THRESHOLD && ng >= WHITE_THRESHOLD && nb >= WHITE_THRESHOLD) {
+              wQueue.push(nIdx);
+              regionPixels.push(nIdx);
+            }
+          }
+        }
+
+        // Mark all found white pixels as background (to be made transparent)
+        for (const pIdx of regionPixels) {
+          isBackground[pIdx] = 1;
+        }
       }
     }
   }
