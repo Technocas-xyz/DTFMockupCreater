@@ -532,16 +532,16 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
 
             <div className="bgr-control-group">
               <label className="bgr-label bgr-toggle-label">
-                <span>Remove Interior White</span>
+                <span>Remove Interior BG</span>
                 <button
                   className={`bgr-toggle-btn ${removeInteriorWhite ? 'active' : ''}`}
                   onClick={() => setRemoveInteriorWhite(v => !v)}
-                  title="Also remove white/light areas trapped inside the artwork"
+                  title="Also remove background color areas trapped inside the artwork"
                 >
                   {removeInteriorWhite ? 'ON' : 'OFF'}
                 </button>
               </label>
-              <p className="bgr-hint">Removes white gaps trapped inside the design (e.g. between chains, letters)</p>
+              <p className="bgr-hint">Removes enclosed background pockets inside the design (gaps between chains, letters, etc.)</p>
             </div>
 
             <div className="bgr-button-group">

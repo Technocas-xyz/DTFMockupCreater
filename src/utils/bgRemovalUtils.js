@@ -115,20 +115,18 @@ export function removeBackground(imageData, tolerance = 30, feather = 0, removeI
     }
   }
 
-  // Optional: remove interior white/light areas not connected to the edge
-  // Uses a second pass: flood-fill from any non-background pixel that is white/near-white
-  // Only removes pixels that are clearly white (brightness > 220) and not already removed
+  // Optional: remove interior areas not connected to the edge that match the background color
+  // Works for ANY background color (gray, dark, white, etc.) using the same dominantColor
   if (removeInteriorWhite) {
-    const WHITE_THRESHOLD = 220; // pixels brighter than this in all channels are considered white
     const interiorVisited = new Uint8Array(totalPixels);
 
-    // Mark already-removed (background) pixels as visited so we skip them
+    // Mark already-removed (edge background) pixels as visited
     for (let i = 0; i < totalPixels; i++) {
       if (isBackground[i]) interiorVisited[i] = 1;
     }
 
-    // Find all unvisited white pixels and flood-fill them out
-    // These are enclosed white regions (not connected to the already-removed edge background)
+    // Find all unvisited pixels that match the dominant background color
+    // These are enclosed interior background regions
     for (let i = 0; i < totalPixels; i++) {
       if (interiorVisited[i]) continue;
       const offset = i * 4;
@@ -136,9 +134,15 @@ export function removeBackground(imageData, tolerance = 30, feather = 0, removeI
       const g = data[offset + 1];
       const b = data[offset + 2];
 
-      // Is this pixel white/near-white?
-      if (r >= WHITE_THRESHOLD && g >= WHITE_THRESHOLD && b >= WHITE_THRESHOLD) {
-        // Flood fill this enclosed white region
+      // Check if this pixel matches the dominant background color within tolerance
+      const dist = Math.sqrt(
+        (r - dominantColor.r) ** 2 +
+        (g - dominantColor.g) ** 2 +
+        (b - dominantColor.b) ** 2
+      );
+
+      if (dist <= toleranceScaled) {
+        // Flood fill this enclosed interior background region
         const wQueue = [i];
         interiorVisited[i] = 1;
         const regionPixels = [i];
@@ -163,15 +167,20 @@ export function removeBackground(imageData, tolerance = 30, feather = 0, removeI
             const ng = data[nOff + 1];
             const nb = data[nOff + 2];
 
-            // Continue filling if neighbour is also white/near-white
-            if (nr >= WHITE_THRESHOLD && ng >= WHITE_THRESHOLD && nb >= WHITE_THRESHOLD) {
+            const nDist = Math.sqrt(
+              (nr - dominantColor.r) ** 2 +
+              (ng - dominantColor.g) ** 2 +
+              (nb - dominantColor.b) ** 2
+            );
+
+            if (nDist <= toleranceScaled) {
               wQueue.push(nIdx);
               regionPixels.push(nIdx);
             }
           }
         }
 
-        // Mark all found white pixels as background (to be made transparent)
+        // Mark all found pixels as background (transparent)
         for (const pIdx of regionPixels) {
           isBackground[pIdx] = 1;
         }
