@@ -9,6 +9,7 @@ import BGRemover from './components/BGRemover';
 import GarmentManager from './components/GarmentManager';
 import GangSheet from './components/GangSheet';
 import { TSHIRT_SIZES, TSHIRT_COLORS, SIZE_ORDER } from './constants/tshirtSizes';
+import { GARMENTS_API, SERVE_IMAGE_URL } from './utils/apiConfig';
 import './App.css';
 
 function App() {
@@ -38,11 +39,8 @@ function App() {
   const [selectedGarmentId, setSelectedGarmentId] = useState(null);
 
   // Load garment library from server API (shared for all users), fallback to localStorage
-  const API_URL = '/Tshirt Previewer/api/garments.php';
-  const IMAGE_URL = '/Tshirt Previewer/api/serve-image.php';
-
   const loadGarmentLibrary = () => {
-    fetch(API_URL)
+    fetch(GARMENTS_API)
       .then(res => {
         if (!res.ok) throw new Error('Server error');
         return res.json();
@@ -51,7 +49,7 @@ function App() {
         if (!Array.isArray(data)) throw new Error('Invalid data');
         const withUrls = data.map(g => ({
           ...g,
-          dataUrl: g.dataUrl || (g.imageFile ? `${IMAGE_URL}?file=${g.imageFile}` : null),
+          dataUrl: g.dataUrl || (g.imageFile ? `${SERVE_IMAGE_URL}?file=${g.imageFile}` : null),
         })).filter(g => g.dataUrl); // only include garments that have a valid image
         setGarmentLibrary(withUrls);
         // Keep localStorage in sync

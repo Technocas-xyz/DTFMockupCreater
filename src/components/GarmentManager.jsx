@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { TSHIRT_SIZES } from '../constants/tshirtSizes';
+import { GARMENTS_API, SERVE_IMAGE_URL } from '../utils/apiConfig';
 import './GarmentManager.css';
 
 const GARMENT_TYPES = ['T-Shirt', 'Hoodie', 'Long Sleeve', 'Tank Top', 'Other'];
@@ -75,9 +76,9 @@ function GarmentManager({ onUseAsMockup }) {
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
 
-  // API base URL (same origin for WAMP)
-  const API_URL = '/Tshirt Previewer/api/garments.php';
-  const IMAGE_URL = '/Tshirt Previewer/api/serve-image.php';
+  // API base URL — auto-detected for local and remote servers
+  const API_URL = GARMENTS_API;
+  const IMAGE_URL = SERVE_IMAGE_URL;
 
   // Load library from server (shared for all users)
   useEffect(() => {
