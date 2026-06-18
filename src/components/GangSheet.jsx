@@ -48,59 +48,40 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
     return { items: placed, totalHeight: currentY };
   }
 
-  // TIGHT PACK: 2D free-rectangle bin packing with rotation
-  // Uses Best Short Side Fit (BSSF) heuristic for minimal waste
-  items.sort((a, b) => Math.max(b.w, b.h) - Math.max(a.w, a.h));
+  // TIGHT PACK: MaxRects with Bottom-Left scoring
+  // Always fills the lowest available position first — minimizes sheet height
+  items.sort((a, b) => (b.w * b.h) - (a.w * a.h)); // largest area first
 
-  let freeRects = [{ x: marg.left, y: marg.top, w: availableWidth, h: 10000 }];
+  let freeRects = [{ x: marg.left, y: marg.top, w: availableWidth, h: 100000 }];
   const placed = [];
   let maxY = marg.top;
 
   for (const item of items) {
-    let bestScore1 = Infinity;
-    let bestScore2 = Infinity;
-    let bestX = 0, bestY = 0;
+    let bestY = Infinity, bestX = Infinity;
     let bestW = item.w, bestH = item.h;
     let bestRotated = false;
     let bestFound = false;
 
-    for (let ri = 0; ri < freeRects.length; ri++) {
-      const rect = freeRects[ri];
-
+    for (const rect of freeRects) {
       // Try normal orientation
-      if (item.w <= rect.w + 0.01 && item.h <= rect.h + 0.01) {
-        // Best Short Side Fit: minimize leftover on the shorter side
-        const leftoverW = rect.w - item.w;
-        const leftoverH = rect.h - item.h;
-        const shortSide = Math.min(leftoverW, leftoverH);
-        const longSide = Math.max(leftoverW, leftoverH);
-
-        if (shortSide < bestScore1 || (shortSide === bestScore1 && longSide < bestScore2)) {
-          bestScore1 = shortSide;
-          bestScore2 = longSide;
-          bestX = rect.x;
+      if (item.w <= rect.w + 0.001 && item.h <= rect.h + 0.001) {
+        // Bottom-Left: prefer lowest Y, then leftmost X
+        if (rect.y < bestY || (rect.y === bestY && rect.x < bestX)) {
           bestY = rect.y;
+          bestX = rect.x;
           bestW = item.w;
           bestH = item.h;
           bestRotated = false;
           bestFound = true;
         }
       }
-
       // Try rotated orientation
-      if (item.h <= rect.w + 0.01 && item.w <= rect.h + 0.01) {
-        const leftoverW = rect.w - item.h;
-        const leftoverH = rect.h - item.w;
-        const shortSide = Math.min(leftoverW, leftoverH);
-        const longSide = Math.max(leftoverW, leftoverH);
-
-        if (shortSide < bestScore1 || (shortSide === bestScore1 && longSide < bestScore2)) {
-          bestScore1 = shortSide;
-          bestScore2 = longSide;
-          bestX = rect.x;
+      if (item.h <= rect.w + 0.001 && item.w <= rect.h + 0.001) {
+        if (rect.y < bestY || (rect.y === bestY && rect.x < bestX)) {
           bestY = rect.y;
-          bestW = item.h; // swapped
-          bestH = item.w; // swapped
+          bestX = rect.x;
+          bestW = item.h;
+          bestH = item.w;
           bestRotated = true;
           bestFound = true;
         }
@@ -111,50 +92,44 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
       placed.push({ ...item, x: bestX, y: bestY, w: bestW, h: bestH, rotated: bestRotated });
       maxY = Math.max(maxY, bestY + bestH);
 
-      // Split free rectangles around the placed item (include cutting gap)
-      const placedRect = { x: bestX, y: bestY, w: bestW + hGap, h: bestH + vGap };
-      const newFreeRects = [];
+      // Split free rects around placed item (occupies bestW+hGap × bestH+vGap)
+      const px = bestX, py = bestY;
+      const pw = bestW + hGap, ph = bestH + vGap;
 
+      const newFreeRects = [];
       for (const fr of freeRects) {
-        if (placedRect.x >= fr.x + fr.w || placedRect.x + placedRect.w <= fr.x ||
-            placedRect.y >= fr.y + fr.h || placedRect.y + placedRect.h <= fr.y) {
+        // No overlap → keep as is
+        if (px >= fr.x + fr.w || px + pw <= fr.x || py >= fr.y + fr.h || py + ph <= fr.y) {
           newFreeRects.push(fr);
           continue;
         }
-
         // Left portion
-        if (placedRect.x > fr.x) {
-          newFreeRects.push({ x: fr.x, y: fr.y, w: placedRect.x - fr.x, h: fr.h });
-        }
+        if (px > fr.x)
+          newFreeRects.push({ x: fr.x, y: fr.y, w: px - fr.x, h: fr.h });
         // Right portion
-        if (placedRect.x + placedRect.w < fr.x + fr.w) {
-          newFreeRects.push({ x: placedRect.x + placedRect.w, y: fr.y, w: (fr.x + fr.w) - (placedRect.x + placedRect.w), h: fr.h });
-        }
+        if (px + pw < fr.x + fr.w)
+          newFreeRects.push({ x: px + pw, y: fr.y, w: (fr.x + fr.w) - (px + pw), h: fr.h });
         // Top portion
-        if (placedRect.y > fr.y) {
-          newFreeRects.push({ x: fr.x, y: fr.y, w: fr.w, h: placedRect.y - fr.y });
-        }
+        if (py > fr.y)
+          newFreeRects.push({ x: fr.x, y: fr.y, w: fr.w, h: py - fr.y });
         // Bottom portion
-        if (placedRect.y + placedRect.h < fr.y + fr.h) {
-          newFreeRects.push({ x: fr.x, y: placedRect.y + placedRect.h, w: fr.w, h: (fr.y + fr.h) - (placedRect.y + placedRect.h) });
-        }
+        if (py + ph < fr.y + fr.h)
+          newFreeRects.push({ x: fr.x, y: py + ph, w: fr.w, h: (fr.y + fr.h) - (py + ph) });
       }
 
-      // Remove contained free rects
+      // Remove redundant (contained) rects
       freeRects = [];
-      for (let i = 0; i < newFreeRects.length; i++) {
-        let contained = false;
+      outer: for (let i = 0; i < newFreeRects.length; i++) {
+        const a = newFreeRects[i];
+        if (a.w < 0.25 || a.h < 0.25) continue;
         for (let j = 0; j < newFreeRects.length; j++) {
           if (i === j) continue;
-          const a = newFreeRects[i], b = newFreeRects[j];
+          const b = newFreeRects[j];
           if (a.x >= b.x && a.y >= b.y && a.x + a.w <= b.x + b.w && a.y + a.h <= b.y + b.h) {
-            contained = true;
-            break;
+            continue outer;
           }
         }
-        if (!contained && newFreeRects[i].w > 0.3 && newFreeRects[i].h > 0.3) {
-          freeRects.push(newFreeRects[i]);
-        }
+        freeRects.push(a);
       }
     }
   }
