@@ -1,3 +1,7 @@
 node_modules/
 dist/
 .vite/
+
+# Garment data (images are uploaded per server, don't track them in git)
+api/garment-data/*.png
+api/garment-data/garments.json

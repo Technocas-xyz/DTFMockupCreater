@@ -1,4 +1,9 @@
 <?php
+// ============================================================
+// Garment API — handles save, load, delete of garment images
+// Auto-creates data directory and sets permissions on first run
+// ============================================================
+
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS');
@@ -9,50 +14,73 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
+// Increase PHP limits for large base64 image uploads
+@ini_set('post_max_size', '50M');
+@ini_set('upload_max_filesize', '50M');
+@ini_set('memory_limit', '256M');
+@ini_set('max_execution_time', 60);
+
 $dataDir = __DIR__ . '/garment-data';
 $dataFile = $dataDir . '/garments.json';
 
-// Create directory if not exists
+// Auto-create directory with proper permissions
 if (!is_dir($dataDir)) {
-    if (!mkdir($dataDir, 0777, true)) {
+    @mkdir($dataDir, 0777, true);
+    if (!is_dir($dataDir)) {
         http_response_code(500);
-        echo json_encode(['error' => 'Cannot create data directory: ' . $dataDir]);
+        echo json_encode(['error' => 'Cannot create directory: ' . $dataDir . '. Please create it manually with write permissions.']);
         exit;
     }
 }
 
-// Ensure directory is writable
+// Ensure writable
 if (!is_writable($dataDir)) {
-    chmod($dataDir, 0777);
-    if (!is_writable($dataDir)) {
-        http_response_code(500);
-        echo json_encode(['error' => 'Data directory not writable: ' . $dataDir]);
-        exit;
-    }
+    @chmod($dataDir, 0777);
 }
 
-// Initialize file if not exists
+// Create .htaccess to allow image serving in garment-data
+$htaccess = $dataDir . '/.htaccess';
+if (!file_exists($htaccess)) {
+    @file_put_contents($htaccess, "Options -Indexes\n<FilesMatch \"\\.png$\">\n  Allow from all\n</FilesMatch>\n");
+}
+
+// Initialize JSON file if missing
 if (!file_exists($dataFile)) {
-    file_put_contents($dataFile, json_encode([]));
-    chmod($dataFile, 0666);
+    @file_put_contents($dataFile, '[]');
+    @chmod($dataFile, 0666);
 }
 
 $method = $_SERVER['REQUEST_METHOD'];
 
+// ==================== GET: Return all garments ====================
 if ($method === 'GET') {
-    $data = file_get_contents($dataFile);
-    if ($data === false) {
-        echo json_encode([]);
+    $data = @file_get_contents($dataFile);
+    if ($data === false || empty($data)) {
+        echo '[]';
     } else {
         $decoded = json_decode($data, true);
-        echo json_encode($decoded ?: []);
+        echo json_encode(is_array($decoded) ? $decoded : []);
     }
     exit;
 }
 
+// ==================== POST: Save a new garment ====================
 if ($method === 'POST') {
     $rawInput = file_get_contents('php://input');
+    
+    if (empty($rawInput)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Empty request body. PHP post_max_size may be too small.']);
+        exit;
+    }
+    
     $input = json_decode($rawInput, true);
+    
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Invalid JSON: ' . json_last_error_msg()]);
+        exit;
+    }
     
     if (!$input || !isset($input['name']) || !isset($input['dataUrl'])) {
         http_response_code(400);
@@ -60,7 +88,8 @@ if ($method === 'POST') {
         exit;
     }
 
-    $garments = json_decode(file_get_contents($dataFile), true);
+    // Load existing garments
+    $garments = json_decode(@file_get_contents($dataFile), true);
     if (!is_array($garments)) $garments = [];
     
     // Save image to file
@@ -69,21 +98,31 @@ if ($method === 'POST') {
     
     if (strpos($imageData, 'data:image/png;base64,') === 0) {
         $base64 = str_replace('data:image/png;base64,', '', $imageData);
-        $imageBytes = base64_decode($base64);
+        $base64 = str_replace(' ', '+', $base64); // fix URL-encoded spaces
+        $imageBytes = base64_decode($base64, true);
+        
         if ($imageBytes === false) {
             http_response_code(400);
             echo json_encode(['error' => 'Invalid base64 image data']);
             exit;
         }
+        
         $imagePath = $dataDir . '/' . $imageId . '.png';
-        if (file_put_contents($imagePath, $imageBytes) === false) {
+        $written = @file_put_contents($imagePath, $imageBytes);
+        
+        if ($written === false) {
             http_response_code(500);
-            echo json_encode(['error' => 'Failed to write image file']);
+            echo json_encode(['error' => 'Failed to write image. Directory may not be writable: ' . $dataDir]);
             exit;
         }
-        chmod($imagePath, 0666);
+        
+        @chmod($imagePath, 0666);
         $input['imageFile'] = $imageId . '.png';
-        unset($input['dataUrl']);
+        unset($input['dataUrl']); // Don't store base64 in JSON
+    } else {
+        http_response_code(400);
+        echo json_encode(['error' => 'dataUrl must be a PNG base64 data URL']);
+        exit;
     }
 
     $input['id'] = $imageId;
@@ -91,18 +130,20 @@ if ($method === 'POST') {
     
     $garments[] = $input;
     $jsonOutput = json_encode($garments, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-    if (file_put_contents($dataFile, $jsonOutput) === false) {
+    
+    if (@file_put_contents($dataFile, $jsonOutput) === false) {
         http_response_code(500);
-        echo json_encode(['error' => 'Failed to save garments.json']);
+        echo json_encode(['error' => 'Failed to save garments.json. Check file permissions.']);
         exit;
     }
     
-    // Return saved garment with dataUrl
+    // Return saved garment with dataUrl for immediate use
     $input['dataUrl'] = $imageData;
     echo json_encode($input, JSON_UNESCAPED_UNICODE);
     exit;
 }
 
+// ==================== DELETE: Remove a garment ====================
 if ($method === 'DELETE') {
     $input = json_decode(file_get_contents('php://input'), true);
     $id = isset($input['id']) ? $input['id'] : (isset($_GET['id']) ? $_GET['id'] : null);
@@ -113,19 +154,20 @@ if ($method === 'DELETE') {
         exit;
     }
 
-    $garments = json_decode(file_get_contents($dataFile), true);
+    $garments = json_decode(@file_get_contents($dataFile), true);
     if (!is_array($garments)) $garments = [];
     
     $garments = array_values(array_filter($garments, function($g) use ($id) {
         return isset($g['id']) && $g['id'] !== $id;
     }));
     
+    // Delete image file
     $imagePath = $dataDir . '/' . $id . '.png';
     if (file_exists($imagePath)) {
-        unlink($imagePath);
+        @unlink($imagePath);
     }
     
-    file_put_contents($dataFile, json_encode($garments, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+    @file_put_contents($dataFile, json_encode($garments, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
     echo json_encode(['success' => true]);
     exit;
 }

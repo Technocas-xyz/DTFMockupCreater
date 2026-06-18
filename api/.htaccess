@@ -1,0 +1,12 @@
+# Allow PHP to handle large garment image uploads
+php_value post_max_size 50M
+php_value upload_max_filesize 50M
+php_value memory_limit 256M
+php_value max_execution_time 60
+
+# Allow CORS
+<IfModule mod_headers.c>
+    Header set Access-Control-Allow-Origin "*"
+    Header set Access-Control-Allow-Methods "GET, POST, DELETE, OPTIONS"
+    Header set Access-Control-Allow-Headers "Content-Type"
+</IfModule>
