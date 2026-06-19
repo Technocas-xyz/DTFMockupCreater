@@ -308,9 +308,9 @@ function DesignCanvas({
       ctx.lineWidth = 1.5;
       ctx.setLineDash([]);
 
-      // Calculate actual inches from rendered pixels using uniform pxPerInch
-      const actualW = (artW / printArea.pxPerInch).toFixed(2);
-      const actualH = (artH / printArea.pxPerInch).toFixed(2);
+      // Show exact dimensions from user input (not from pixel calculation)
+      const actualW = artworkDimensions.width.toFixed(2);
+      const actualH = artworkDimensions.height.toFixed(2);
 
       // Width line above artwork
       const dimY = drawY - 14;
