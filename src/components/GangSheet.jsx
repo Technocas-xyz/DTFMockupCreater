@@ -152,6 +152,11 @@ function GangSheet({ sharedArtwork }) {
   const [detailsArtwork, setDetailsArtwork] = useState(null); // artwork being shown in details popup
   const COST_PER_FOOT = 5; // USD per linear foot
 
+  // Order info for header strip
+  const [poNumber, setPoNumber] = useState('');
+  const [orderNumber, setOrderNumber] = useState('');
+  const [orderLink, setOrderLink] = useState('');
+
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
   const imageCache = useRef({});
@@ -405,9 +410,9 @@ function GangSheet({ sharedArtwork }) {
     })));
 
     const exportWidth = SHEET_WIDTH_INCHES * DPI;
-    const totalHeightPx = Math.round(layout.totalHeight * DPI);
+    const HEADER_HEIGHT = 1 * DPI; // 1 inch header at 300 DPI = 300px
+    const totalHeightPx = Math.round(layout.totalHeight * DPI) + HEADER_HEIGHT;
 
-    // Always single file download
     const exportCanvas = document.createElement('canvas');
     exportCanvas.width = exportWidth;
     exportCanvas.height = totalHeightPx;
@@ -418,16 +423,123 @@ function GangSheet({ sharedArtwork }) {
       return;
     }
 
-    if (!bgTransparent) {
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, exportWidth, totalHeightPx);
+    // White background
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, exportWidth, totalHeightPx);
+
+    // === DRAW HEADER STRIP (1 inch tall, 22 inches wide) ===
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, exportWidth, HEADER_HEIGHT);
+    ctx.strokeStyle = '#333333';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(4, 4, exportWidth - 8, HEADER_HEIGHT - 8);
+
+    const hPad = 30; // padding inside header
+    const colPO = hPad; // PO/Order section
+    const colTable = exportWidth * 0.2; // Table start
+    const colQR = exportWidth * 0.78; // QR code area
+
+    // PO Number
+    ctx.fillStyle = '#666666';
+    ctx.font = '500 22px Arial, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('PO#:', colPO, 50);
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 38px Arial, sans-serif';
+    ctx.fillText(poNumber || '—', colPO, 92);
+
+    // Divider line
+    ctx.strokeStyle = '#cccccc';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(colPO, 115);
+    ctx.lineTo(colTable - 30, 115);
+    ctx.stroke();
+
+    // Order Number
+    ctx.fillStyle = '#666666';
+    ctx.font = '500 22px Arial, sans-serif';
+    ctx.fillText('ORDER#:', colPO, 145);
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 38px Arial, sans-serif';
+    ctx.fillText(orderNumber || '—', colPO, 190);
+
+    // Artwork table header
+    ctx.fillStyle = '#333333';
+    ctx.font = 'bold italic 18px Arial, sans-serif';
+    ctx.textAlign = 'center';
+    const tColName = colTable + 120;
+    const tColThumb = colTable + 300;
+    const tColSize = colTable + 460;
+    const tColQty = colTable + 600;
+    ctx.fillText('ARTWORK NO.', tColName, 40);
+    ctx.fillText('THUMB', tColThumb, 40);
+    ctx.fillText('SIZE', tColSize, 40);
+    ctx.fillText('QTY', tColQty, 40);
+
+    // Table divider
+    ctx.strokeStyle = '#999999';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(colTable, 50);
+    ctx.lineTo(colQR - 20, 50);
+    ctx.stroke();
+
+    // Artwork rows (max 4 rows that fit in header)
+    const maxRows = Math.min(artworks.length, 4);
+    const rowH = (HEADER_HEIGHT - 70) / maxRows;
+    for (let i = 0; i < maxRows; i++) {
+      const art = artworks[i];
+      const rowY = 55 + i * rowH;
+
+      // Artwork name
+      ctx.fillStyle = '#000000';
+      ctx.font = '500 20px Arial, sans-serif';
+      ctx.textAlign = 'center';
+      const name = art.filename.length > 12 ? art.filename.substring(0, 12) + '…' : art.filename;
+      ctx.fillText(name, tColName, rowY + rowH / 2 + 6);
+
+      // Thumbnail
+      const thumbImg = loadedImages[art.dataUrl];
+      if (thumbImg) {
+        const thumbSize = Math.min(rowH - 10, 50);
+        const thumbX = tColThumb - thumbSize / 2;
+        const thumbY = rowY + (rowH - thumbSize) / 2;
+        ctx.drawImage(thumbImg, thumbX, thumbY, thumbSize, thumbSize);
+        ctx.strokeStyle = '#cccccc';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(thumbX, thumbY, thumbSize, thumbSize);
+      }
+
+      // Size
+      ctx.fillStyle = '#000000';
+      ctx.font = 'bold 22px Arial, sans-serif';
+      ctx.fillText(`${art.widthInches}" x ${art.heightInches}"`, tColSize, rowY + rowH / 2 + 6);
+
+      // Qty
+      ctx.font = 'bold 24px Arial, sans-serif';
+      ctx.fillText(`${art.repetitions}`, tColQty, rowY + rowH / 2 + 6);
+    }
+
+    // QR Code (simple generated from orderLink)
+    if (orderLink) {
+      drawQRCode(ctx, orderLink, colQR, 20, HEADER_HEIGHT - 60);
+      ctx.fillStyle = '#666666';
+      ctx.font = '400 16px Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Scan for full order details', colQR + (HEADER_HEIGHT - 60) / 2, HEADER_HEIGHT - 16);
+    }
+
+    // === DRAW GANG SHEET ITEMS (offset by header height) ===
+    if (bgTransparent) {
+      // Don't fill — keep transparent below header
     }
 
     for (const item of layout.items) {
       const img = loadedImages[item.dataUrl];
       if (!img) continue;
       const x = item.x * DPI;
-      const y = item.y * DPI;
+      const y = item.y * DPI + HEADER_HEIGHT;
       const w = item.w * DPI;
       const h = item.h * DPI;
 
@@ -450,7 +562,7 @@ function GangSheet({ sharedArtwork }) {
       }
     }
 
-    const filename = `gang-sheet-${SHEET_WIDTH_INCHES}x${layout.totalHeight.toFixed(1)}-${DPI}dpi.png`;
+    const filename = `gang-sheet-${SHEET_WIDTH_INCHES}x${(layout.totalHeight + 1).toFixed(1)}-${DPI}dpi.png`;
 
     // Download using blob with fallback
     try {
@@ -467,7 +579,6 @@ function GangSheet({ sharedArtwork }) {
         document.body.removeChild(link);
         setTimeout(() => URL.revokeObjectURL(url), 2000);
       } else {
-        // Fallback to dataURL
         const dataUrl = exportCanvas.toDataURL('image/png');
         const link = document.createElement('a');
         link.download = filename;
@@ -490,6 +601,54 @@ function GangSheet({ sharedArtwork }) {
       }
     }
   };
+
+  // Simple QR code generator (generates a basic QR-like pattern from text)
+  function drawQRCode(ctx, text, x, y, size) {
+    // Use a simple hash-based pattern for visual QR representation
+    // For production, consider a proper QR library
+    const modules = 21; // 21x21 grid
+    const cellSize = size / modules;
+    
+    // Generate a deterministic pattern from the text
+    let hash = 0;
+    for (let i = 0; i < text.length; i++) {
+      hash = ((hash << 5) - hash) + text.charCodeAt(i);
+      hash = hash & hash;
+    }
+    
+    ctx.fillStyle = '#000000';
+    
+    // Fixed position patterns (corners)
+    const drawFinder = (fx, fy) => {
+      for (let r = 0; r < 7; r++) {
+        for (let c = 0; c < 7; c++) {
+          const isBorder = r === 0 || r === 6 || c === 0 || c === 6;
+          const isInner = r >= 2 && r <= 4 && c >= 2 && c <= 4;
+          if (isBorder || isInner) {
+            ctx.fillRect(x + (fx + c) * cellSize, y + (fy + r) * cellSize, cellSize, cellSize);
+          }
+        }
+      }
+    };
+    
+    drawFinder(0, 0); // top-left
+    drawFinder(modules - 7, 0); // top-right
+    drawFinder(0, modules - 7); // bottom-left
+    
+    // Data area — pseudo-random fill based on text hash
+    let seed = Math.abs(hash);
+    for (let r = 0; r < modules; r++) {
+      for (let c = 0; c < modules; c++) {
+        // Skip finder patterns
+        if ((r < 8 && c < 8) || (r < 8 && c >= modules - 8) || (r >= modules - 8 && c < 8)) continue;
+        
+        seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+        if (seed % 3 !== 0) {
+          ctx.fillRect(x + c * cellSize, y + r * cellSize, cellSize, cellSize);
+        }
+      }
+    }
+  }
 
   const totalItemCount = artworks.reduce((sum, a) => sum + a.repetitions, 0);
 
@@ -644,6 +803,40 @@ function GangSheet({ sharedArtwork }) {
 
         {/* Right Panel - Settings */}
         <div className="gs-right-panel">
+          <div className="gs-settings-section">
+            <h3>Order Info (Header Strip)</h3>
+            <div className="gs-setting-row">
+              <label>PO #</label>
+              <input
+                type="text"
+                placeholder="PO-0425"
+                value={poNumber}
+                onChange={(e) => setPoNumber(e.target.value)}
+                className="gs-text-input"
+              />
+            </div>
+            <div className="gs-setting-row">
+              <label>Order #</label>
+              <input
+                type="text"
+                placeholder="ORD-1538"
+                value={orderNumber}
+                onChange={(e) => setOrderNumber(e.target.value)}
+                className="gs-text-input"
+              />
+            </div>
+            <div className="gs-setting-row">
+              <label>Order Link (QR)</label>
+              <input
+                type="text"
+                placeholder="https://..."
+                value={orderLink}
+                onChange={(e) => setOrderLink(e.target.value)}
+                className="gs-text-input"
+              />
+            </div>
+          </div>
+
           <div className="gs-settings-section">
             <h3>Sheet Settings</h3>
             <div className="gs-setting-row">

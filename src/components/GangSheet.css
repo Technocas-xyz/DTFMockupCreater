@@ -679,3 +679,22 @@
   color: #64748b;
   font-weight: 400;
 }
+
+/* Text input for order info */
+.gs-text-input {
+  width: 100px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.gs-text-input:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
+.gs-text-input::placeholder {
+  color: #94a3b8;
+}
