@@ -365,7 +365,29 @@ function ControlPanel({
               )}
             </button>
           ))}
+          {/* Custom color picker */}
+          <label
+            className={`color-btn color-btn-custom ${selectedColor.name === 'Custom' ? 'active' : ''}`}
+            title="Pick custom color"
+          >
+            <input
+              type="color"
+              value={selectedColor.name === 'Custom' ? selectedColor.hex : '#888888'}
+              onChange={(e) => onColorChange({ name: 'Custom', hex: e.target.value })}
+              style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }}
+            />
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={selectedColor.name === 'Custom' ? 'white' : '#666'} strokeWidth="2">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M12 2a10 10 0 0 1 0 20 10 10 0 0 1 0-20" />
+              <path d="M2 12h4M18 12h4M12 2v4M12 18v4" />
+            </svg>
+          </label>
         </div>
+        {selectedColor.name === 'Custom' && (
+          <div className="custom-color-display">
+            Custom: <span style={{ color: selectedColor.hex, fontWeight: 700 }}>{selectedColor.hex}</span>
+          </div>
+        )}
       </section>
 
       {/* Position Controls */}

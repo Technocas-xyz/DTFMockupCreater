@@ -277,6 +277,27 @@
   box-shadow: 0 0 0 2px white, 0 0 0 4px var(--primary);
 }
 
+.color-btn-custom {
+  background: conic-gradient(red, yellow, lime, aqua, blue, magenta, red) !important;
+  position: relative;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.color-btn-custom.active {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px white, 0 0 0 4px var(--primary);
+}
+
+.custom-color-display {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 6px;
+  text-align: center;
+}
+
 /* Adjustment Controls */
 .adjustment-controls {
   display: flex;
