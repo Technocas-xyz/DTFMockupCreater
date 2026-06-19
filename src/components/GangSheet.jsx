@@ -848,7 +848,7 @@ function GangSheet({ sharedArtwork }) {
           </div>
           {layout.totalHeight > 0 && (
             <div className="gs-height-indicator">
-              Sheet: {SHEET_WIDTH_INCHES}" × {layout.totalHeight.toFixed(2)}" | {totalItemCount} item{totalItemCount !== 1 ? 's' : ''}
+              Sheet: {SHEET_WIDTH_INCHES}" × {Math.ceil(layout.totalHeight)}" | {totalItemCount} item{totalItemCount !== 1 ? 's' : ''}
             </div>
           )}
         </div>
@@ -986,7 +986,7 @@ function GangSheet({ sharedArtwork }) {
           <div className="gs-stats">
             <div className="gs-stat-row">
               <label>Total Height</label>
-              <span className="highlight">{layout.totalHeight.toFixed(2)}"</span>
+              <span className="highlight">{Math.ceil(layout.totalHeight)}"</span>
             </div>
             <div className="gs-stat-row">
               <label>Total Artworks</label>
@@ -998,7 +998,7 @@ function GangSheet({ sharedArtwork }) {
             </div>
             <div className="gs-stat-row">
               <label>Export Size</label>
-              <span>{SHEET_WIDTH_INCHES * DPI} × {Math.round(layout.totalHeight * DPI)} px ({SHEET_WIDTH_INCHES}" × {layout.totalHeight.toFixed(2)}")</span>
+              <span>{SHEET_WIDTH_INCHES * DPI} × {Math.ceil(layout.totalHeight) * DPI} px ({SHEET_WIDTH_INCHES}" × {Math.ceil(layout.totalHeight)}")</span>
             </div>
           </div>
 
@@ -1008,7 +1008,7 @@ function GangSheet({ sharedArtwork }) {
               <div className="gs-cost-title">💰 Cost Estimate</div>
               <div className="gs-cost-row">
                 <span>Sheet length</span>
-                <span>{layout.totalHeight.toFixed(2)}" ({(layout.totalHeight / 12).toFixed(2)} ft)</span>
+                <span>{Math.ceil(layout.totalHeight)}" ({(Math.ceil(layout.totalHeight) / 12).toFixed(2)} ft)</span>
               </div>
               <div className="gs-cost-row">
                 <span>Rate</span>
@@ -1017,7 +1017,7 @@ function GangSheet({ sharedArtwork }) {
               <div className="gs-cost-divider" />
               <div className="gs-cost-row gs-cost-total">
                 <span>Total</span>
-                <span>${((layout.totalHeight / 12) * COST_PER_FOOT).toFixed(2)} USD</span>
+                <span>${((Math.ceil(layout.totalHeight) / 12) * COST_PER_FOOT).toFixed(2)} USD</span>
               </div>
             </div>
           )}
