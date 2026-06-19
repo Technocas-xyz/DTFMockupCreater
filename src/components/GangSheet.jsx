@@ -175,27 +175,82 @@ function GangSheet({ sharedArtwork }) {
 
     const containerWidth = canvas.parentElement?.clientWidth - 40 || 600;
     const scale = (containerWidth * (zoom / 100)) / SHEET_WIDTH_INCHES;
+    const headerH = 1 * scale; // 1 inch header in preview
     const canvasWidth = SHEET_WIDTH_INCHES * scale;
-    const canvasHeight = Math.max(layout.totalHeight * scale, 200);
+    const canvasHeight = Math.max((layout.totalHeight + 1) * scale, 200);
 
     canvas.width = canvasWidth;
     canvas.height = canvasHeight;
 
     const ctx = canvas.getContext('2d');
 
-    // Background
+    // White background
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+    // === HEADER STRIP ===
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(0, 0, canvasWidth, headerH);
+    ctx.strokeStyle = '#475569';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(1, 1, canvasWidth - 2, headerH - 2);
+
+    const fs = Math.max(8, Math.round(scale * 0.35));
+    const fsSmall = Math.max(6, Math.round(scale * 0.22));
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#64748b';
+    ctx.font = `500 ${fsSmall}px Arial`;
+    ctx.fillText('PO#:', 6, headerH * 0.28);
+    ctx.fillStyle = '#000';
+    ctx.font = `bold ${fs}px Arial`;
+    ctx.fillText(poNumber || '—', 6, headerH * 0.52);
+    ctx.fillStyle = '#64748b';
+    ctx.font = `500 ${fsSmall}px Arial`;
+    ctx.fillText('ORDER#:', 6, headerH * 0.72);
+    ctx.fillStyle = '#000';
+    ctx.font = `bold ${fs}px Arial`;
+    ctx.fillText(orderNumber || '—', 6, headerH * 0.93);
+
+    // Mini artwork table
+    if (artworks.length > 0) {
+      const tx = canvasWidth * 0.22;
+      ctx.fillStyle = '#475569';
+      ctx.font = `bold ${fsSmall}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.fillText('FILE', tx + canvasWidth * 0.08, headerH * 0.18);
+      ctx.fillText('SIZE', tx + canvasWidth * 0.26, headerH * 0.18);
+      ctx.fillText('QTY', tx + canvasWidth * 0.38, headerH * 0.18);
+      const rows = Math.min(artworks.length, 3);
+      const rh = (headerH * 0.75) / rows;
+      for (let i = 0; i < rows; i++) {
+        const a = artworks[i];
+        const ry = headerH * 0.25 + i * rh;
+        ctx.fillStyle = '#1e293b';
+        ctx.font = `400 ${fsSmall}px Arial`;
+        const nm = a.filename.length > 8 ? a.filename.substring(0, 8) + '…' : a.filename;
+        ctx.fillText(nm, tx + canvasWidth * 0.08, ry + rh * 0.65);
+        ctx.fillText(`${a.widthInches}"×${a.heightInches}"`, tx + canvasWidth * 0.26, ry + rh * 0.65);
+        ctx.font = `bold ${fsSmall}px Arial`;
+        ctx.fillText(`${a.repetitions}`, tx + canvasWidth * 0.38, ry + rh * 0.65);
+      }
+    }
+
+    if (orderLink) {
+      ctx.fillStyle = '#2563eb';
+      ctx.font = `500 ${fsSmall}px Arial`;
+      ctx.textAlign = 'right';
+      ctx.fillText('[QR in export]', canvasWidth - 8, headerH * 0.55);
+    }
+
+    // === BACKGROUND FOR ARTWORK AREA ===
     if (bgTransparent) {
-      // Checkerboard
       const sz = 10;
-      for (let y = 0; y < canvasHeight; y += sz) {
+      for (let y = Math.ceil(headerH); y < canvasHeight; y += sz) {
         for (let x = 0; x < canvasWidth; x += sz) {
-          ctx.fillStyle = ((x / sz + y / sz) % 2 === 0) ? '#ffffff' : '#e2e8f0';
+          ctx.fillStyle = ((Math.floor(x / sz) + Math.floor(y / sz)) % 2 === 0) ? '#ffffff' : '#e2e8f0';
           ctx.fillRect(x, y, sz, sz);
         }
       }
-    } else {
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, canvasWidth, canvasHeight);
     }
 
     // Grid lines
@@ -205,13 +260,13 @@ function GangSheet({ sharedArtwork }) {
       for (let i = 0; i <= SHEET_WIDTH_INCHES; i++) {
         const x = i * scale;
         ctx.beginPath();
-        ctx.moveTo(x, 0);
+        ctx.moveTo(x, headerH);
         ctx.lineTo(x, canvasHeight);
         ctx.stroke();
       }
       const maxH = Math.ceil(layout.totalHeight) || 1;
       for (let i = 0; i <= maxH; i++) {
-        const y = i * scale;
+        const y = i * scale + headerH;
         ctx.beginPath();
         ctx.moveTo(0, y);
         ctx.lineTo(canvasWidth, y);
@@ -219,34 +274,31 @@ function GangSheet({ sharedArtwork }) {
       }
     }
 
-    // Draw artworks
+    // Draw artworks (offset by header)
     for (const item of layout.items) {
       const x = item.x * scale;
-      const y = item.y * scale;
+      const y = item.y * scale + headerH;
       const w = item.w * scale;
       const h = item.h * scale;
 
       const img = imageCache.current[item.dataUrl];
       if (img && img.complete) {
         if (item.rotated) {
-          // Draw rotated 90° clockwise
           ctx.save();
           ctx.translate(x + w, y);
           ctx.rotate(Math.PI / 2);
-          ctx.drawImage(img, 0, 0, h, w); // swap w/h for drawing
+          ctx.drawImage(img, 0, 0, h, w);
           ctx.restore();
         } else {
           ctx.drawImage(img, x, y, w, h);
         }
       } else {
-        // Placeholder
         ctx.fillStyle = '#f1f5f9';
         ctx.fillRect(x, y, w, h);
         ctx.strokeStyle = '#cbd5e1';
         ctx.strokeRect(x, y, w, h);
       }
 
-      // Cut lines
       if (showCutLines) {
         ctx.strokeStyle = '#ef4444';
         ctx.lineWidth = 1;
@@ -256,12 +308,12 @@ function GangSheet({ sharedArtwork }) {
       }
     }
 
-    // Border around sheet
+    // Border
     ctx.strokeStyle = '#94a3b8';
     ctx.lineWidth = 1.5;
     ctx.setLineDash([]);
     ctx.strokeRect(0, 0, canvasWidth, canvasHeight);
-  }, [layout, zoom, showGrid, showCutLines, bgTransparent]);
+  }, [layout, zoom, showGrid, showCutLines, bgTransparent, artworks, poNumber, orderNumber, orderLink]);
 
   // Load images into cache when artworks change
   useEffect(() => {
