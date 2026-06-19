@@ -380,11 +380,30 @@ function MockupPreview({
           ctx.stroke();
           ctx.setLineDash([]);
 
-          // Size label
+          // Info labels below t-shirt — bold and readable
+          const infoY = H - 60;
+          const garmentWidth = isCustomGarment && taggedGarment?.bodyMapping?.shirtWidthInches 
+            ? taggedGarment.bodyMapping.shirtWidthInches 
+            : sizeData.bodyWidth;
+          const garmentHeight = isCustomGarment && taggedGarment?.bodyMapping?.shirtHeightInches 
+            ? taggedGarment.bodyMapping.shirtHeightInches 
+            : sizeData.bodyLength;
+
+          // Background bar for readability
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+          ctx.fillRect(0, infoY - 8, W, 60);
+
+          // Shirt size line
           ctx.fillStyle = '#ffffff';
-          ctx.font = 'bold 18px Inter, sans-serif';
+          ctx.font = 'bold 20px Inter, sans-serif';
           ctx.textAlign = 'center';
-          ctx.fillText(`Size: ${size} | ${viewSide.toUpperCase()} | Body: ${sizeData.bodyWidth}" × ${sizeData.bodyLength}"`, W / 2, H - 30);
+          ctx.fillText(`Shirt: ${size} — ${garmentWidth}" × ${garmentHeight}"`, W / 2, infoY + 14);
+
+          // Artwork size line
+          ctx.fillStyle = '#fbbf24';
+          ctx.font = 'bold 18px Inter, sans-serif';
+          ctx.fillText(`Artwork: ${artWidthInches}" × ${artHeightInches}" | Top Offset: ${topFromCollar}"`, W / 2, infoY + 40);
+
           } // end showAnnotations
 
           resolve(canvas);
