@@ -519,6 +519,14 @@ function GarmentManager({ onUseAsMockup }) {
           <label>Size Tag</label>
           <select value={garmentSize} onChange={(e) => setGarmentSize(e.target.value)}>
             <option value="">No Size</option>
+            <option value="2T">2T</option>
+            <option value="3T">3T</option>
+            <option value="4T">4T</option>
+            <option value="5T">5T</option>
+            <option value="YS">YS</option>
+            <option value="YM">YM</option>
+            <option value="YL">YL</option>
+            <option value="YXL">YXL</option>
             <option value="S">S</option>
             <option value="M">M</option>
             <option value="L">L</option>

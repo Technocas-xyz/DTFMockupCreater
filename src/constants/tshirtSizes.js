@@ -3,6 +3,78 @@
 // Print area = Body dimensions minus 1 inch from all sides
 
 export const TSHIRT_SIZES = {
+  '2T': {
+    label: '2T',
+    bodyLength: 15.5,
+    bodyWidth: 11,
+    fullBodyLength: 15.5,
+    sleeveLength: 9,
+    maxPrintWidth: 7,
+    maxPrintHeight: 8,
+  },
+  '3T': {
+    label: '3T',
+    bodyLength: 16.5,
+    bodyWidth: 12,
+    fullBodyLength: 16.5,
+    sleeveLength: 9.5,
+    maxPrintWidth: 7.5,
+    maxPrintHeight: 9,
+  },
+  '4T': {
+    label: '4T',
+    bodyLength: 17.5,
+    bodyWidth: 13,
+    fullBodyLength: 17.5,
+    sleeveLength: 10,
+    maxPrintWidth: 8,
+    maxPrintHeight: 9.5,
+  },
+  '5T': {
+    label: '5T',
+    bodyLength: 18.5,
+    bodyWidth: 13.5,
+    fullBodyLength: 18.5,
+    sleeveLength: 10.5,
+    maxPrintWidth: 8.5,
+    maxPrintHeight: 10,
+  },
+  'YS': {
+    label: 'YS',
+    bodyLength: 22,
+    bodyWidth: 14.5,
+    fullBodyLength: 22,
+    sleeveLength: 12,
+    maxPrintWidth: 9,
+    maxPrintHeight: 11,
+  },
+  'YM': {
+    label: 'YM',
+    bodyLength: 23.5,
+    bodyWidth: 15.5,
+    fullBodyLength: 23.5,
+    sleeveLength: 13,
+    maxPrintWidth: 9.5,
+    maxPrintHeight: 12,
+  },
+  'YL': {
+    label: 'YL',
+    bodyLength: 25,
+    bodyWidth: 16.5,
+    fullBodyLength: 25,
+    sleeveLength: 14,
+    maxPrintWidth: 10,
+    maxPrintHeight: 13,
+  },
+  'YXL': {
+    label: 'YXL',
+    bodyLength: 26.5,
+    bodyWidth: 17.5,
+    fullBodyLength: 26.5,
+    sleeveLength: 15,
+    maxPrintWidth: 11,
+    maxPrintHeight: 14,
+  },
   S: {
     label: 'S',
     bodyLength: 28,
@@ -107,4 +179,4 @@ export const TSHIRT_COLORS = [
   { name: 'Pink', hex: '#ec4899' },
 ];
 
-export const SIZE_ORDER = ['S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL'];
+export const SIZE_ORDER = ['2T', '3T', '4T', '5T', 'YS', 'YM', 'YL', 'YXL', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL'];
