@@ -137,12 +137,24 @@ function GarmentManager({ onUseAsMockup }) {
       const img = new Image();
       img.onload = async () => {
         setOriginalDimensions({ width: img.width, height: img.height });
+        let finalW = img.width, finalH = img.height;
         if (autoTrim) {
           const trimmed = await trimTransparentPixels(dataUrl);
           setGarmentImage({ dataUrl: trimmed.dataUrl, width: trimmed.width, height: trimmed.height, fileName: file.name });
+          finalW = trimmed.width;
+          finalH = trimmed.height;
         } else {
           setGarmentImage({ dataUrl, width: img.width, height: img.height, fileName: file.name });
         }
+        // Auto-set shirt dimensions from image pixel size at 300 DPI
+        const DPI = 300;
+        const autoW = parseFloat((finalW / DPI).toFixed(2));
+        const autoH = parseFloat((finalH / DPI).toFixed(2));
+        setBodyMapping(prev => ({
+          ...prev,
+          shirtWidthInches: autoW,
+          shirtHeightInches: autoH,
+        }));
         setGarmentName(file.name.replace('.png', '').replace(/[-_]/g, ' '));
         setZoom(1);
         setPan({ x: 0, y: 0 });
