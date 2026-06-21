@@ -32,8 +32,8 @@ function MockupPreview({
     ctx.fillRect(0, 0, W, H);
 
     return new Promise((resolve) => {
-      // Check if there's a tagged garment for this size in the library
-      const taggedGarment = garmentLibrary && garmentLibrary.find(g => g.size === size);
+      // Check if there's a tagged garment for this size AND side in the library
+      const taggedGarment = garmentLibrary && garmentLibrary.find(g => g.size === size && (g.side || 'front') === viewSide);
 
       const side = viewSide === 'front' ? 'front' : 'back';
       const colorName = selectedColor.name.toLowerCase().replace(/\s+/g, '-');
@@ -529,7 +529,7 @@ function MockupCard({ size, artwork, color, artworkDimensions, artworkPosition, 
   // Load t-shirt image — use tagged garment if available
   const [isCustomGarment, setIsCustomGarment] = useState(false);
   useEffect(() => {
-    const taggedGarment = garmentLibrary && garmentLibrary.find(g => g.size === size);
+    const taggedGarment = garmentLibrary && garmentLibrary.find(g => g.size === size && (g.side || 'front') === viewSide);
     if (taggedGarment && taggedGarment.dataUrl) {
       const img = new Image();
       img.onload = () => { setTshirtImg(img); setIsCustomGarment(true); };
@@ -636,7 +636,7 @@ function MockupCard({ size, artwork, color, artworkDimensions, artworkPosition, 
         // Use garment's own body width for custom garments
         let pxPerInch;
         if (isCustomGarment) {
-          const taggedGarment = garmentLibrary && garmentLibrary.find(g => g.size === size);
+          const taggedGarment = garmentLibrary && garmentLibrary.find(g => g.size === size && (g.side || 'front') === viewSide);
           const garmentBodyWidth = taggedGarment?.bodyMapping?.shirtWidthInches || sizeData.bodyWidth;
           pxPerInch = tshirtW / garmentBodyWidth;
         } else {

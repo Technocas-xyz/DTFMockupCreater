@@ -524,3 +524,33 @@
   border-color: var(--primary);
   outline: none;
 }
+
+/* Front/Back side toggle */
+.gm-side-toggle {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.gm-side-btn {
+  flex: 1;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  border: none;
+  background: white;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.gm-side-btn.active {
+  background: var(--primary);
+  color: white;
+}
+
+.gm-side-btn:not(.active):hover {
+  background: #f1f5f9;
+}

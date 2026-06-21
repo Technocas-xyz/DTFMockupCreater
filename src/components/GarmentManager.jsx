@@ -61,6 +61,7 @@ function GarmentManager({ onUseAsMockup }) {
   const [garmentName, setGarmentName] = useState('');
   const [garmentType, setGarmentType] = useState('T-Shirt');
   const [garmentSize, setGarmentSize] = useState('XL');
+  const [garmentSide, setGarmentSide] = useState('front');
   const [bodyMapping, setBodyMapping] = useState({
     shirtWidthInches: 20,   // actual shirt body width
     shirtHeightInches: 29,  // actual shirt body height
@@ -286,6 +287,7 @@ function GarmentManager({ onUseAsMockup }) {
         name: garmentName || 'Untitled',
         type: garmentType,
         size: garmentSize,
+        side: garmentSide,
         dataUrl: compressedUrl,
         width: garmentImage.width,
         height: garmentImage.height,
@@ -347,6 +349,7 @@ function GarmentManager({ onUseAsMockup }) {
     setGarmentName(garment.name);
     setGarmentType(garment.type);
     setGarmentSize(garment.size || '');
+    setGarmentSide(garment.side || 'front');
     setBodyMapping(garment.bodyMapping);
     setZoom(1);
     setPan({ x: 0, y: 0 });
@@ -360,6 +363,7 @@ function GarmentManager({ onUseAsMockup }) {
       bodyMapping: { ...bodyMapping },
       name: garmentName || 'Custom Garment',
       type: garmentType,
+      side: garmentSide,
     });
   };
 
@@ -548,6 +552,19 @@ function GarmentManager({ onUseAsMockup }) {
             <option value="4XL">4XL</option>
             <option value="5XL">5XL</option>
           </select>
+        </div>
+        <div className="gm-setting-group">
+          <label>Side</label>
+          <div className="gm-side-toggle">
+            <button
+              className={`gm-side-btn ${garmentSide === 'front' ? 'active' : ''}`}
+              onClick={() => setGarmentSide('front')}
+            >Front</button>
+            <button
+              className={`gm-side-btn ${garmentSide === 'back' ? 'active' : ''}`}
+              onClick={() => setGarmentSide('back')}
+            >Back</button>
+          </div>
         </div>
         <div className="gm-setting-group">
           <label>Garment Name</label>
