@@ -120,19 +120,30 @@
 /* Artwork Size Grid */
 .artwork-size-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.artwork-size-heading {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding: 4px 0 2px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 2px;
 }
 
 .artwork-size-btn {
-  padding: 8px 6px;
+  padding: 6px 4px;
   border-radius: 6px;
   border: 2px solid var(--border);
   background: white;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--text-primary);
   transition: all 0.2s;
+  cursor: pointer;
 }
 
 .artwork-size-btn:hover {

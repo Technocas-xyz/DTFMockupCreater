@@ -151,14 +151,21 @@ export const TSHIRT_SIZES = {
 };
 
 export const ARTWORK_SIZES = [
-  { label: '8 x 8"', width: 8, height: 8 },
-  { label: '9 x 10"', width: 9, height: 10 },
-  { label: '10 x 12"', width: 10, height: 12 },
-  { label: '11 x 14"', width: 11, height: 14 },
-  { label: '12 x 16"', width: 12, height: 16 },
-  { label: '13 x 18"', width: 13, height: 18 },
-  { label: '14 x 20"', width: 14, height: 20 },
-  { label: 'Custom', width: 0, height: 0 },
+  { label: 'W 8"', width: 8, height: 0, lockBy: 'width' },
+  { label: 'W 9"', width: 9, height: 0, lockBy: 'width' },
+  { label: 'W 10"', width: 10, height: 0, lockBy: 'width' },
+  { label: 'W 11"', width: 11, height: 0, lockBy: 'width' },
+  { label: 'W 12"', width: 12, height: 0, lockBy: 'width' },
+  { label: 'W 13"', width: 13, height: 0, lockBy: 'width' },
+  { label: 'W 14"', width: 14, height: 0, lockBy: 'width' },
+  { label: 'H 8"', width: 0, height: 8, lockBy: 'height' },
+  { label: 'H 9"', width: 0, height: 9, lockBy: 'height' },
+  { label: 'H 10"', width: 0, height: 10, lockBy: 'height' },
+  { label: 'H 11"', width: 0, height: 11, lockBy: 'height' },
+  { label: 'H 12"', width: 0, height: 12, lockBy: 'height' },
+  { label: 'H 13"', width: 0, height: 13, lockBy: 'height' },
+  { label: 'H 14"', width: 0, height: 14, lockBy: 'height' },
+  { label: 'Custom', width: 0, height: 0, lockBy: 'none' },
 ];
 
 export const TSHIRT_COLORS = [

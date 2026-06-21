@@ -174,23 +174,45 @@ function ControlPanel({
           Artwork Size
         </h3>
         <div className="artwork-size-grid">
-          {ARTWORK_SIZES.map((size) => (
+          <div className="artwork-size-heading">W (set width, auto height)</div>
+          {ARTWORK_SIZES.filter(s => s.lockBy === 'width').map((size) => (
             <button
               key={size.label}
               className={`artwork-size-btn ${
-                artworkDimensions.width === size.width && artworkDimensions.height === size.height
-                  ? 'active'
-                  : ''
+                artworkDimensions.width === size.width && size.lockBy === 'width' ? 'active' : ''
               }`}
               onClick={() => {
-                if (size.width > 0) {
-                  onDimensionsChange({ width: size.width, height: size.height });
-                }
+                const newW = size.width;
+                const newH = parseFloat((newW / aspectRatio).toFixed(2));
+                onDimensionsChange({ width: newW, height: newH });
               }}
             >
               {size.label}
             </button>
           ))}
+          <div className="artwork-size-heading">H (set height, auto width)</div>
+          {ARTWORK_SIZES.filter(s => s.lockBy === 'height').map((size) => (
+            <button
+              key={size.label}
+              className={`artwork-size-btn ${
+                artworkDimensions.height === size.height && size.lockBy === 'height' ? 'active' : ''
+              }`}
+              onClick={() => {
+                const newH = size.height;
+                const newW = parseFloat((newH * aspectRatio).toFixed(2));
+                onDimensionsChange({ width: newW, height: newH });
+              }}
+            >
+              {size.label}
+            </button>
+          ))}
+          <button
+            className={`artwork-size-btn`}
+            onClick={() => {}}
+            style={{ opacity: 0.6 }}
+          >
+            Custom
+          </button>
         </div>
 
         {/* Width & Height inputs with lock proportion */}
