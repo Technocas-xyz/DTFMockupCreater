@@ -129,30 +129,25 @@ function DesignCanvas({
     let pxPerInchW, pxPerInchH, pxPerInch, tshirtW, tshirtH, tshirtX, tshirtY;
 
     if (customGarment && tshirtImage) {
-      // Custom garment: display the uploaded image as-is (fit to 90% canvas, keep aspect ratio)
-      // NO size chart calculations — the garment image IS the shirt
-      const imgW = tshirtImage.naturalWidth || tshirtImage.width;
-      const imgH = tshirtImage.naturalHeight || tshirtImage.height;
-      const imgAspect = imgW / imgH;
-      const canvasAspect = CANVAS_WIDTH / CANVAS_HEIGHT;
-
-      let drawW, drawH;
-      if (imgAspect > canvasAspect) {
-        drawW = CANVAS_WIDTH * 0.9;
-        drawH = drawW / imgAspect;
-      } else {
-        drawH = CANVAS_HEIGHT * 0.9;
-        drawW = drawH * imgAspect;
-      }
-
-      tshirtW = drawW;
-      tshirtH = drawH;
-      tshirtX = (CANVAS_WIDTH - drawW) / 2;
-      tshirtY = (CANVAS_HEIGHT - drawH) / 2;
-
-      // pxPerInch from the garment's own stored shirt width (from Garment Manager input)
+      // Custom garment: scale based on stored shirt dimensions using a fixed reference
+      // This ensures different sizes appear at proportionally different visual sizes
       const garmentBodyWidth = customGarment.bodyMapping?.shirtWidthInches || bodyWidth;
-      pxPerInch = drawW / garmentBodyWidth;
+      const garmentBodyHeight = customGarment.bodyMapping?.shirtHeightInches || bodyLength;
+
+      // Use the same reference scale as default t-shirts (based on 5XL = largest)
+      const maxBodyWidth = 32;
+      const maxBodyHeight = 35;
+      const maxTshirtW = CANVAS_WIDTH * 0.52;
+      const maxTshirtH = CANVAS_HEIGHT * 0.68;
+      const refPxPerInchW = maxTshirtW / maxBodyWidth;
+      const refPxPerInchH = maxTshirtH / maxBodyHeight;
+      pxPerInch = Math.min(refPxPerInchW, refPxPerInchH);
+
+      // Draw garment at its actual proportional size on canvas
+      tshirtW = garmentBodyWidth * pxPerInch;
+      tshirtH = garmentBodyHeight * pxPerInch;
+      tshirtX = (CANVAS_WIDTH - tshirtW) / 2;
+      tshirtY = (CANVAS_HEIGHT - tshirtH) / 2;
       pxPerInchW = pxPerInch;
       pxPerInchH = pxPerInch;
     } else {
