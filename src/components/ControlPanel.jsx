@@ -1,6 +1,8 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { TSHIRT_COLORS, ARTWORK_SIZES, SIZE_ORDER, TSHIRT_SIZES } from '../constants/tshirtSizes';
 import './ControlPanel.css';
+
+const GARMENT_TYPES_FILTER = ['All', 'T-Shirt', 'Hoodie', 'Long Sleeve', 'Tank Top', 'Other'];
 
 function ControlPanel({
   selectedSize,
@@ -28,7 +30,13 @@ function ControlPanel({
   onGarmentChange,
 }) {
   const fileInputRef = useRef(null);
+  const [selectedType, setSelectedType] = useState('All');
   const aspectRatio = artworkDimensions.width / artworkDimensions.height;
+
+  // Filter garment library by selected type
+  const filteredGarments = garmentLibrary
+    ? garmentLibrary.filter(g => selectedType === 'All' || g.type === selectedType)
+    : [];
 
   const handleWidthChange = (newWidth) => {
     const w = parseFloat(newWidth) || 0;
@@ -125,10 +133,51 @@ function ControlPanel({
         />
       </section>
 
-      {/* Size Selection */}
+      {/* Garment Type Selection */}
       <section className="panel-section">
         <h3 className="section-title">
           <span className="step-number">2</span>
+          Garment Type
+        </h3>
+        <div className="type-grid">
+          {GARMENT_TYPES_FILTER.map((type) => (
+            <button
+              key={type}
+              className={`type-btn ${selectedType === type ? 'active' : ''}`}
+              onClick={() => setSelectedType(type)}
+            >
+              {type}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* Garment Selector (filtered by type) */}
+      {filteredGarments.length > 0 && (
+        <section className="panel-section">
+          <h3 className="section-title">
+            <span className="step-number">3</span>
+            Select Garment
+          </h3>
+          <select
+            className="garment-select"
+            value={selectedGarmentId || 'default'}
+            onChange={(e) => onGarmentChange(e.target.value === 'default' ? null : e.target.value)}
+          >
+            <option value="default">Default (from size chart)</option>
+            {filteredGarments.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.description || g.name} — {g.size} {g.side ? `(${g.side})` : ''} {g.color ? `[${g.color}]` : ''}
+              </option>
+            ))}
+          </select>
+        </section>
+      )}
+
+      {/* Size Selection */}
+      <section className="panel-section">
+        <h3 className="section-title">
+          <span className="step-number">4</span>
           Select Size ({selectedSize})
         </h3>
         <div className="size-grid">
@@ -170,7 +219,7 @@ function ControlPanel({
       {/* Artwork Size */}
       <section className="panel-section">
         <h3 className="section-title">
-          <span className="step-number">3</span>
+          <span className="step-number">5</span>
           Artwork Size
         </h3>
         <div className="artwork-size-grid">
@@ -286,7 +335,7 @@ function ControlPanel({
       {/* Artwork Area Placement */}
       <section className="panel-section">
         <h3 className="section-title">
-          <span className="step-number">4</span>
+          <span className="step-number">6</span>
           Artwork Area
         </h3>
         <div className="area-settings-grid">
@@ -345,30 +394,10 @@ function ControlPanel({
         <p className="area-info">Fixed print area: {artworkAreaSettings.width}" × {artworkAreaSettings.height}" starting {artworkAreaSettings.topOffset}" from top</p>
       </section>
 
-      {/* Garment Selector */}
-      {garmentLibrary && garmentLibrary.length > 0 && (
-        <section className="panel-section">
-          <h3 className="section-title">
-            <span className="step-number">5</span>
-            Select Garment
-          </h3>
-          <select
-            className="garment-select"
-            value={selectedGarmentId || 'default'}
-            onChange={(e) => onGarmentChange(e.target.value === 'default' ? null : e.target.value)}
-          >
-            <option value="default">Default T-Shirt</option>
-            {garmentLibrary.map((g) => (
-              <option key={g.id} value={g.id}>{g.name} ({g.type})</option>
-            ))}
-          </select>
-        </section>
-      )}
-
       {/* Color Selection */}
       <section className="panel-section">
         <h3 className="section-title">
-          <span className="step-number">{garmentLibrary && garmentLibrary.length > 0 ? '6' : '5'}</span>
+          <span className="step-number">7</span>
           Select Color
         </h3>
         <div className="color-grid">
@@ -416,7 +445,7 @@ function ControlPanel({
       {artwork && (
         <section className="panel-section">
           <h3 className="section-title">
-            <span className="step-number">6</span>
+            <span className="step-number">8</span>
             Adjust Position
           </h3>
           <div className="adjustment-controls">
@@ -460,7 +489,7 @@ function ControlPanel({
       {/* Mockup Preview Sizes */}
       <section className="panel-section">
         <h3 className="section-title">
-          <span className="step-number">7</span>
+          <span className="step-number">9</span>
           Generate Mockups
         </h3>
         <div className="mockup-size-selection">
