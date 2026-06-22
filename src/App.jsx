@@ -158,6 +158,33 @@ function App() {
     setSharedArtwork({ dataUrl: imageDataUrl, filename: 'processed-artwork.png' });
     // Also load into the design canvas artwork
     setArtwork(imageDataUrl);
+
+    // Auto-set dimensions from image at 300 DPI (same as handleArtworkUpload)
+    const img = new Image();
+    img.onload = () => {
+      const DPI = 300;
+      let actualW = parseFloat((img.naturalWidth / DPI).toFixed(2));
+      let actualH = parseFloat((img.naturalHeight / DPI).toFixed(2));
+      const imgAspect = img.naturalWidth / img.naturalHeight;
+      const maxW = artworkAreaSettings.width;
+      const maxH = artworkAreaSettings.height;
+
+      if (actualW <= maxW && actualH <= maxH) {
+        setArtworkDimensions({ width: actualW, height: actualH });
+      } else {
+        let newW, newH;
+        if (imgAspect > maxW / maxH) {
+          newW = maxW;
+          newH = parseFloat((maxW / imgAspect).toFixed(2));
+        } else {
+          newH = maxH;
+          newW = parseFloat((maxH * imgAspect).toFixed(2));
+        }
+        setArtworkDimensions({ width: newW, height: newH });
+      }
+    };
+    img.src = imageDataUrl;
+
     setCurrentPage('orders');
   };
 
