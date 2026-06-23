@@ -381,28 +381,17 @@ function MockupPreview({
           ctx.setLineDash([]);
 
           // Info labels below t-shirt — bold and readable
-          const infoY = H - 60;
-          const garmentWidth = isCustomGarment && taggedGarment?.bodyMapping?.shirtWidthInches 
-            ? taggedGarment.bodyMapping.shirtWidthInches 
-            : sizeData.bodyWidth;
-          const garmentHeight = isCustomGarment && taggedGarment?.bodyMapping?.shirtHeightInches 
-            ? taggedGarment.bodyMapping.shirtHeightInches 
-            : sizeData.bodyLength;
+          const infoY = H - 44;
 
           // Background bar for readability
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
-          ctx.fillRect(0, infoY - 8, W, 60);
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+          ctx.fillRect(0, infoY - 14, W, 50);
 
-          // Shirt size line
+          // Single line: Shirt size + Artwork size
           ctx.fillStyle = '#ffffff';
-          ctx.font = 'bold 20px Inter, sans-serif';
+          ctx.font = 'bold 26px Inter, sans-serif';
           ctx.textAlign = 'center';
-          ctx.fillText(`Shirt: ${size} — ${garmentWidth}" × ${garmentHeight}"`, W / 2, infoY + 14);
-
-          // Artwork size line
-          ctx.fillStyle = '#fbbf24';
-          ctx.font = 'bold 18px Inter, sans-serif';
-          ctx.fillText(`Artwork: ${artWidthInches}" × ${artHeightInches}" | Top Offset: ${topFromCollar}"`, W / 2, infoY + 40);
+          ctx.fillText(`Shirt: ${size}   |   Artwork: ${artWidthInches}" × ${artHeightInches}"`, W / 2, infoY + 16);
 
           } // end showAnnotations
 
