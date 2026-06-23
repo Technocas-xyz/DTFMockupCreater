@@ -442,13 +442,21 @@ function GangSheet({ sharedArtwork }) {
   };
 
   const handleDownload = async () => {
-    if (layout.items.length === 0) return;
+    if (layout.items.length === 0) {
+      alert('No artworks to download. Please add artwork first.');
+      return;
+    }
 
-    // Pre-load all images
+    // Pre-load all images (from both layout items and artworks for thumbnails)
     const loadedImages = {};
-    const uniqueUrls = [...new Set(layout.items.map(i => i.dataUrl))];
+    const allUrls = [
+      ...new Set([
+        ...layout.items.map(i => i.dataUrl),
+        ...artworks.map(a => a.dataUrl),
+      ])
+    ];
     
-    await Promise.all(uniqueUrls.map(dataUrl => new Promise((resolve) => {
+    await Promise.all(allUrls.map(dataUrl => new Promise((resolve) => {
       const existing = imageCache.current[dataUrl];
       if (existing && existing.complete && existing.naturalWidth > 0) {
         loadedImages[dataUrl] = existing;
@@ -462,7 +470,7 @@ function GangSheet({ sharedArtwork }) {
     })));
 
     const exportWidth = SHEET_WIDTH_INCHES * DPI;
-    const HEADER_HEIGHT = 1 * DPI; // 1 inch header at 300 DPI = 300px
+    const HEADER_HEIGHT = 1.2 * DPI; // 1.2 inch header for larger text
     const totalHeightPx = Math.round(layout.totalHeight * DPI) + HEADER_HEIGHT;
 
     const exportCanvas = document.createElement('canvas');
@@ -479,82 +487,82 @@ function GangSheet({ sharedArtwork }) {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, exportWidth, totalHeightPx);
 
-    // === DRAW HEADER STRIP (1 inch tall, 22 inches wide) ===
+    // === DRAW HEADER STRIP ===
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, exportWidth, HEADER_HEIGHT);
-    ctx.strokeStyle = '#333333';
-    ctx.lineWidth = 3;
-    ctx.strokeRect(4, 4, exportWidth - 8, HEADER_HEIGHT - 8);
+    ctx.strokeStyle = '#222222';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(6, 6, exportWidth - 12, HEADER_HEIGHT - 12);
 
-    const hPad = 30; // padding inside header
-    const colPO = hPad; // PO/Order section
-    const colTable = exportWidth * 0.2; // Table start
-    const colQR = exportWidth * 0.78; // QR code area
+    const hPad = 40;
+    const colPO = hPad;
+    const colTable = exportWidth * 0.2;
+    const colQR = exportWidth * 0.76;
 
-    // PO Number
-    ctx.fillStyle = '#666666';
-    ctx.font = '500 22px Arial, sans-serif';
+    // PO Number — larger text
+    ctx.fillStyle = '#555555';
+    ctx.font = '500 28px Arial, sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText('PO#:', colPO, 50);
+    ctx.fillText('PO#:', colPO, 60);
     ctx.fillStyle = '#000000';
-    ctx.font = 'bold 38px Arial, sans-serif';
-    ctx.fillText(poNumber || '—', colPO, 92);
+    ctx.font = 'bold 48px Arial, sans-serif';
+    ctx.fillText(poNumber || '—', colPO, 110);
 
     // Divider line
     ctx.strokeStyle = '#cccccc';
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(colPO, 115);
-    ctx.lineTo(colTable - 30, 115);
+    ctx.moveTo(colPO, 135);
+    ctx.lineTo(colTable - 30, 135);
     ctx.stroke();
 
-    // Order Number
-    ctx.fillStyle = '#666666';
-    ctx.font = '500 22px Arial, sans-serif';
-    ctx.fillText('ORDER#:', colPO, 145);
+    // Order Number — larger text
+    ctx.fillStyle = '#555555';
+    ctx.font = '500 28px Arial, sans-serif';
+    ctx.fillText('ORDER#:', colPO, 175);
     ctx.fillStyle = '#000000';
-    ctx.font = 'bold 38px Arial, sans-serif';
-    ctx.fillText(orderNumber || '—', colPO, 190);
+    ctx.font = 'bold 48px Arial, sans-serif';
+    ctx.fillText(orderNumber || '—', colPO, 225);
 
     // Artwork table header
-    ctx.fillStyle = '#333333';
-    ctx.font = 'bold italic 18px Arial, sans-serif';
+    ctx.fillStyle = '#222222';
+    ctx.font = 'bold 22px Arial, sans-serif';
     ctx.textAlign = 'center';
-    const tColName = colTable + 120;
-    const tColThumb = colTable + 300;
-    const tColSize = colTable + 460;
-    const tColQty = colTable + 600;
-    ctx.fillText('ARTWORK NO.', tColName, 40);
-    ctx.fillText('THUMB', tColThumb, 40);
-    ctx.fillText('SIZE', tColSize, 40);
-    ctx.fillText('QTY', tColQty, 40);
+    const tColName = colTable + 100;
+    const tColThumb = colTable + 280;
+    const tColSize = colTable + 440;
+    const tColQty = colTable + 580;
+    ctx.fillText('ARTWORK NO.', tColName, 50);
+    ctx.fillText('THUMB', tColThumb, 50);
+    ctx.fillText('SIZE', tColSize, 50);
+    ctx.fillText('QTY', tColQty, 50);
 
     // Table divider
-    ctx.strokeStyle = '#999999';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = '#888888';
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.moveTo(colTable, 50);
-    ctx.lineTo(colQR - 20, 50);
+    ctx.moveTo(colTable, 62);
+    ctx.lineTo(colQR - 30, 62);
     ctx.stroke();
 
-    // Artwork rows (max 4 rows that fit in header)
+    // Artwork rows
     const maxRows = Math.min(artworks.length, 4);
-    const rowH = (HEADER_HEIGHT - 70) / maxRows;
+    const rowH = (HEADER_HEIGHT - 90) / Math.max(maxRows, 1);
     for (let i = 0; i < maxRows; i++) {
       const art = artworks[i];
-      const rowY = 55 + i * rowH;
+      const rowY = 70 + i * rowH;
 
       // Artwork name
       ctx.fillStyle = '#000000';
-      ctx.font = '500 20px Arial, sans-serif';
+      ctx.font = '500 22px Arial, sans-serif';
       ctx.textAlign = 'center';
-      const name = art.filename.length > 12 ? art.filename.substring(0, 12) + '…' : art.filename;
-      ctx.fillText(name, tColName, rowY + rowH / 2 + 6);
+      const name = art.filename.length > 14 ? art.filename.substring(0, 14) + '…' : art.filename;
+      ctx.fillText(name, tColName, rowY + rowH / 2 + 7);
 
       // Thumbnail
       const thumbImg = loadedImages[art.dataUrl];
       if (thumbImg) {
-        const thumbSize = Math.min(rowH - 10, 50);
+        const thumbSize = Math.min(rowH - 14, 55);
         const thumbX = tColThumb - thumbSize / 2;
         const thumbY = rowY + (rowH - thumbSize) / 2;
         ctx.drawImage(thumbImg, thumbX, thumbY, thumbSize, thumbSize);
@@ -565,28 +573,28 @@ function GangSheet({ sharedArtwork }) {
 
       // Size
       ctx.fillStyle = '#000000';
-      ctx.font = 'bold 22px Arial, sans-serif';
-      ctx.fillText(`${art.widthInches}" x ${art.heightInches}"`, tColSize, rowY + rowH / 2 + 6);
+      ctx.font = 'bold 24px Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${art.widthInches}" x ${art.heightInches}"`, tColSize, rowY + rowH / 2 + 7);
 
       // Qty
-      ctx.font = 'bold 24px Arial, sans-serif';
-      ctx.fillText(`${art.repetitions}`, tColQty, rowY + rowH / 2 + 6);
+      ctx.font = 'bold 28px Arial, sans-serif';
+      ctx.fillText(`${art.repetitions}`, tColQty, rowY + rowH / 2 + 7);
     }
 
-    // QR Code (simple generated from orderLink)
+    // QR Code
     if (orderLink) {
-      drawQRCode(ctx, orderLink, colQR, 20, HEADER_HEIGHT - 60);
-      ctx.fillStyle = '#666666';
-      ctx.font = '400 16px Arial, sans-serif';
+      const qrSize = HEADER_HEIGHT - 80;
+      const qrX = colQR;
+      const qrY = 30;
+      drawQRCode(ctx, orderLink, qrX, qrY, qrSize);
+      ctx.fillStyle = '#444444';
+      ctx.font = '500 18px Arial, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('Scan for full order details', colQR + (HEADER_HEIGHT - 60) / 2, HEADER_HEIGHT - 16);
+      ctx.fillText('Scan for order details', qrX + qrSize / 2, HEADER_HEIGHT - 20);
     }
 
     // === DRAW GANG SHEET ITEMS (offset by header height) ===
-    if (bgTransparent) {
-      // Don't fill — keep transparent below header
-    }
-
     for (const item of layout.items) {
       const img = loadedImages[item.dataUrl];
       if (!img) continue;
@@ -614,32 +622,26 @@ function GangSheet({ sharedArtwork }) {
       }
     }
 
-    const filename = `gang-sheet-${SHEET_WIDTH_INCHES}x${(layout.totalHeight + 1).toFixed(1)}-${DPI}dpi.png`;
+    const filename = `gang-sheet-${SHEET_WIDTH_INCHES}x${Math.ceil(layout.totalHeight + 1.2)}-${DPI}dpi.png`;
 
-    // Download using blob with fallback
+    // Download
     try {
-      const blob = await new Promise((resolve) => {
-        exportCanvas.toBlob((b) => resolve(b), 'image/png');
+      const blob = await new Promise((resolve, reject) => {
+        exportCanvas.toBlob((b) => {
+          if (b) resolve(b);
+          else reject(new Error('toBlob returned null'));
+        }, 'image/png');
       });
-      if (blob && blob.size > 0) {
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.download = filename;
-        link.href = url;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        setTimeout(() => URL.revokeObjectURL(url), 2000);
-      } else {
-        const dataUrl = exportCanvas.toDataURL('image/png');
-        const link = document.createElement('a');
-        link.download = filename;
-        link.href = dataUrl;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.download = filename;
+      link.href = url;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
     } catch (err) {
+      console.error('Blob export failed, trying dataURL:', err);
       try {
         const dataUrl = exportCanvas.toDataURL('image/png');
         const link = document.createElement('a');
@@ -649,7 +651,7 @@ function GangSheet({ sharedArtwork }) {
         link.click();
         document.body.removeChild(link);
       } catch (e) {
-        alert('Export failed. Try fewer repetitions.');
+        alert('Export failed: ' + e.message);
       }
     }
   };
