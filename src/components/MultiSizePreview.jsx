@@ -57,7 +57,7 @@ function MultiSizePreview({
         // Draw text below
         const artW = ref.artWidth || 0;
         const artH = ref.artHeight || 0;
-        const text = `Size: ${size} | Artwork Size: W ${artW.toFixed(2)}" × H ${artH.toFixed(2)}"`;
+        const text = `Size: ${realSize} | Artwork Size: W ${artW.toFixed(2)}" × H ${artH.toFixed(2)}"`;
         combCtx.font = `bold ${24}px sans-serif`;
         combCtx.fillStyle = '#000000';
         combCtx.textAlign = 'center';
@@ -152,7 +152,9 @@ const MSPCard = React.forwardRef(function MSPCard({
   const [isCustomGarment, setIsCustomGarment] = useState(false);
   const [percentOverride, setPercentOverride] = useState(null); // null = use calculated
 
-  const sizeData = TSHIRT_SIZES[size];
+  // Handle "sameShirt" mode: size key may be "XL_1234567890" — extract real size
+  const realSize = size.includes('_') ? size.split('_')[0] : size;
+  const sizeData = TSHIRT_SIZES[realSize];
   if (!sizeData) return null;
 
   // Calculate artwork dimensions for this size
@@ -176,7 +178,7 @@ const MSPCard = React.forwardRef(function MSPCard({
   // Load garment image
   useEffect(() => {
     const taggedGarment = garmentLibrary && garmentLibrary.find(
-      (g) => g.size === size && (g.side || 'front') === viewSide
+      (g) => g.size === realSize && (g.side || 'front') === viewSide
     );
     if (taggedGarment && taggedGarment.dataUrl) {
       const img = new Image();
@@ -283,7 +285,7 @@ const MSPCard = React.forwardRef(function MSPCard({
         let pxPerInch;
         if (isCustomGarment) {
           const taggedGarment = garmentLibrary && garmentLibrary.find(
-            (g) => g.size === size && (g.side || 'front') === viewSide
+            (g) => g.size === realSize && (g.side || 'front') === viewSide
           );
           const garmentBodyWidth = taggedGarment?.bodyMapping?.shirtWidthInches || sizeData.bodyWidth;
           pxPerInch = tshirtW / garmentBodyWidth;
@@ -328,7 +330,7 @@ const MSPCard = React.forwardRef(function MSPCard({
         ctx.font = 'bold 12px sans-serif';
         ctx.fillStyle = '#1e293b';
         ctx.textAlign = 'center';
-        ctx.fillText(`Size: ${size} | W ${sizeArtW.toFixed(1)}" × H ${sizeArtH.toFixed(1)}"`, W / 2, 335);
+        ctx.fillText(`Size: ${realSize} | W ${sizeArtW.toFixed(1)}" × H ${sizeArtH.toFixed(1)}"`, W / 2, 335);
         ctx.restore();
       };
       img.src = artwork;
@@ -338,7 +340,7 @@ const MSPCard = React.forwardRef(function MSPCard({
       ctx.font = 'bold 12px sans-serif';
       ctx.fillStyle = '#1e293b';
       ctx.textAlign = 'center';
-      ctx.fillText(`Size: ${size} | W ${sizeArtW.toFixed(1)}" × H ${sizeArtH.toFixed(1)}"`, W / 2, 335);
+      ctx.fillText(`Size: ${realSize} | W ${sizeArtW.toFixed(1)}" × H ${sizeArtH.toFixed(1)}"`, W / 2, 335);
       ctx.restore();
     }
   }, [artwork, size, selectedColor, artworkDimensions, artworkPosition, artworkScale, artworkAreaSettings, viewSide, tshirtImg, isCustomGarment, sizeArtW, sizeArtH]);
@@ -362,14 +364,14 @@ const MSPCard = React.forwardRef(function MSPCard({
     dlCtx.drawImage(sourceCanvas, 0, 0, 300 * scale, 350 * scale);
 
     // Draw text below — larger for high-res
-    const text = `Size: ${size} | Artwork Size: W ${sizeArtW.toFixed(2)}" × H ${sizeArtH.toFixed(2)}"`;
+    const text = `Size: ${realSize} | Artwork Size: W ${sizeArtW.toFixed(2)}" × H ${sizeArtH.toFixed(2)}"`;
     dlCtx.font = `bold ${24 * scale / 2}px sans-serif`;
     dlCtx.fillStyle = '#000000';
     dlCtx.textAlign = 'center';
     dlCtx.fillText(text, dlCanvas.width / 2, 380 * scale);
 
     const link = document.createElement('a');
-    link.download = `mockup-${size}.png`;
+    link.download = `mockup-${realSize}.png`;
     link.href = dlCanvas.toDataURL('image/png');
     document.body.appendChild(link);
     link.click();
@@ -390,7 +392,7 @@ const MSPCard = React.forwardRef(function MSPCard({
       </div>
       <div className="msp-info">
         <div className="msp-size-label">
-          {size}
+          {realSize}
           {size === baseSize && <span className="msp-base-tag">Base</span>}
         </div>
         <div className="msp-slider-row">

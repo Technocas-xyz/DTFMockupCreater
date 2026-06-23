@@ -506,7 +506,7 @@ function ControlPanel({
             className={`scaling-mode-btn ${scalingMode === 'same' ? 'active' : ''}`}
             onClick={() => onScalingModeChange('same')}
           >
-            Same Size
+            Same Art
           </button>
           <button
             className={`scaling-mode-btn ${scalingMode === 'proportional' ? 'active' : ''}`}
@@ -514,12 +514,42 @@ function ControlPanel({
           >
             Proportional
           </button>
+          <button
+            className={`scaling-mode-btn ${scalingMode === 'sameShirt' ? 'active' : ''}`}
+            onClick={() => onScalingModeChange('sameShirt')}
+          >
+            Same Shirt
+          </button>
         </div>
         <p className="scaling-mode-hint">
           {scalingMode === 'proportional'
             ? `Artwork scales to ${((artworkDimensions.width / (TSHIRT_SIZES[selectedSize]?.bodyWidth || 22)) * 100).toFixed(1)}% of body width on all sizes`
+            : scalingMode === 'sameShirt'
+            ? `Same shirt (${selectedSize}), adjust artwork % on each card`
             : `All sizes use exact ${artworkDimensions.width}" × ${artworkDimensions.height}"`}
         </p>
+        {scalingMode === 'sameShirt' ? (
+          <div className="same-shirt-controls">
+            <p className="same-shirt-info">Add multiple cards of <strong>{selectedSize}</strong> with different artwork sizes.</p>
+            <button
+              className="btn-add-card"
+              onClick={() => onComparisonSizeToggle(`${selectedSize}_${Date.now()}`)}
+            >
+              + Add {selectedSize} Card
+            </button>
+            {comparisonSizes && comparisonSizes.length > 0 && (
+              <button
+                className="btn-clear-cards"
+                onClick={() => {
+                  // Clear all comparison sizes
+                  comparisonSizes.forEach(s => onComparisonSizeToggle(s));
+                }}
+              >
+                Clear All
+              </button>
+            )}
+          </div>
+        ) : (
         <div className="mockup-size-selection">
           {SIZE_ORDER.map((size) => {
             const sizeData = TSHIRT_SIZES[size];
@@ -546,6 +576,7 @@ function ControlPanel({
             );
           })}
         </div>
+        )}
         <button
           className="btn-generate"
           onClick={onGenerateMockups}

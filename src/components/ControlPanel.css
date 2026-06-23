@@ -598,3 +598,48 @@
   line-height: 1.4;
   font-style: italic;
 }
+
+/* Same Shirt Controls */
+.same-shirt-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.same-shirt-info {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.btn-add-card {
+  padding: 8px 12px;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-add-card:hover {
+  background: var(--primary-hover);
+}
+
+.btn-clear-cards {
+  padding: 6px 12px;
+  background: white;
+  color: #ef4444;
+  border: 1px solid #fca5a5;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.btn-clear-cards:hover {
+  background: #fef2f2;
+}
