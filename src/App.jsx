@@ -290,18 +290,35 @@ function App() {
                 </button>
               ))}
             </div>
-            <DesignCanvas
-              artwork={artwork}
-              selectedSize={selectedSize}
-              selectedColor={selectedColor}
-              artworkDimensions={artworkDimensions}
-              viewSide={viewSide}
-              artworkPosition={artworkPosition}
-              artworkScale={artworkScale}
-              artworkAreaSettings={artworkAreaSettings}
-              onPositionChange={handlePositionChange}
-              customGarment={customGarment}
-            />
+            <div className={`canvas-with-comparison ${comparisonSizes.length > 0 ? 'has-comparison' : ''}`}>
+              <DesignCanvas
+                artwork={artwork}
+                selectedSize={selectedSize}
+                selectedColor={selectedColor}
+                artworkDimensions={artworkDimensions}
+                viewSide={viewSide}
+                artworkPosition={artworkPosition}
+                artworkScale={artworkScale}
+                artworkAreaSettings={artworkAreaSettings}
+                onPositionChange={handlePositionChange}
+                customGarment={customGarment}
+              />
+              {comparisonSizes.length > 0 && (
+                <MultiSizePreview
+                  artwork={artwork}
+                  selectedColor={selectedColor}
+                  artworkDimensions={artworkDimensions}
+                  artworkPosition={artworkPosition}
+                  artworkScale={artworkScale}
+                  artworkAreaSettings={artworkAreaSettings}
+                  selectedSizes={comparisonSizes}
+                  viewSide={viewSide}
+                  garmentLibrary={garmentLibrary}
+                  scalingMode={scalingMode}
+                  baseSize={selectedSize}
+                />
+              )}
+            </div>
           </div>
 
           <div className="controls-section">
@@ -341,22 +358,6 @@ function App() {
             />
           </div>
         </div>
-
-        {comparisonSizes.length > 0 && (
-          <MultiSizePreview
-            artwork={artwork}
-            selectedColor={selectedColor}
-            artworkDimensions={artworkDimensions}
-            artworkPosition={artworkPosition}
-            artworkScale={artworkScale}
-            artworkAreaSettings={artworkAreaSettings}
-            selectedSizes={comparisonSizes}
-            viewSide={viewSide}
-            garmentLibrary={garmentLibrary}
-            scalingMode={scalingMode}
-            baseSize={selectedSize}
-          />
-        )}
 
         {showMockups && (
           <MockupPreview

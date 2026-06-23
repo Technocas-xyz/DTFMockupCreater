@@ -1,94 +1,89 @@
 .multi-size-preview {
-  margin-top: 24px;
-  padding: 20px;
-  background: #1e1e2e;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0;
 }
 
 .msp-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
+  padding: 0 4px;
 }
 
 .msp-header h3 {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
-  color: #e2e8f0;
+  color: var(--text-primary, #1e293b);
   margin: 0;
 }
 
 .msp-mode-badge {
-  font-size: 11px;
-  padding: 3px 8px;
+  font-size: 10px;
+  padding: 2px 8px;
   border-radius: 4px;
-  background: rgba(99, 102, 241, 0.15);
-  color: #a5b4fc;
-  font-weight: 500;
+  background: #eff6ff;
+  color: #2563eb;
+  font-weight: 600;
 }
 
 .msp-scroll-container {
   display: flex;
-  gap: 16px;
+  gap: 12px;
   overflow-x: auto;
-  padding-bottom: 8px;
+  padding: 4px 0 8px;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
 }
 
 .msp-scroll-container::-webkit-scrollbar {
-  height: 6px;
-}
-
-.msp-scroll-container::-webkit-scrollbar-track {
-  background: transparent;
+  height: 4px;
 }
 
 .msp-scroll-container::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 3px;
+  background: #cbd5e1;
+  border-radius: 2px;
 }
 
 .msp-card {
   flex-shrink: 0;
-  width: 200px;
-  background: #262637;
+  width: 160px;
+  background: white;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 2px solid var(--border, #e2e8f0);
   overflow: hidden;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .msp-card:hover {
-  border-color: rgba(99, 102, 241, 0.3);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border-color: #93c5fd;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.1);
 }
 
 .msp-card.msp-card-base {
-  border-color: rgba(99, 102, 241, 0.4);
-  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.2);
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
 }
 
 .msp-canvas {
   display: block;
-  width: 200px;
-  height: 200px;
-  background: #1a1a2a;
+  width: 160px;
+  height: 160px;
+  background: #f8fafc;
 }
 
 .msp-info {
-  padding: 8px 10px;
+  padding: 6px 8px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
+  border-top: 1px solid var(--border, #e2e8f0);
 }
 
 .msp-size-label {
   font-size: 13px;
   font-weight: 700;
-  color: #e2e8f0;
+  color: var(--text-primary, #1e293b);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -98,32 +93,91 @@
   font-size: 9px;
   padding: 1px 5px;
   border-radius: 3px;
-  background: rgba(99, 102, 241, 0.2);
-  color: #a5b4fc;
+  background: #dbeafe;
+  color: #1d4ed8;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.3px;
 }
 
 .msp-dimensions {
   font-size: 11px;
-  color: #94a3b8;
-  line-height: 1.4;
+  color: var(--text-primary, #1e293b);
+  font-weight: 500;
 }
 
 .msp-percentage {
   font-size: 10px;
-  color: #64748b;
+  color: #2563eb;
+  font-weight: 500;
 }
 
 .msp-body-info {
   font-size: 10px;
-  color: #475569;
+  color: var(--text-secondary, #64748b);
 }
 
-.msp-empty {
-  text-align: center;
-  padding: 32px 20px;
-  color: #64748b;
-  font-size: 13px;
+/* Layout integration - side by side with main canvas */
+.canvas-with-comparison {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+.canvas-with-comparison.has-comparison {
+  align-items: flex-start;
+}
+
+.canvas-with-comparison .multi-size-preview {
+  width: 100%;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border, #e2e8f0);
+  background: #f8fafc;
+  border-radius: 0 0 12px 12px;
+}
+
+/* Per-card percentage slider */
+.msp-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.msp-percent-slider {
+  flex: 1;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: #e2e8f0;
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+.msp-percent-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #2563eb;
+  cursor: pointer;
+}
+
+.msp-percent-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #2563eb;
+  cursor: pointer;
+  border: none;
+}
+
+.msp-percent-value {
+  font-size: 11px;
+  font-weight: 700;
+  color: #2563eb;
+  min-width: 32px;
+  text-align: right;
 }

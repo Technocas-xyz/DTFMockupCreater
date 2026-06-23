@@ -77,24 +77,20 @@ function MSPCard({
   const canvasRef = useRef(null);
   const [tshirtImg, setTshirtImg] = useState(null);
   const [isCustomGarment, setIsCustomGarment] = useState(false);
+  const [percentOverride, setPercentOverride] = useState(null); // null = use calculated
 
   const sizeData = TSHIRT_SIZES[size];
   if (!sizeData) return null;
 
   // Calculate artwork dimensions for this size
-  let sizeArtW, sizeArtH;
-  if (scalingMode === 'proportional') {
-    // Apply same percentage of body width
-    sizeArtW = (sizeData.bodyWidth * basePercentage) / 100;
-    const aspectRatio = artworkDimensions.height / artworkDimensions.width;
-    sizeArtH = sizeArtW * aspectRatio;
-  } else {
-    // Same size mode — use exact same dimensions
-    sizeArtW = artworkDimensions.width;
-    sizeArtH = artworkDimensions.height;
-  }
+  const defaultPercent = scalingMode === 'proportional' ? basePercentage : ((artworkDimensions.width / sizeData.bodyWidth) * 100);
+  const activePercent = percentOverride !== null ? percentOverride : defaultPercent;
 
-  const widthPercent = ((sizeArtW / sizeData.bodyWidth) * 100).toFixed(1);
+  const sizeArtW = (sizeData.bodyWidth * activePercent) / 100;
+  const aspectRatio = artworkDimensions.height / artworkDimensions.width;
+  const sizeArtH = sizeArtW * aspectRatio;
+
+  const widthPercent = activePercent.toFixed(1);
 
   // Load garment image
   useEffect(() => {
@@ -258,8 +254,17 @@ function MSPCard({
         <div className="msp-dimensions">
           W {sizeArtW.toFixed(2)}" × H {sizeArtH.toFixed(2)}"
         </div>
-        <div className="msp-percentage">
-          {widthPercent}% of body width
+        <div className="msp-slider-row">
+          <input
+            type="range"
+            min="20"
+            max="95"
+            step="1"
+            value={Math.round(activePercent)}
+            onChange={(e) => setPercentOverride(parseFloat(e.target.value))}
+            className="msp-percent-slider"
+          />
+          <span className="msp-percent-value">{Math.round(activePercent)}%</span>
         </div>
         <div className="msp-body-info">
           Body: {sizeData.bodyWidth}" × {sizeData.bodyLength}"
