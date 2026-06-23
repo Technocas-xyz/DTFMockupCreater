@@ -174,8 +174,8 @@ function GangSheet({ sharedArtwork }) {
     if (!canvas) return;
 
     const containerWidth = canvas.parentElement?.clientWidth - 40 || 600;
-    const scale = (containerWidth * (zoom / 100)) / SHEET_WIDTH_INCHES;
-    const headerH = Math.max(1 * scale, 40); // 1 inch header, min 40px for visibility
+    const scale = (containerWidth * Math.min(zoom, 100) / 100) / SHEET_WIDTH_INCHES;
+    const headerH = Math.max(1 * scale, 40);
     const headerMarginTop = headerTopMargin * scale;
     const canvasWidth = SHEET_WIDTH_INCHES * scale;
     const canvasHeight = Math.max((layout.totalHeight) * scale + headerH + headerMarginTop, 200);
@@ -860,7 +860,7 @@ function GangSheet({ sharedArtwork }) {
           <div className="gs-canvas-toolbar">
             <button className="gs-zoom-btn" onClick={() => setZoom((z) => Math.max(20, z - 10))}>−</button>
             <span className="gs-zoom-label">{zoom}%</span>
-            <button className="gs-zoom-btn" onClick={() => setZoom((z) => Math.min(150, z + 10))}>+</button>
+            <button className="gs-zoom-btn" onClick={() => setZoom((z) => Math.min(100, z + 10))}>+</button>
             <button className="gs-zoom-btn" onClick={() => setZoom(50)}>Fit</button>
           </div>
           <div className="gs-canvas-container">
