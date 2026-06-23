@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import { TSHIRT_COLORS, ARTWORK_SIZES, SIZE_ORDER, TSHIRT_SIZES } from '../constants/tshirtSizes';
 import './ControlPanel.css';
 
-const GARMENT_TYPES_FILTER = ['All', 'T-Shirt', 'Hoodie', 'Long Sleeve', 'Tank Top', 'Other'];
+const GARMENT_TYPES_FILTER = ['T-Shirt', 'Hoodie', 'Long Sleeve', 'Tank Top', 'Other'];
 
 function ControlPanel({
   selectedSize,
@@ -30,12 +30,17 @@ function ControlPanel({
   onGarmentChange,
 }) {
   const fileInputRef = useRef(null);
-  const [selectedType, setSelectedType] = useState('All');
+  const [selectedType, setSelectedType] = useState('T-Shirt');
   const aspectRatio = artworkDimensions.width / artworkDimensions.height;
+
+  // Only show types that exist in the garment library
+  const availableTypes = garmentLibrary && garmentLibrary.length > 0
+    ? [...new Set(garmentLibrary.map(g => g.type).filter(Boolean))]
+    : GARMENT_TYPES_FILTER;
 
   // Filter garment library by selected type
   const filteredGarments = garmentLibrary
-    ? garmentLibrary.filter(g => selectedType === 'All' || g.type === selectedType)
+    ? garmentLibrary.filter(g => g.type === selectedType)
     : [];
 
   const handleWidthChange = (newWidth) => {
@@ -140,7 +145,7 @@ function ControlPanel({
           Garment Type
         </h3>
         <div className="type-grid">
-          {GARMENT_TYPES_FILTER.map((type) => (
+          {(garmentLibrary && garmentLibrary.length > 0 ? availableTypes : GARMENT_TYPES_FILTER).map((type) => (
             <button
               key={type}
               className={`type-btn ${selectedType === type ? 'active' : ''}`}

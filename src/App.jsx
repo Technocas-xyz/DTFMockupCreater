@@ -17,21 +17,21 @@ function App() {
   const [sharedArtwork, setSharedArtwork] = useState(null);
   const [artwork, setArtwork] = useState(null);
   const [artworkFile, setArtworkFile] = useState(null);
-  const [selectedSize, setSelectedSize] = useState('XL');
+  const [selectedSize, setSelectedSize] = useState('L');
   const [selectedColor, setSelectedColor] = useState(TSHIRT_COLORS[0]);
-  const [artworkDimensions, setArtworkDimensions] = useState({ width: 9, height: 12 });
+  const [artworkDimensions, setArtworkDimensions] = useState({ width: 10.75, height: 10.75 });
   const [lockProportion, setLockProportion] = useState(true);
   const [viewSide, setViewSide] = useState('front');
   const [artworkPosition, setArtworkPosition] = useState({ x: 0, y: 0 });
   const artworkScale = 1; // Fixed at 1 — size controlled by width/height inputs only
-  // Artwork area placement settings — fixed default 13x16
+  // Artwork area placement settings — default 18x24 offset 3
   const [artworkAreaSettings, setArtworkAreaSettings] = useState({
-    width: 13,
-    height: 16,
+    width: 18,
+    height: 24,
     topOffset: 3,
   });
   const [selectedMockupSizes, setSelectedMockupSizes] = useState(
-    SIZE_ORDER.reduce((acc, size) => ({ ...acc, [size]: true }), {})
+    SIZE_ORDER.reduce((acc, size) => ({ ...acc, [size]: false }), {})
   );
   const [showMockups, setShowMockups] = useState(false);
   const [customGarment, setCustomGarment] = useState(null);

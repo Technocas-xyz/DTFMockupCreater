@@ -151,16 +151,12 @@ export const TSHIRT_SIZES = {
 };
 
 export const ARTWORK_SIZES = [
-  { label: 'W 8"', width: 8, height: 0, lockBy: 'width' },
-  { label: 'W 9"', width: 9, height: 0, lockBy: 'width' },
-  { label: 'W 10"', width: 10, height: 0, lockBy: 'width' },
+  { label: 'W 10.75"', width: 10.75, height: 0, lockBy: 'width' },
   { label: 'W 11"', width: 11, height: 0, lockBy: 'width' },
   { label: 'W 12"', width: 12, height: 0, lockBy: 'width' },
   { label: 'W 13"', width: 13, height: 0, lockBy: 'width' },
   { label: 'W 14"', width: 14, height: 0, lockBy: 'width' },
-  { label: 'H 8"', width: 0, height: 8, lockBy: 'height' },
-  { label: 'H 9"', width: 0, height: 9, lockBy: 'height' },
-  { label: 'H 10"', width: 0, height: 10, lockBy: 'height' },
+  { label: 'H 10.75"', width: 0, height: 10.75, lockBy: 'height' },
   { label: 'H 11"', width: 0, height: 11, lockBy: 'height' },
   { label: 'H 12"', width: 0, height: 12, lockBy: 'height' },
   { label: 'H 13"', width: 0, height: 13, lockBy: 'height' },

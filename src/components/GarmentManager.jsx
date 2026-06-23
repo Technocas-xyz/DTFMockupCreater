@@ -59,7 +59,7 @@ function GarmentManager({ onUseAsMockup }) {
   const [library, setLibrary] = useState([]);
   const [selectedGarment, setSelectedGarment] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [showPreviewPanel, setShowPreviewPanel] = useState(false);
+  const [showPreviewPanel, setShowPreviewPanel] = useState(true);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -128,6 +128,10 @@ function GarmentManager({ onUseAsMockup }) {
             dataUrl: g.dataUrl || (g.imageFile ? `${imgUrl}?file=${g.imageFile}` : null),
           })).filter(g => g.dataUrl);
           setLibrary(withUrls);
+          // Auto-select first garment for preview
+          if (withUrls.length > 0 && !selectedGarment) {
+            setSelectedGarment(withUrls[0]);
+          }
         })
         .catch(e => {
           console.warn('Failed to load from server, trying localStorage', e);
@@ -598,41 +602,49 @@ function GarmentManager({ onUseAsMockup }) {
           </div>
         </div>
 
-        {/* Right Preview Panel */}
-        {showPreviewPanel && selectedGarment && (
+        {/* Right Preview Panel — always visible */}
+        {showPreviewPanel && (
           <div className="gm-preview-panel">
             <div className="gm-preview-panel-header">
               <h3>Garment Preview</h3>
               <button className="gm-preview-close" onClick={() => { setShowPreviewPanel(false); setSelectedGarment(null); }}>×</button>
             </div>
-            <div className="gm-preview-image">
-              <img src={selectedGarment.dataUrl} alt={selectedGarment.name} />
-            </div>
-            <div className="gm-preview-details">
-              <div className="gm-detail-row"><span className="gm-detail-label">Item Description</span><span className="gm-detail-value">{selectedGarment.description || selectedGarment.name}</span></div>
-              <div className="gm-detail-row"><span className="gm-detail-label">Gender</span><span className="gm-detail-value">{selectedGarment.gender || '—'}</span></div>
-              <div className="gm-detail-row"><span className="gm-detail-label">Brand</span><span className="gm-detail-value">{selectedGarment.brand || '—'}</span></div>
-              <div className="gm-detail-row"><span className="gm-detail-label">Style No</span><span className="gm-detail-value">{selectedGarment.styleNo || '—'}</span></div>
-              <div className="gm-detail-row"><span className="gm-detail-label">Size</span><span className="gm-detail-value">{selectedGarment.size || '—'}</span></div>
-              <div className="gm-detail-row">
-                <span className="gm-detail-label">Color</span>
-                <span className="gm-detail-value gm-color-cell">
-                  <span className="gm-color-dot" style={{ background: selectedGarment.colorHex || '#333' }}></span>
-                  {selectedGarment.color || '—'}
-                </span>
+            {selectedGarment ? (
+              <>
+                <div className="gm-preview-image">
+                  <img src={selectedGarment.dataUrl} alt={selectedGarment.name} />
+                </div>
+                <div className="gm-preview-details">
+                  <div className="gm-detail-row"><span className="gm-detail-label">Item Description</span><span className="gm-detail-value">{selectedGarment.description || selectedGarment.name}</span></div>
+                  <div className="gm-detail-row"><span className="gm-detail-label">Gender</span><span className="gm-detail-value">{selectedGarment.gender || '—'}</span></div>
+                  <div className="gm-detail-row"><span className="gm-detail-label">Brand</span><span className="gm-detail-value">{selectedGarment.brand || '—'}</span></div>
+                  <div className="gm-detail-row"><span className="gm-detail-label">Style No</span><span className="gm-detail-value">{selectedGarment.styleNo || '—'}</span></div>
+                  <div className="gm-detail-row"><span className="gm-detail-label">Size</span><span className="gm-detail-value">{selectedGarment.size || '—'}</span></div>
+                  <div className="gm-detail-row">
+                    <span className="gm-detail-label">Color</span>
+                    <span className="gm-detail-value gm-color-cell">
+                      <span className="gm-color-dot" style={{ background: selectedGarment.colorHex || '#333' }}></span>
+                      {selectedGarment.color || '—'}
+                    </span>
+                  </div>
+                  <div className="gm-detail-row"><span className="gm-detail-label">Garment Type</span><span className="gm-detail-value">{selectedGarment.type}</span></div>
+                  <div className="gm-detail-row"><span className="gm-detail-label">Size Specs (Inches)</span><span className="gm-detail-value">Length: {selectedGarment.bodyMapping?.shirtHeightInches || '—'}    Width: {selectedGarment.bodyMapping?.shirtWidthInches || '—'}</span></div>
+                  <div className="gm-detail-row"><span className="gm-detail-label">File Name</span><span className="gm-detail-value">{selectedGarment.fileName || selectedGarment.name}</span></div>
+                  <div className="gm-detail-row"><span className="gm-detail-label">Image Dimensions</span><span className="gm-detail-value">{selectedGarment.width} x {selectedGarment.height} px</span></div>
+                  <div className="gm-detail-row"><span className="gm-detail-label">Uploaded On</span><span className="gm-detail-value">{formatDate(selectedGarment.createdAt)}</span></div>
+                  <div className="gm-detail-row"><span className="gm-detail-label">Uploaded By</span><span className="gm-detail-value">Admin</span></div>
+                </div>
+                <div className="gm-preview-actions">
+                  <button className="gm-btn-secondary" onClick={() => replaceFileInputRef.current?.click()}>Replace Image</button>
+                  <button className="gm-btn-danger" onClick={() => deleteFromLibrary(selectedGarment.id)}>Delete Garment</button>
+                  <input ref={replaceFileInputRef} type="file" accept=".png,image/png" style={{ display: 'none' }} onChange={(e) => handleReplaceImage(e.target.files[0])} />
+                </div>
+              </>
+            ) : (
+              <div style={{ padding: '40px 20px', textAlign: 'center', color: '#94a3b8', fontSize: '13px' }}>
+                <p>Click a garment row to preview details here.</p>
               </div>
-              <div className="gm-detail-row"><span className="gm-detail-label">Garment Type</span><span className="gm-detail-value">{selectedGarment.type}</span></div>
-              <div className="gm-detail-row"><span className="gm-detail-label">Size Specs</span><span className="gm-detail-value">{selectedGarment.bodyMapping?.shirtHeightInches || '—'}" × {selectedGarment.bodyMapping?.shirtWidthInches || '—'}"</span></div>
-              <div className="gm-detail-row"><span className="gm-detail-label">File Name</span><span className="gm-detail-value">{selectedGarment.fileName || selectedGarment.name}</span></div>
-              <div className="gm-detail-row"><span className="gm-detail-label">Image Dimensions</span><span className="gm-detail-value">{selectedGarment.width} × {selectedGarment.height} px</span></div>
-              <div className="gm-detail-row"><span className="gm-detail-label">Uploaded On</span><span className="gm-detail-value">{formatDate(selectedGarment.createdAt)}</span></div>
-              <div className="gm-detail-row"><span className="gm-detail-label">Uploaded By</span><span className="gm-detail-value">Admin</span></div>
-            </div>
-            <div className="gm-preview-actions">
-              <button className="gm-btn-secondary" onClick={() => replaceFileInputRef.current?.click()}>Replace Image</button>
-              <button className="gm-btn-danger" onClick={() => deleteFromLibrary(selectedGarment.id)}>Delete Garment</button>
-              <input ref={replaceFileInputRef} type="file" accept=".png,image/png" style={{ display: 'none' }} onChange={(e) => handleReplaceImage(e.target.files[0])} />
-            </div>
+            )}
           </div>
         )}
       </div>

@@ -356,9 +356,54 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
   };
 
   const handleSendToMockup = () => {
-    if (displayUrl && onSendToMockup) {
-      onSendToMockup(displayUrl);
-    }
+    if (!displayUrl || !onSendToMockup) return;
+    // Trim transparent/semi-transparent pixels before sending to mockup
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const { data, width, height } = imageData;
+
+      // First pass: remove semi-transparent pixels (alpha < 20) — make them fully transparent
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] > 0 && data[i + 3] < 20) {
+          data[i + 3] = 0;
+        }
+      }
+      ctx.putImageData(imageData, 0, 0);
+
+      // Second pass: find bounds of non-transparent content (alpha >= 20)
+      let top = height, bottom = 0, left = width, right = 0;
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          if (data[(y * width + x) * 4 + 3] >= 20) {
+            if (y < top) top = y;
+            if (y > bottom) bottom = y;
+            if (x < left) left = x;
+            if (x > right) right = x;
+          }
+        }
+      }
+
+      if (top > bottom || left > right) {
+        onSendToMockup(displayUrl);
+        return;
+      }
+
+      const trimW = right - left + 1;
+      const trimH = bottom - top + 1;
+      const trimCanvas = document.createElement('canvas');
+      trimCanvas.width = trimW;
+      trimCanvas.height = trimH;
+      const trimCtx = trimCanvas.getContext('2d');
+      trimCtx.drawImage(canvas, left, top, trimW, trimH, 0, 0, trimW, trimH);
+      onSendToMockup(trimCanvas.toDataURL('image/png'));
+    };
+    img.src = displayUrl;
   };
 
   // Split view drag
