@@ -147,7 +147,7 @@ function GangSheet({ sharedArtwork }) {
   const [showGrid, setShowGrid] = useState(false);
   const [showCutLines, setShowCutLines] = useState(true);
   const [bgTransparent, setBgTransparent] = useState(false);
-  const [zoom, setZoom] = useState(100);
+  const [zoom, setZoom] = useState(50);
   const [layout, setLayout] = useState({ items: [], totalHeight: 0 });
   const [detailsArtwork, setDetailsArtwork] = useState(null); // artwork being shown in details popup
   const COST_PER_FOOT = 5; // USD per linear foot
@@ -858,10 +858,10 @@ function GangSheet({ sharedArtwork }) {
         {/* Center Panel - Canvas Preview */}
         <div className="gs-center-panel">
           <div className="gs-canvas-toolbar">
-            <button className="gs-zoom-btn" onClick={() => setZoom((z) => Math.max(25, z - 10))}>−</button>
+            <button className="gs-zoom-btn" onClick={() => setZoom((z) => Math.max(20, z - 10))}>−</button>
             <span className="gs-zoom-label">{zoom}%</span>
-            <button className="gs-zoom-btn" onClick={() => setZoom((z) => Math.min(200, z + 10))}>+</button>
-            <button className="gs-zoom-btn" onClick={() => setZoom(100)}>Fit</button>
+            <button className="gs-zoom-btn" onClick={() => setZoom((z) => Math.min(150, z + 10))}>+</button>
+            <button className="gs-zoom-btn" onClick={() => setZoom(50)}>Fit</button>
           </div>
           <div className="gs-canvas-container">
             <canvas ref={canvasRef} />
