@@ -28,6 +28,10 @@ function ControlPanel({
   garmentLibrary,
   selectedGarmentId,
   onGarmentChange,
+  comparisonSizes,
+  onComparisonSizeToggle,
+  scalingMode,
+  onScalingModeChange,
 }) {
   const fileInputRef = useRef(null);
   const [selectedType, setSelectedType] = useState('T-Shirt');
@@ -491,24 +495,56 @@ function ControlPanel({
         </section>
       )}
 
-      {/* Mockup Preview Sizes */}
+      {/* Size Comparison */}
       <section className="panel-section">
         <h3 className="section-title">
           <span className="step-number">9</span>
-          Generate Mockups
+          Size Comparison
         </h3>
+        <div className="scaling-mode-toggle">
+          <button
+            className={`scaling-mode-btn ${scalingMode === 'same' ? 'active' : ''}`}
+            onClick={() => onScalingModeChange('same')}
+          >
+            Same Size
+          </button>
+          <button
+            className={`scaling-mode-btn ${scalingMode === 'proportional' ? 'active' : ''}`}
+            onClick={() => onScalingModeChange('proportional')}
+          >
+            Proportional
+          </button>
+        </div>
+        <p className="scaling-mode-hint">
+          {scalingMode === 'proportional'
+            ? `Artwork scales to ${((artworkDimensions.width / (TSHIRT_SIZES[selectedSize]?.bodyWidth || 22)) * 100).toFixed(1)}% of body width on all sizes`
+            : `All sizes use exact ${artworkDimensions.width}" × ${artworkDimensions.height}"`}
+        </p>
         <div className="mockup-size-selection">
-          {SIZE_ORDER.map((size) => (
-            <label key={size} className="mockup-checkbox">
-              <input
-                type="checkbox"
-                checked={selectedMockupSizes[size]}
-                onChange={() => onMockupSizeToggle(size)}
-              />
-              <span className="checkmark"></span>
-              <span>{size}</span>
-            </label>
-          ))}
+          {SIZE_ORDER.map((size) => {
+            const sizeData = TSHIRT_SIZES[size];
+            const isChecked = comparisonSizes && comparisonSizes.includes(size);
+            let pctLabel = '';
+            if (scalingMode === 'proportional' && sizeData) {
+              const baseBW = TSHIRT_SIZES[selectedSize]?.bodyWidth || 22;
+              const basePct = (artworkDimensions.width / baseBW) * 100;
+              const sizeArtW = (sizeData.bodyWidth * basePct) / 100;
+              pctLabel = ` (${((sizeArtW / sizeData.bodyWidth) * 100).toFixed(0)}%)`;
+            } else if (sizeData) {
+              pctLabel = ` (${((artworkDimensions.width / sizeData.bodyWidth) * 100).toFixed(0)}%)`;
+            }
+            return (
+              <label key={size} className="mockup-checkbox">
+                <input
+                  type="checkbox"
+                  checked={isChecked}
+                  onChange={() => onComparisonSizeToggle(size)}
+                />
+                <span className="checkmark"></span>
+                <span>{size}{pctLabel}</span>
+              </label>
+            );
+          })}
         </div>
         <button
           className="btn-generate"

@@ -1,0 +1,129 @@
+.multi-size-preview {
+  margin-top: 24px;
+  padding: 20px;
+  background: #1e1e2e;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.msp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.msp-header h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e2e8f0;
+  margin: 0;
+}
+
+.msp-mode-badge {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(99, 102, 241, 0.15);
+  color: #a5b4fc;
+  font-weight: 500;
+}
+
+.msp-scroll-container {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+.msp-scroll-container::-webkit-scrollbar {
+  height: 6px;
+}
+
+.msp-scroll-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.msp-scroll-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+
+.msp-card {
+  flex-shrink: 0;
+  width: 200px;
+  background: #262637;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.msp-card:hover {
+  border-color: rgba(99, 102, 241, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.msp-card.msp-card-base {
+  border-color: rgba(99, 102, 241, 0.4);
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.2);
+}
+
+.msp-canvas {
+  display: block;
+  width: 200px;
+  height: 200px;
+  background: #1a1a2a;
+}
+
+.msp-info {
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.msp-size-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #e2e8f0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.msp-base-tag {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(99, 102, 241, 0.2);
+  color: #a5b4fc;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.msp-dimensions {
+  font-size: 11px;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+.msp-percentage {
+  font-size: 10px;
+  color: #64748b;
+}
+
+.msp-body-info {
+  font-size: 10px;
+  color: #475569;
+}
+
+.msp-empty {
+  text-align: center;
+  padding: 32px 20px;
+  color: #64748b;
+  font-size: 13px;
+}

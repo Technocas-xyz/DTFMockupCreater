@@ -557,3 +557,44 @@
   color: white;
   font-weight: 600;
 }
+
+/* Scaling Mode Toggle */
+.scaling-mode-toggle {
+  display: flex;
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.scaling-mode-btn {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  background: white;
+  color: var(--text-secondary);
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.scaling-mode-btn:first-child {
+  border-right: 1px solid var(--border);
+}
+
+.scaling-mode-btn:hover {
+  background: #f8fafc;
+}
+
+.scaling-mode-btn.active {
+  background: var(--primary);
+  color: white;
+  font-weight: 600;
+}
+
+.scaling-mode-hint {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  font-style: italic;
+}

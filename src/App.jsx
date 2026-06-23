@@ -3,6 +3,7 @@ import Sidebar from './components/Sidebar';
 import DesignCanvas from './components/DesignCanvas';
 import ControlPanel from './components/ControlPanel';
 import MockupPreview from './components/MockupPreview';
+import MultiSizePreview from './components/MultiSizePreview';
 import ContrastChecker from './components/ContrastChecker';
 import QADefectAnalysis from './components/QADefectAnalysis';
 import BGRemover from './components/BGRemover';
@@ -37,6 +38,8 @@ function App() {
   const [customGarment, setCustomGarment] = useState(null);
   const [garmentLibrary, setGarmentLibrary] = useState([]);
   const [selectedGarmentId, setSelectedGarmentId] = useState(null);
+  const [comparisonSizes, setComparisonSizes] = useState([]);
+  const [scalingMode, setScalingMode] = useState('proportional');
 
   // Load garment library from server API (shared for all users), fallback to localStorage
   const loadGarmentLibrary = async () => {
@@ -327,9 +330,33 @@ function App() {
               garmentLibrary={garmentLibrary}
               selectedGarmentId={selectedGarmentId}
               onGarmentChange={handleGarmentChange}
+              comparisonSizes={comparisonSizes}
+              onComparisonSizeToggle={(size) =>
+                setComparisonSizes((prev) =>
+                  prev.includes(size) ? prev.filter((s) => s !== size) : [...prev, size]
+                )
+              }
+              scalingMode={scalingMode}
+              onScalingModeChange={setScalingMode}
             />
           </div>
         </div>
+
+        {comparisonSizes.length > 0 && (
+          <MultiSizePreview
+            artwork={artwork}
+            selectedColor={selectedColor}
+            artworkDimensions={artworkDimensions}
+            artworkPosition={artworkPosition}
+            artworkScale={artworkScale}
+            artworkAreaSettings={artworkAreaSettings}
+            selectedSizes={comparisonSizes}
+            viewSide={viewSide}
+            garmentLibrary={garmentLibrary}
+            scalingMode={scalingMode}
+            baseSize={selectedSize}
+          />
+        )}
 
         {showMockups && (
           <MockupPreview
