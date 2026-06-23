@@ -165,7 +165,7 @@ export const ARTWORK_SIZES = [
 ];
 
 export const TSHIRT_COLORS = [
-  { name: 'Black', hex: '#1a1a1a' },
+  { name: 'Black', hex: '#000000' },
   { name: 'Navy', hex: '#1e3a5f' },
   { name: 'Dark Heather', hex: '#4a4a4a' },
   { name: 'Charcoal', hex: '#3d3d3d' },

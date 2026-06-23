@@ -395,6 +395,17 @@ function MockupPreview({
 
           } // end showAnnotations
 
+          // Always show shirt size + artwork size bar (even on clean download)
+          if (!showAnnotations) {
+            const infoY2 = H - 44;
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            ctx.fillRect(0, infoY2 - 14, W, 50);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 26px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(`Shirt: ${size}   |   Artwork: ${artWidthInches}" × ${artHeightInches}"`, W / 2, infoY2 + 16);
+          }
+
           resolve(canvas);
         };
         img.onerror = () => resolve(canvas);
