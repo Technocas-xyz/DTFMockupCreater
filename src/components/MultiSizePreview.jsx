@@ -29,13 +29,14 @@ function MultiSizePreview({
   const baseBodyWidth = baseSizeData ? baseSizeData.bodyWidth : 22;
   const basePercentage = (artworkDimensions.width / baseBodyWidth) * 100;
 
-  // Download All handler
+  // Download All handler — high resolution (2x)
   const handleDownloadAll = () => {
     const numSizes = sortedSizes.length;
-    const cardW = 300;
-    const gap = 20;
+    const scale = 2;
+    const cardW = 300 * scale;
+    const gap = 20 * scale;
     const totalW = numSizes * (cardW + gap) - gap;
-    const totalH = 400;
+    const totalH = 420 * scale;
 
     const combinedCanvas = document.createElement('canvas');
     combinedCanvas.width = totalW;
@@ -50,26 +51,42 @@ function MultiSizePreview({
       const ref = cardRefs.current[size];
       if (ref && ref.canvas) {
         const x = idx * (cardW + gap);
-        // Draw the card's canvas (300x350)
-        combCtx.drawImage(ref.canvas, x, 0, cardW, 350);
+        // Draw the card's canvas scaled up
+        combCtx.drawImage(ref.canvas, x, 0, cardW, 350 * scale);
 
         // Draw text below
-        const sizeData = TSHIRT_SIZES[size];
         const artW = ref.artWidth || 0;
         const artH = ref.artHeight || 0;
         const text = `Size: ${size} | Artwork Size: W ${artW.toFixed(2)}" × H ${artH.toFixed(2)}"`;
-        combCtx.font = 'bold 14px sans-serif';
+        combCtx.font = `bold ${24}px sans-serif`;
         combCtx.fillStyle = '#000000';
         combCtx.textAlign = 'center';
-        combCtx.fillText(text, x + cardW / 2, 375);
+        combCtx.fillText(text, x + cardW / 2, 380 * scale);
       }
     });
 
     // Download
-    const link = document.createElement('a');
-    link.download = 'mockup-comparison-all-sizes.png';
-    link.href = combinedCanvas.toDataURL('image/png');
-    link.click();
+    try {
+      combinedCanvas.toBlob((blob) => {
+        if (blob) {
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.download = 'mockup-comparison-all-sizes.png';
+          link.href = url;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          setTimeout(() => URL.revokeObjectURL(url), 2000);
+        }
+      }, 'image/png');
+    } catch (e) {
+      const link = document.createElement('a');
+      link.download = 'mockup-comparison-all-sizes.png';
+      link.href = combinedCanvas.toDataURL('image/png');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
   };
 
   return (
@@ -306,44 +323,57 @@ const MSPCard = React.forwardRef(function MSPCard({
         ctx.drawImage(img, drawX, drawY, artW, artH);
         ctx.restore();
 
-        // Draw text at bottom of canvas
-        drawCanvasText(ctx, size, sizeArtW, sizeArtH, W);
+        // Draw text at bottom of canvas — only for live preview (smaller)
+        ctx.save();
+        ctx.font = 'bold 12px sans-serif';
+        ctx.fillStyle = '#1e293b';
+        ctx.textAlign = 'center';
+        ctx.fillText(`Size: ${size} | W ${sizeArtW.toFixed(1)}" × H ${sizeArtH.toFixed(1)}"`, W / 2, 335);
+        ctx.restore();
       };
       img.src = artwork;
     } else {
       // Draw text even without artwork
-      drawCanvasText(ctx, size, sizeArtW, sizeArtH, W);
+      ctx.save();
+      ctx.font = 'bold 12px sans-serif';
+      ctx.fillStyle = '#1e293b';
+      ctx.textAlign = 'center';
+      ctx.fillText(`Size: ${size} | W ${sizeArtW.toFixed(1)}" × H ${sizeArtH.toFixed(1)}"`, W / 2, 335);
+      ctx.restore();
     }
   }, [artwork, size, selectedColor, artworkDimensions, artworkPosition, artworkScale, artworkAreaSettings, viewSide, tshirtImg, isCustomGarment, sizeArtW, sizeArtH]);
 
-  // Download single card
+  // Download single card — high resolution (2x)
   const handleDownloadSingle = () => {
     const sourceCanvas = canvasRef.current;
     if (!sourceCanvas) return;
 
+    const scale = 2; // 2x resolution
     const dlCanvas = document.createElement('canvas');
-    dlCanvas.width = 300;
-    dlCanvas.height = 400;
+    dlCanvas.width = 300 * scale;
+    dlCanvas.height = 420 * scale;
     const dlCtx = dlCanvas.getContext('2d');
 
     // White background
     dlCtx.fillStyle = '#ffffff';
-    dlCtx.fillRect(0, 0, 300, 400);
+    dlCtx.fillRect(0, 0, dlCanvas.width, dlCanvas.height);
 
-    // Draw shirt canvas
-    dlCtx.drawImage(sourceCanvas, 0, 0, 300, 350);
+    // Draw shirt canvas scaled up
+    dlCtx.drawImage(sourceCanvas, 0, 0, 300 * scale, 350 * scale);
 
-    // Draw text below
+    // Draw text below — larger for high-res
     const text = `Size: ${size} | Artwork Size: W ${sizeArtW.toFixed(2)}" × H ${sizeArtH.toFixed(2)}"`;
-    dlCtx.font = 'bold 14px sans-serif';
+    dlCtx.font = `bold ${24 * scale / 2}px sans-serif`;
     dlCtx.fillStyle = '#000000';
     dlCtx.textAlign = 'center';
-    dlCtx.fillText(text, 150, 380);
+    dlCtx.fillText(text, dlCanvas.width / 2, 380 * scale);
 
     const link = document.createElement('a');
     link.download = `mockup-${size}.png`;
     link.href = dlCanvas.toDataURL('image/png');
+    document.body.appendChild(link);
     link.click();
+    document.body.removeChild(link);
   };
 
   return (
@@ -362,9 +392,6 @@ const MSPCard = React.forwardRef(function MSPCard({
         <div className="msp-size-label">
           {size}
           {size === baseSize && <span className="msp-base-tag">Base</span>}
-        </div>
-        <div className="msp-dimensions">
-          W {sizeArtW.toFixed(2)}" × H {sizeArtH.toFixed(2)}"
         </div>
         <div className="msp-slider-row">
           <input
@@ -385,17 +412,6 @@ const MSPCard = React.forwardRef(function MSPCard({
     </div>
   );
 });
-
-function drawCanvasText(ctx, size, artW, artH, canvasWidth) {
-  const text = `Size: ${size} | Artwork Size: W ${artW.toFixed(2)}" × H ${artH.toFixed(2)}"`;
-  ctx.save();
-  ctx.font = 'bold 14px sans-serif';
-  ctx.fillStyle = '#000000';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(text, canvasWidth / 2, 335);
-  ctx.restore();
-}
 
 function drawMiniTshirt(ctx, color, side, tshirtX, tshirtY, tshirtW, tshirtH) {
   const cx = tshirtX + tshirtW / 2;
