@@ -156,7 +156,7 @@ function GangSheet({ sharedArtwork }) {
   const [poNumber, setPoNumber] = useState('');
   const [orderNumber, setOrderNumber] = useState('');
   const [orderLink, setOrderLink] = useState('');
-
+  const [headerTopMargin, setHeaderTopMargin] = useState(0); // inches above header strip
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
   const imageCache = useRef({});
@@ -176,8 +176,9 @@ function GangSheet({ sharedArtwork }) {
     const containerWidth = canvas.parentElement?.clientWidth - 40 || 600;
     const scale = (containerWidth * (zoom / 100)) / SHEET_WIDTH_INCHES;
     const headerH = Math.max(1 * scale, 40); // 1 inch header, min 40px for visibility
+    const headerMarginTop = headerTopMargin * scale;
     const canvasWidth = SHEET_WIDTH_INCHES * scale;
-    const canvasHeight = Math.max((layout.totalHeight) * scale + headerH, 200);
+    const canvasHeight = Math.max((layout.totalHeight) * scale + headerH + headerMarginTop, 200);
 
     canvas.width = canvasWidth;
     canvas.height = canvasHeight;
@@ -188,58 +189,81 @@ function GangSheet({ sharedArtwork }) {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
-    // === HEADER STRIP ===
-    ctx.fillStyle = '#1e293b';
-    ctx.fillRect(0, 0, canvasWidth, headerH);
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(0, 0, canvasWidth, headerH);
+    // === HEADER STRIP (transparent bg, dark text, with thumbnails) ===
+    const headerY = headerMarginTop;
+    ctx.strokeStyle = '#333333';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(2, headerY + 2, canvasWidth - 4, headerH - 4);
 
-    const fs = Math.max(10, Math.round(headerH * 0.3));
-    const fsSmall = Math.max(8, Math.round(headerH * 0.2));
+    const fs = Math.max(10, Math.round(headerH * 0.28));
+    const fsSmall = Math.max(8, Math.round(headerH * 0.18));
     ctx.textAlign = 'left';
-    ctx.fillStyle = '#94a3b8';
+    ctx.fillStyle = '#666666';
     ctx.font = `500 ${fsSmall}px Arial`;
-    ctx.fillText('PO#:', 8, headerH * 0.35);
-    ctx.fillStyle = '#ffffff';
+    ctx.fillText('PO#:', 8, headerY + headerH * 0.35);
+    ctx.fillStyle = '#000000';
     ctx.font = `bold ${fs}px Arial`;
-    ctx.fillText(poNumber || '—', 8 + fsSmall * 3, headerH * 0.35);
-    ctx.fillStyle = '#94a3b8';
+    ctx.fillText(poNumber || '—', 8 + fsSmall * 2.5, headerY + headerH * 0.35);
+    ctx.fillStyle = '#666666';
     ctx.font = `500 ${fsSmall}px Arial`;
-    ctx.fillText('ORDER#:', 8, headerH * 0.72);
-    ctx.fillStyle = '#ffffff';
+    ctx.fillText('ORDER#:', 8, headerY + headerH * 0.7);
+    ctx.fillStyle = '#000000';
     ctx.font = `bold ${fs}px Arial`;
-    ctx.fillText(orderNumber || '—', 8 + fsSmall * 5, headerH * 0.72);
+    ctx.fillText(orderNumber || '—', 8 + fsSmall * 5, headerY + headerH * 0.7);
 
-    // Mini artwork table in header
+    // Artwork thumbnails + info in header
     if (artworks.length > 0) {
-      const tx = canvasWidth * 0.3;
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = `bold ${fsSmall}px Arial`;
-      ctx.textAlign = 'center';
-      const maxItems = Math.min(artworks.length, 3);
-      const itemWidth = (canvasWidth * 0.4) / maxItems;
+      const thumbAreaX = canvasWidth * 0.28;
+      const maxItems = Math.min(artworks.length, 4);
+      const itemWidth = (canvasWidth * 0.45) / maxItems;
+      const thumbSize = Math.max(8, Math.min(headerH - 16, 30));
+      
       for (let i = 0; i < maxItems; i++) {
         const a = artworks[i];
-        const ix = tx + i * itemWidth + itemWidth / 2;
-        ctx.fillStyle = '#ffffff';
+        const ix = thumbAreaX + i * itemWidth;
+        
+        // Draw thumbnail
+        const img = imageCache.current[a.dataUrl];
+        if (img && img.complete) {
+          const ty = headerY + (headerH - thumbSize) / 2;
+          ctx.drawImage(img, ix, ty, thumbSize, thumbSize);
+          ctx.strokeStyle = '#cbd5e1';
+          ctx.lineWidth = 0.5;
+          ctx.strokeRect(ix, ty, thumbSize, thumbSize);
+        }
+        
+        // Size + qty text next to thumbnail
+        ctx.fillStyle = '#000000';
         ctx.font = `500 ${fsSmall}px Arial`;
-        ctx.fillText(`${a.widthInches}"×${a.heightInches}" ×${a.repetitions}`, ix, headerH * 0.55);
+        ctx.textAlign = 'left';
+        ctx.fillText(`${a.widthInches}"×${a.heightInches}" ×${a.repetitions}`, ix + thumbSize + 4, headerY + headerH * 0.55);
       }
     }
 
     // QR indicator in header
     if (orderLink) {
-      ctx.fillStyle = '#ffffff';
-      ctx.font = `bold ${fsSmall}px Arial`;
-      ctx.textAlign = 'right';
-      ctx.fillText('[QR]', canvasWidth - 10, headerH * 0.55);
+      const qrSize = Math.max(headerH - 12, 20);
+      const qrX = canvasWidth - qrSize - 8;
+      const qrY = headerY + (headerH - qrSize) / 2;
+      // Draw mini QR pattern
+      ctx.fillStyle = '#000000';
+      const cells = 7;
+      const cellSz = qrSize / cells;
+      for (let r = 0; r < cells; r++) {
+        for (let c = 0; c < cells; c++) {
+          const isBorder = r === 0 || r === cells-1 || c === 0 || c === cells-1;
+          const isCenter = r >= 2 && r <= 4 && c >= 2 && c <= 4;
+          if (isBorder || isCenter) {
+            ctx.fillRect(qrX + c * cellSz, qrY + r * cellSz, cellSz - 0.5, cellSz - 0.5);
+          }
+        }
+      }
     }
 
     // === BACKGROUND FOR ARTWORK AREA ===
     if (bgTransparent) {
       const sz = 10;
-      for (let y = Math.ceil(headerH); y < canvasHeight; y += sz) {
+      for (let y = Math.ceil(headerH + headerMarginTop); y < canvasHeight; y += sz) {
         for (let x = 0; x < canvasWidth; x += sz) {
           ctx.fillStyle = ((Math.floor(x / sz) + Math.floor(y / sz)) % 2 === 0) ? '#ffffff' : '#e2e8f0';
           ctx.fillRect(x, y, sz, sz);
@@ -254,13 +278,13 @@ function GangSheet({ sharedArtwork }) {
       for (let i = 0; i <= SHEET_WIDTH_INCHES; i++) {
         const x = i * scale;
         ctx.beginPath();
-        ctx.moveTo(x, headerH);
+        ctx.moveTo(x, headerH + headerMarginTop);
         ctx.lineTo(x, canvasHeight);
         ctx.stroke();
       }
       const maxH = Math.ceil(layout.totalHeight) || 1;
       for (let i = 0; i <= maxH; i++) {
-        const y = i * scale + headerH;
+        const y = i * scale + headerH + headerMarginTop;
         ctx.beginPath();
         ctx.moveTo(0, y);
         ctx.lineTo(canvasWidth, y);
@@ -268,10 +292,10 @@ function GangSheet({ sharedArtwork }) {
       }
     }
 
-    // Draw artworks (offset by header)
+    // Draw artworks (offset by header + margin)
     for (const item of layout.items) {
       const x = item.x * scale;
-      const y = item.y * scale + headerH;
+      const y = item.y * scale + headerH + headerMarginTop;
       const w = item.w * scale;
       const h = item.h * scale;
 
@@ -307,7 +331,7 @@ function GangSheet({ sharedArtwork }) {
     ctx.lineWidth = 1.5;
     ctx.setLineDash([]);
     ctx.strokeRect(0, 0, canvasWidth, canvasHeight);
-  }, [layout, zoom, showGrid, showCutLines, bgTransparent, artworks, poNumber, orderNumber, orderLink]);
+  }, [layout, zoom, showGrid, showCutLines, bgTransparent, artworks, poNumber, orderNumber, orderLink, headerTopMargin]);
 
   // Load images into cache when artworks change
   useEffect(() => {
@@ -465,7 +489,8 @@ function GangSheet({ sharedArtwork }) {
 
     const exportWidth = SHEET_WIDTH_INCHES * DPI;
     const HEADER_HEIGHT = 1.2 * DPI; // 1.2 inch header for larger text
-    const totalHeightPx = Math.round(layout.totalHeight * DPI) + HEADER_HEIGHT;
+    const HEADER_MARGIN_TOP = headerTopMargin * DPI;
+    const totalHeightPx = Math.round(layout.totalHeight * DPI) + HEADER_HEIGHT + HEADER_MARGIN_TOP;
 
     const exportCanvas = document.createElement('canvas');
     exportCanvas.width = exportWidth;
@@ -477,16 +502,15 @@ function GangSheet({ sharedArtwork }) {
       return;
     }
 
-    // White background
+    // Transparent background (PNG) — only fill white below header for artwork area
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, exportWidth, totalHeightPx);
+    ctx.fillRect(0, HEADER_HEIGHT + HEADER_MARGIN_TOP, exportWidth, totalHeightPx - HEADER_HEIGHT - HEADER_MARGIN_TOP);
 
-    // === DRAW HEADER STRIP ===
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, exportWidth, HEADER_HEIGHT);
-    ctx.strokeStyle = '#222222';
+    // === DRAW HEADER STRIP (no background, just border + text) ===
+    const headerStartY = HEADER_MARGIN_TOP;
+    ctx.strokeStyle = '#333333';
     ctx.lineWidth = 4;
-    ctx.strokeRect(6, 6, exportWidth - 12, HEADER_HEIGHT - 12);
+    ctx.strokeRect(6, headerStartY + 6, exportWidth - 12, HEADER_HEIGHT - 12);
 
     const hPad = 40;
     const colPO = hPad;
@@ -497,26 +521,26 @@ function GangSheet({ sharedArtwork }) {
     ctx.fillStyle = '#555555';
     ctx.font = '500 28px Arial, sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText('PO#:', colPO, 60);
+    ctx.fillText('PO#:', colPO, headerStartY + 60);
     ctx.fillStyle = '#000000';
     ctx.font = 'bold 48px Arial, sans-serif';
-    ctx.fillText(poNumber || '—', colPO, 110);
+    ctx.fillText(poNumber || '—', colPO, headerStartY + 110);
 
     // Divider line
     ctx.strokeStyle = '#cccccc';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(colPO, 135);
-    ctx.lineTo(colTable - 30, 135);
+    ctx.moveTo(colPO, headerStartY + 135);
+    ctx.lineTo(colTable - 30, headerStartY + 135);
     ctx.stroke();
 
     // Order Number — larger text
     ctx.fillStyle = '#555555';
     ctx.font = '500 28px Arial, sans-serif';
-    ctx.fillText('ORDER#:', colPO, 175);
+    ctx.fillText('ORDER#:', colPO, headerStartY + 175);
     ctx.fillStyle = '#000000';
     ctx.font = 'bold 48px Arial, sans-serif';
-    ctx.fillText(orderNumber || '—', colPO, 225);
+    ctx.fillText(orderNumber || '—', colPO, headerStartY + 225);
 
     // Artwork table header
     ctx.fillStyle = '#222222';
@@ -526,17 +550,17 @@ function GangSheet({ sharedArtwork }) {
     const tColThumb = colTable + 280;
     const tColSize = colTable + 440;
     const tColQty = colTable + 580;
-    ctx.fillText('ARTWORK NO.', tColName, 50);
-    ctx.fillText('THUMB', tColThumb, 50);
-    ctx.fillText('SIZE', tColSize, 50);
-    ctx.fillText('QTY', tColQty, 50);
+    ctx.fillText('ARTWORK NO.', tColName, headerStartY + 50);
+    ctx.fillText('THUMB', tColThumb, headerStartY + 50);
+    ctx.fillText('SIZE', tColSize, headerStartY + 50);
+    ctx.fillText('QTY', tColQty, headerStartY + 50);
 
     // Table divider
     ctx.strokeStyle = '#888888';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.moveTo(colTable, 62);
-    ctx.lineTo(colQR - 30, 62);
+    ctx.moveTo(colTable, headerStartY + 62);
+    ctx.lineTo(colQR - 30, headerStartY + 62);
     ctx.stroke();
 
     // Artwork rows
@@ -544,7 +568,7 @@ function GangSheet({ sharedArtwork }) {
     const rowH = (HEADER_HEIGHT - 90) / Math.max(maxRows, 1);
     for (let i = 0; i < maxRows; i++) {
       const art = artworks[i];
-      const rowY = 70 + i * rowH;
+      const rowY = headerStartY + 70 + i * rowH;
 
       // Artwork name
       ctx.fillStyle = '#000000';
@@ -580,20 +604,20 @@ function GangSheet({ sharedArtwork }) {
     if (orderLink) {
       const qrSize = HEADER_HEIGHT - 80;
       const qrX = colQR;
-      const qrY = 30;
+      const qrY = headerStartY + 30;
       drawQRCode(ctx, orderLink, qrX, qrY, qrSize);
       ctx.fillStyle = '#444444';
       ctx.font = '500 18px Arial, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('Scan for order details', qrX + qrSize / 2, HEADER_HEIGHT - 20);
+      ctx.fillText('Scan for order details', qrX + qrSize / 2, headerStartY + HEADER_HEIGHT - 20);
     }
 
-    // === DRAW GANG SHEET ITEMS (offset by header height) ===
+    // === DRAW GANG SHEET ITEMS (offset by header + margin) ===
     for (const item of layout.items) {
       const img = loadedImages[item.dataUrl];
       if (!img) continue;
       const x = item.x * DPI;
-      const y = item.y * DPI + HEADER_HEIGHT;
+      const y = item.y * DPI + HEADER_HEIGHT + HEADER_MARGIN_TOP;
       const w = item.w * DPI;
       const h = item.h * DPI;
 
@@ -881,6 +905,17 @@ function GangSheet({ sharedArtwork }) {
                 value={orderLink}
                 onChange={(e) => setOrderLink(e.target.value)}
                 className="gs-text-input"
+              />
+            </div>
+            <div className="gs-setting-row">
+              <label>Header Top Margin</label>
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                max="5"
+                value={headerTopMargin}
+                onChange={(e) => setHeaderTopMargin(parseFloat(e.target.value) || 0)}
               />
             </div>
           </div>
