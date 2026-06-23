@@ -19,6 +19,32 @@
   margin: 0;
 }
 
+.msp-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.msp-download-all-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #2563eb;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.msp-download-all-btn:hover {
+  background: #dbeafe;
+  border-color: #93c5fd;
+}
+
 .msp-mode-badge {
   font-size: 10px;
   padding: 2px 8px;
@@ -47,7 +73,7 @@
 
 .msp-card {
   flex-shrink: 0;
-  width: 160px;
+  width: 300px;
   background: white;
   border-radius: 10px;
   border: 2px solid var(--border, #e2e8f0);
@@ -65,11 +91,43 @@
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
 }
 
+.msp-canvas-wrapper {
+  position: relative;
+}
+
 .msp-canvas {
   display: block;
-  width: 160px;
-  height: 160px;
+  width: 300px;
+  height: 350px;
   background: #f8fafc;
+}
+
+.msp-download-single-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #475569;
+  opacity: 0;
+  transition: opacity 0.2s, background 0.2s, color 0.2s;
+}
+
+.msp-card:hover .msp-download-single-btn {
+  opacity: 1;
+}
+
+.msp-download-single-btn:hover {
+  background: #2563eb;
+  color: #ffffff;
+  border-color: #2563eb;
 }
 
 .msp-info {

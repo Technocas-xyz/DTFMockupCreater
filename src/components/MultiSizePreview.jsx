@@ -15,6 +15,8 @@ function MultiSizePreview({
   scalingMode,
   baseSize,
 }) {
+  const cardRefs = useRef({});
+
   if (!selectedSizes || selectedSizes.length === 0) return null;
 
   // Sort selected sizes by SIZE_ORDER
@@ -27,13 +29,66 @@ function MultiSizePreview({
   const baseBodyWidth = baseSizeData ? baseSizeData.bodyWidth : 22;
   const basePercentage = (artworkDimensions.width / baseBodyWidth) * 100;
 
+  // Download All handler
+  const handleDownloadAll = () => {
+    const numSizes = sortedSizes.length;
+    const cardW = 300;
+    const gap = 20;
+    const totalW = numSizes * (cardW + gap) - gap;
+    const totalH = 400;
+
+    const combinedCanvas = document.createElement('canvas');
+    combinedCanvas.width = totalW;
+    combinedCanvas.height = totalH;
+    const combCtx = combinedCanvas.getContext('2d');
+
+    // White background
+    combCtx.fillStyle = '#ffffff';
+    combCtx.fillRect(0, 0, totalW, totalH);
+
+    sortedSizes.forEach((size, idx) => {
+      const ref = cardRefs.current[size];
+      if (ref && ref.canvas) {
+        const x = idx * (cardW + gap);
+        // Draw the card's canvas (300x350)
+        combCtx.drawImage(ref.canvas, x, 0, cardW, 350);
+
+        // Draw text below
+        const sizeData = TSHIRT_SIZES[size];
+        const artW = ref.artWidth || 0;
+        const artH = ref.artHeight || 0;
+        const text = `Size: ${size} | Artwork Size: W ${artW.toFixed(2)}" × H ${artH.toFixed(2)}"`;
+        combCtx.font = 'bold 14px sans-serif';
+        combCtx.fillStyle = '#000000';
+        combCtx.textAlign = 'center';
+        combCtx.fillText(text, x + cardW / 2, 375);
+      }
+    });
+
+    // Download
+    const link = document.createElement('a');
+    link.download = 'mockup-comparison-all-sizes.png';
+    link.href = combinedCanvas.toDataURL('image/png');
+    link.click();
+  };
+
   return (
     <div className="multi-size-preview">
       <div className="msp-header">
         <h3>Size Comparison</h3>
-        <span className="msp-mode-badge">
-          {scalingMode === 'proportional' ? 'Proportional' : 'Same Size'}
-        </span>
+        <div className="msp-header-actions">
+          <button className="msp-download-all-btn" onClick={handleDownloadAll} title="Download All Sizes">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Download All
+          </button>
+          <span className="msp-mode-badge">
+            {scalingMode === 'proportional' ? 'Proportional' : 'Same Size'}
+          </span>
+        </div>
       </div>
       <div className="msp-scroll-container">
         {sortedSizes.map((size) => (
@@ -52,6 +107,7 @@ function MultiSizePreview({
             baseSize={baseSize}
             baseBodyWidth={baseBodyWidth}
             basePercentage={basePercentage}
+            ref={(el) => { cardRefs.current[size] = el; }}
           />
         ))}
       </div>
@@ -59,7 +115,7 @@ function MultiSizePreview({
   );
 }
 
-function MSPCard({
+const MSPCard = React.forwardRef(function MSPCard({
   size,
   artwork,
   selectedColor,
@@ -73,7 +129,7 @@ function MSPCard({
   baseSize,
   baseBodyWidth,
   basePercentage,
-}) {
+}, ref) {
   const canvasRef = useRef(null);
   const [tshirtImg, setTshirtImg] = useState(null);
   const [isCustomGarment, setIsCustomGarment] = useState(false);
@@ -91,6 +147,14 @@ function MSPCard({
   const sizeArtH = sizeArtW * aspectRatio;
 
   const widthPercent = activePercent.toFixed(1);
+
+  // Expose canvas and art dimensions via ref for Download All
+  React.useImperativeHandle(ref, () => ({
+    canvas: canvasRef.current,
+    artWidth: sizeArtW,
+    artHeight: sizeArtH,
+    size,
+  }));
 
   // Load garment image
   useEffect(() => {
@@ -121,8 +185,8 @@ function MSPCard({
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    const W = 200;
-    const H = 200;
+    const W = 300;
+    const H = 350;
 
     ctx.clearRect(0, 0, W, H);
 
@@ -132,18 +196,21 @@ function MSPCard({
       const imgW = tshirtImg.naturalWidth || tshirtImg.width;
       const imgH = tshirtImg.naturalHeight || tshirtImg.height;
       const imgAspect = imgW / imgH;
-      const canvasAspect = W / H;
+      // Use only the upper portion (300x300) for the shirt, leaving bottom for text
+      const drawAreaW = W;
+      const drawAreaH = 300;
+      const canvasAspect = drawAreaW / drawAreaH;
 
       let dw, dh, dx, dy;
       if (imgAspect > canvasAspect) {
-        dw = W;
-        dh = W / imgAspect;
+        dw = drawAreaW;
+        dh = drawAreaW / imgAspect;
         dx = 0;
-        dy = (H - dh) / 2;
+        dy = (drawAreaH - dh) / 2;
       } else {
-        dh = H;
-        dw = H * imgAspect;
-        dx = (W - dw) / 2;
+        dh = drawAreaH;
+        dw = drawAreaH * imgAspect;
+        dx = (drawAreaW - dw) / 2;
         dy = 0;
       }
 
@@ -154,9 +221,9 @@ function MSPCard({
         tshirtY = dy;
       } else {
         tshirtW = W * 0.52;
-        tshirtH = H * 0.68;
+        tshirtH = drawAreaH * 0.68;
         tshirtX = (W - tshirtW) / 2;
-        tshirtY = H * 0.18;
+        tshirtY = drawAreaH * 0.18;
       }
 
       // Draw with color tint
@@ -186,9 +253,9 @@ function MSPCard({
       ctx.drawImage(offscreen, 0, 0);
     } else {
       tshirtW = W * 0.52;
-      tshirtH = H * 0.68;
+      tshirtH = 300 * 0.68;
       tshirtX = (W - tshirtW) / 2;
-      tshirtY = H * 0.18;
+      tshirtY = 300 * 0.18;
       drawMiniTshirt(ctx, selectedColor.hex, viewSide, tshirtX, tshirtY, tshirtW, tshirtH);
     }
 
@@ -238,14 +305,59 @@ function MSPCard({
         ctx.clip();
         ctx.drawImage(img, drawX, drawY, artW, artH);
         ctx.restore();
+
+        // Draw text at bottom of canvas
+        drawCanvasText(ctx, size, sizeArtW, sizeArtH, W);
       };
       img.src = artwork;
+    } else {
+      // Draw text even without artwork
+      drawCanvasText(ctx, size, sizeArtW, sizeArtH, W);
     }
   }, [artwork, size, selectedColor, artworkDimensions, artworkPosition, artworkScale, artworkAreaSettings, viewSide, tshirtImg, isCustomGarment, sizeArtW, sizeArtH]);
 
+  // Download single card
+  const handleDownloadSingle = () => {
+    const sourceCanvas = canvasRef.current;
+    if (!sourceCanvas) return;
+
+    const dlCanvas = document.createElement('canvas');
+    dlCanvas.width = 300;
+    dlCanvas.height = 400;
+    const dlCtx = dlCanvas.getContext('2d');
+
+    // White background
+    dlCtx.fillStyle = '#ffffff';
+    dlCtx.fillRect(0, 0, 300, 400);
+
+    // Draw shirt canvas
+    dlCtx.drawImage(sourceCanvas, 0, 0, 300, 350);
+
+    // Draw text below
+    const text = `Size: ${size} | Artwork Size: W ${sizeArtW.toFixed(2)}" × H ${sizeArtH.toFixed(2)}"`;
+    dlCtx.font = 'bold 14px sans-serif';
+    dlCtx.fillStyle = '#000000';
+    dlCtx.textAlign = 'center';
+    dlCtx.fillText(text, 150, 380);
+
+    const link = document.createElement('a');
+    link.download = `mockup-${size}.png`;
+    link.href = dlCanvas.toDataURL('image/png');
+    link.click();
+  };
+
   return (
     <div className={`msp-card ${size === baseSize ? 'msp-card-base' : ''}`}>
-      <canvas ref={canvasRef} width={200} height={200} className="msp-canvas" />
+      <div className="msp-canvas-wrapper">
+        <canvas ref={canvasRef} width={300} height={350} className="msp-canvas" />
+        <button className="msp-download-single-btn" onClick={handleDownloadSingle} title={`Download ${size} mockup`}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+        </button>
+      </div>
       <div className="msp-info">
         <div className="msp-size-label">
           {size}
@@ -272,6 +384,17 @@ function MSPCard({
       </div>
     </div>
   );
+});
+
+function drawCanvasText(ctx, size, artW, artH, canvasWidth) {
+  const text = `Size: ${size} | Artwork Size: W ${artW.toFixed(2)}" × H ${artH.toFixed(2)}"`;
+  ctx.save();
+  ctx.font = 'bold 14px sans-serif';
+  ctx.fillStyle = '#000000';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, canvasWidth / 2, 335);
+  ctx.restore();
 }
 
 function drawMiniTshirt(ctx, color, side, tshirtX, tshirtY, tshirtW, tshirtH) {
