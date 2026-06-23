@@ -391,7 +391,7 @@ function MockupPreview({
           ctx.fillStyle = '#ffffff';
           ctx.font = 'bold 26px Inter, sans-serif';
           ctx.textAlign = 'center';
-          ctx.fillText(`Shirt: ${size}   |   Artwork: ${artWidthInches}" × ${artHeightInches}"`, W / 2, infoY + 16);
+          ctx.fillText(`Shirt: ${size}   |   Artwork Size: W ${artWidthInches}" × H ${artHeightInches}"`, W / 2, infoY + 16);
 
           } // end showAnnotations
 
@@ -403,7 +403,7 @@ function MockupPreview({
             ctx.fillStyle = '#ffffff';
             ctx.font = 'bold 26px Inter, sans-serif';
             ctx.textAlign = 'center';
-            ctx.fillText(`Shirt: ${size}   |   Artwork: ${artWidthInches}" × ${artHeightInches}"`, W / 2, infoY2 + 16);
+            ctx.fillText(`Shirt: ${size}   |   Artwork Size: W ${artWidthInches}" × H ${artHeightInches}"`, W / 2, infoY2 + 16);
           }
 
           resolve(canvas);
@@ -434,23 +434,70 @@ function MockupPreview({
   // Download a single mockup with dimensions
   const downloadSingle = async (size) => {
     const canvas = await renderHighRes(size, true);
-    const link = document.createElement('a');
-    link.download = `mockup-${selectedColor.name}-${size}-${viewSide}.png`;
-    link.href = canvas.toDataURL('image/png');
-    link.click();
+    try {
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+      if (blob && blob.size > 0) {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = `mockup-${selectedColor.name}-${size}-${viewSide}.png`;
+        link.href = url;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(url), 2000);
+      } else {
+        const link = document.createElement('a');
+        link.download = `mockup-${selectedColor.name}-${size}-${viewSide}.png`;
+        link.href = canvas.toDataURL('image/png');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    } catch (e) {
+      const link = document.createElement('a');
+      link.download = `mockup-${selectedColor.name}-${size}-${viewSide}.png`;
+      link.href = canvas.toDataURL('image/png');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
   };
 
   // Download a single clean mockup (no annotations)
   const downloadClean = async (size) => {
     const canvas = await renderHighRes(size, false);
-    const link = document.createElement('a');
-    link.download = `mockup-clean-${selectedColor.name}-${size}-${viewSide}.png`;
-    link.href = canvas.toDataURL('image/png');
-    link.click();
+    try {
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+      if (blob && blob.size > 0) {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = `mockup-clean-${selectedColor.name}-${size}-${viewSide}.png`;
+        link.href = url;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(url), 2000);
+      } else {
+        const link = document.createElement('a');
+        link.download = `mockup-clean-${selectedColor.name}-${size}-${viewSide}.png`;
+        link.href = canvas.toDataURL('image/png');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    } catch (e) {
+      const link = document.createElement('a');
+      link.download = `mockup-clean-${selectedColor.name}-${size}-${viewSide}.png`;
+      link.href = canvas.toDataURL('image/png');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
   };
 
   // Download all mockups with dimensions
   const downloadAll = async () => {
+    if (activeSizes.length === 0) { alert('Please select at least one size in "Generate Mockups" section.'); return; }
     for (let i = 0; i < activeSizes.length; i++) {
       await downloadSingle(activeSizes[i]);
       await new Promise((r) => setTimeout(r, 300));
@@ -459,6 +506,7 @@ function MockupPreview({
 
   // Download all clean mockups (no annotations)
   const downloadAllClean = async () => {
+    if (activeSizes.length === 0) { alert('Please select at least one size in "Generate Mockups" section.'); return; }
     for (let i = 0; i < activeSizes.length; i++) {
       await downloadClean(activeSizes[i]);
       await new Promise((r) => setTimeout(r, 300));
