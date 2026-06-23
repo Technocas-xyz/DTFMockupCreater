@@ -120,7 +120,19 @@ function App() {
 
         // Only scale down if the actual size exceeds the print area
         if (actualW <= maxW && actualH <= maxH) {
-          // Fits within print area — use actual DPI-based dimensions
+          // If both dimensions are smaller than 10.75", scale up the larger one to 10.75"
+          const MIN_SIZE = 10.75;
+          if (actualW < MIN_SIZE && actualH < MIN_SIZE) {
+            if (imgAspect >= 1) {
+              // wider — set width to 10.75
+              actualW = MIN_SIZE;
+              actualH = parseFloat((MIN_SIZE / imgAspect).toFixed(2));
+            } else {
+              // taller — set height to 10.75
+              actualH = MIN_SIZE;
+              actualW = parseFloat((MIN_SIZE * imgAspect).toFixed(2));
+            }
+          }
           setArtworkDimensions({ width: actualW, height: actualH });
         } else {
           // Too large — scale down to fit within print area maintaining aspect ratio
@@ -170,6 +182,17 @@ function App() {
       const maxH = artworkAreaSettings.height;
 
       if (actualW <= maxW && actualH <= maxH) {
+        // If both dimensions are smaller than 10.75", scale up the larger one to 10.75"
+        const MIN_SIZE = 10.75;
+        if (actualW < MIN_SIZE && actualH < MIN_SIZE) {
+          if (imgAspect >= 1) {
+            actualW = MIN_SIZE;
+            actualH = parseFloat((MIN_SIZE / imgAspect).toFixed(2));
+          } else {
+            actualH = MIN_SIZE;
+            actualW = parseFloat((MIN_SIZE * imgAspect).toFixed(2));
+          }
+        }
         setArtworkDimensions({ width: actualW, height: actualH });
       } else {
         let newW, newH;
