@@ -184,6 +184,10 @@ function MockupPreview({
           ctx.drawImage(img, drawX2, drawY2, artW, artH);
           ctx.restore();
 
+          // Artwork size values (used in both annotated and clean downloads)
+          const artWidthInches = (artworkDimensions.width * artworkScale).toFixed(1);
+          const artHeightInches = (artworkDimensions.height * artworkScale).toFixed(1);
+
           // Draw dimension annotations (only if enabled)
           if (showAnnotations) {
           const canvasTshirtX = tshirtX;
@@ -196,8 +200,6 @@ function MockupPreview({
           ctx.textAlign = 'center';
 
           // Artwork size labels (what user set)
-          const artWidthInches = (artworkDimensions.width * artworkScale).toFixed(1);
-          const artHeightInches = (artworkDimensions.height * artworkScale).toFixed(1);
           const topFromCollar = artworkAreaSettings.topOffset.toFixed(1);
           // Side margin = (body width - artwork width) / 2
           const sideMarginInches = ((sizeData.bodyWidth - artworkDimensions.width * artworkScale) / 2).toFixed(1);
