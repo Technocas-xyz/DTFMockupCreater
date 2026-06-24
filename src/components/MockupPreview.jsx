@@ -25,6 +25,10 @@ function MockupPreview({
     canvas.height = H;
     const ctx = canvas.getContext('2d');
 
+    // High quality rendering — prevent blurring
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
     const sizeData = TSHIRT_SIZES[size];
 
     // White background
@@ -43,8 +47,8 @@ function MockupPreview({
         // Use fixed pxPerInch based on largest size (same as DesignCanvas)
         const maxBodyWidth = 32;
         const maxBodyLength = 35;
-        const maxTshirtW = W * 0.52;
-        const maxTshirtH = H * 0.68;
+        const maxTshirtW = W * 0.65;
+        const maxTshirtH = H * 0.75;
         const pxPerInchW = maxTshirtW / maxBodyWidth;
         const pxPerInchH = maxTshirtH / maxBodyLength;
 
@@ -168,6 +172,10 @@ function MockupPreview({
           let artW, artH;
           if (imgAR > boxAR) { artW = boxW; artH = boxW / imgAR; }
           else { artH = boxH; artW = boxH * imgAR; }
+
+          // Use high-quality scaling for artwork
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
 
           // Scale position proportionally (from 700px DesignCanvas to W download size)
           const scaleFactor = W / 700;
