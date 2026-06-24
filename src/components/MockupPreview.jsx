@@ -18,8 +18,8 @@ function MockupPreview({
 
   // Render a high-resolution mockup for download
   const renderHighRes = (size, showAnnotations = true) => {
-    const W = 1000;
-    const H = 1200;
+    const W = 2000;
+    const H = 2400;
     const canvas = document.createElement('canvas');
     canvas.width = W;
     canvas.height = H;
@@ -497,21 +497,98 @@ function MockupPreview({
     }
   };
 
-  // Download all mockups with dimensions
+  // Download all mockups with dimensions — 2 column grid in single file
   const downloadAll = async () => {
     if (activeSizes.length === 0) { alert('Please select at least one size in "Generate Mockups" section.'); return; }
+    const cols = 2;
+    const rows = Math.ceil(activeSizes.length / cols);
+    const cellW = 2000;
+    const cellH = 2400;
+    const gap = 40;
+    const totalW = cols * cellW + (cols - 1) * gap;
+    const totalH = rows * cellH + (rows - 1) * gap;
+
+    const gridCanvas = document.createElement('canvas');
+    gridCanvas.width = totalW;
+    gridCanvas.height = totalH;
+    const gCtx = gridCanvas.getContext('2d');
+    gCtx.fillStyle = '#ffffff';
+    gCtx.fillRect(0, 0, totalW, totalH);
+
     for (let i = 0; i < activeSizes.length; i++) {
-      await downloadSingle(activeSizes[i]);
-      await new Promise((r) => setTimeout(r, 300));
+      const canvas = await renderHighRes(activeSizes[i], true);
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const x = col * (cellW + gap);
+      const y = row * (cellH + gap);
+      gCtx.drawImage(canvas, x, y, cellW, cellH);
+    }
+
+    try {
+      const blob = await new Promise((resolve) => gridCanvas.toBlob(resolve, 'image/png'));
+      if (blob) {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = `mockups-all-${activeSizes.length}-sizes.png`;
+        link.href = url;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(url), 2000);
+      }
+    } catch (e) {
+      // Fallback: download individually
+      for (let i = 0; i < activeSizes.length; i++) {
+        await downloadSingle(activeSizes[i]);
+        await new Promise((r) => setTimeout(r, 300));
+      }
     }
   };
 
-  // Download all clean mockups (no annotations)
+  // Download all clean mockups (no annotations) — 2 column grid
   const downloadAllClean = async () => {
     if (activeSizes.length === 0) { alert('Please select at least one size in "Generate Mockups" section.'); return; }
+    const cols = 2;
+    const rows = Math.ceil(activeSizes.length / cols);
+    const cellW = 2000;
+    const cellH = 2400;
+    const gap = 40;
+    const totalW = cols * cellW + (cols - 1) * gap;
+    const totalH = rows * cellH + (rows - 1) * gap;
+
+    const gridCanvas = document.createElement('canvas');
+    gridCanvas.width = totalW;
+    gridCanvas.height = totalH;
+    const gCtx = gridCanvas.getContext('2d');
+    gCtx.fillStyle = '#ffffff';
+    gCtx.fillRect(0, 0, totalW, totalH);
+
     for (let i = 0; i < activeSizes.length; i++) {
-      await downloadClean(activeSizes[i]);
-      await new Promise((r) => setTimeout(r, 300));
+      const canvas = await renderHighRes(activeSizes[i], false);
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const x = col * (cellW + gap);
+      const y = row * (cellH + gap);
+      gCtx.drawImage(canvas, x, y, cellW, cellH);
+    }
+
+    try {
+      const blob = await new Promise((resolve) => gridCanvas.toBlob(resolve, 'image/png'));
+      if (blob) {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = `mockups-clean-${activeSizes.length}-sizes.png`;
+        link.href = url;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(url), 2000);
+      }
+    } catch (e) {
+      for (let i = 0; i < activeSizes.length; i++) {
+        await downloadClean(activeSizes[i]);
+        await new Promise((r) => setTimeout(r, 300));
+      }
     }
   };
 
