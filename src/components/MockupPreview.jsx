@@ -189,7 +189,44 @@ function MockupPreview({
           ctx.beginPath();
           ctx.rect(printX - 1, printY - 1, printW + 2, printH + 2);
           ctx.clip();
-          ctx.drawImage(img, drawX2, drawY2, artW, artH);
+
+          // Sharpen artwork before drawing: render at target size then apply unsharp mask
+          const sharpCanvas = document.createElement('canvas');
+          const sharpW = Math.round(artW);
+          const sharpH = Math.round(artH);
+          sharpCanvas.width = sharpW;
+          sharpCanvas.height = sharpH;
+          const sharpCtx = sharpCanvas.getContext('2d');
+          sharpCtx.imageSmoothingEnabled = true;
+          sharpCtx.imageSmoothingQuality = 'high';
+          sharpCtx.drawImage(img, 0, 0, sharpW, sharpH);
+
+          // Apply unsharp mask (sharpen)
+          if (sharpW > 10 && sharpH > 10) {
+            const imgData = sharpCtx.getImageData(0, 0, sharpW, sharpH);
+            const data = imgData.data;
+            const orig = new Uint8ClampedArray(data);
+            const amount = 0.4; // sharpening strength
+            for (let y = 1; y < sharpH - 1; y++) {
+              for (let x = 1; x < sharpW - 1; x++) {
+                const idx = (y * sharpW + x) * 4;
+                if (orig[idx + 3] < 10) continue; // skip transparent
+                for (let c = 0; c < 3; c++) {
+                  const center = orig[idx + c];
+                  const neighbors = (
+                    orig[((y-1) * sharpW + x) * 4 + c] +
+                    orig[((y+1) * sharpW + x) * 4 + c] +
+                    orig[(y * sharpW + (x-1)) * 4 + c] +
+                    orig[(y * sharpW + (x+1)) * 4 + c]
+                  ) / 4;
+                  data[idx + c] = Math.max(0, Math.min(255, Math.round(center + amount * (center - neighbors))));
+                }
+              }
+            }
+            sharpCtx.putImageData(imgData, 0, 0);
+          }
+
+          ctx.drawImage(sharpCanvas, drawX2, drawY2, artW, artH);
           ctx.restore();
 
           // Artwork size values (used in both annotated and clean downloads)
