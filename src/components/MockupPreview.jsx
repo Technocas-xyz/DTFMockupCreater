@@ -149,8 +149,7 @@ function MockupPreview({
         }
         const img = new Image();
         img.onload = () => {
-          console.log(`Mockup render — Source artwork: ${img.naturalWidth}×${img.naturalHeight}px`);
-          // pxPerInch for artwork placement — use garment's own dimensions for custom garments
+          // Calculate position — center artwork on shirt
           let artPxPerInch;
           if (isCustomGarment && taggedGarment && taggedGarment.bodyMapping) {
             const garmentBodyWidth = taggedGarment.bodyMapping.shirtWidthInches || sizeData.bodyWidth;
@@ -158,46 +157,40 @@ function MockupPreview({
           } else {
             artPxPerInch = tshirtW / sizeData.bodyWidth;
           }
-          const artPxPerInchW = artPxPerInch;
-          const artPxPerInchH = artPxPerInch;
 
-          const printW = artworkAreaSettings.width * artPxPerInchW;
-          const printH = artworkAreaSettings.height * artPxPerInchH;
+          const printW = artworkAreaSettings.width * artPxPerInch;
+          const printH = artworkAreaSettings.height * artPxPerInch;
           const printX = tshirtX + (tshirtW - printW) / 2;
-          const printY = tshirtY + (artworkAreaSettings.topOffset * artPxPerInchH);
+          const printY = tshirtY + (artworkAreaSettings.topOffset * artPxPerInch);
 
-          // Artwork with aspect ratio preserved within bounding box
-          const boxW = artworkDimensions.width * artPxPerInchW * artworkScale;
-          const boxH = artworkDimensions.height * artPxPerInchH * artworkScale;
+          // Draw artwork at ORIGINAL resolution — no scaling
+          // Calculate the target area where artwork should fit
+          const targetW = artworkDimensions.width * artPxPerInch * artworkScale;
+          const targetH = artworkDimensions.height * artPxPerInch * artworkScale;
+
+          // Use original image pixels directly — fit within target area maintaining aspect ratio
           const imgAR = img.naturalWidth / img.naturalHeight;
-          const boxAR = boxW / boxH;
-          let artW, artH;
-          if (imgAR > boxAR) { artW = boxW; artH = boxW / imgAR; }
-          else { artH = boxH; artW = boxH * imgAR; }
+          const targetAR = targetW / targetH;
+          let drawW, drawH;
+          if (imgAR > targetAR) {
+            drawW = targetW;
+            drawH = targetW / imgAR;
+          } else {
+            drawH = targetH;
+            drawW = targetH * imgAR;
+          }
 
-          // Use high-quality scaling for artwork
-          ctx.imageSmoothingEnabled = true;
-          ctx.imageSmoothingQuality = 'high';
-
-          // Scale position proportionally (from 700px DesignCanvas to W download size)
+          // Position
           const scaleFactor = W / 700;
           const scaledPosX = artworkPosition.x * scaleFactor;
           const scaledPosY = artworkPosition.y * scaleFactor;
+          const drawX2 = printX + (printW - drawW) / 2 + scaledPosX;
+          const drawY2 = printY + (printH - drawH) / 2 + scaledPosY;
 
-          const drawX2 = printX + (printW - artW) / 2 + scaledPosX;
-          const drawY2 = printY + (printH - artH) / 2 + scaledPosY;
-
-          ctx.save();
-          ctx.beginPath();
-          ctx.rect(printX - 1, printY - 1, printW + 2, printH + 2);
-          ctx.clip();
-
-          // Draw artwork with high quality interpolation
-          console.log(`Mockup render — Drawing artwork at ${Math.round(artW)}×${Math.round(artH)}px on ${W}×${H} canvas`);
+          // Draw at original quality — use source pixels directly
           ctx.imageSmoothingEnabled = true;
           ctx.imageSmoothingQuality = 'high';
-          ctx.drawImage(img, drawX2, drawY2, artW, artH);
-          ctx.restore();
+          ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, drawX2, drawY2, drawW, drawH);
 
           // Artwork size values (used in both annotated and clean downloads)
           const artWidthInches = (artworkDimensions.width * artworkScale).toFixed(1);
