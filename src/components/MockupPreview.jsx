@@ -148,6 +148,7 @@ function MockupPreview({
         }
         const img = new Image();
         img.onload = () => {
+          console.log(`Mockup render — Source artwork: ${img.naturalWidth}×${img.naturalHeight}px`);
           // pxPerInch for artwork placement — use garment's own dimensions for custom garments
           let artPxPerInch;
           if (isCustomGarment && taggedGarment && taggedGarment.bodyMapping) {
@@ -191,6 +192,7 @@ function MockupPreview({
           ctx.clip();
 
           // Draw artwork with high quality interpolation
+          console.log(`Mockup render — Drawing artwork at ${Math.round(artW)}×${Math.round(artH)}px on ${W}×${H} canvas`);
           ctx.imageSmoothingEnabled = true;
           ctx.imageSmoothingQuality = 'high';
           ctx.drawImage(img, drawX2, drawY2, artW, artH);
