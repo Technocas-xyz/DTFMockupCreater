@@ -29,14 +29,14 @@ function MultiSizePreview({
   const baseBodyWidth = baseSizeData ? baseSizeData.bodyWidth : 22;
   const basePercentage = (artworkDimensions.width / baseBodyWidth) * 100;
 
-  // Download All handler — high resolution (2x)
+  // Download All handler — uses high-res canvas directly
   const handleDownloadAll = () => {
     const numSizes = sortedSizes.length;
-    const scale = 2;
-    const cardW = 300 * scale;
-    const gap = 20 * scale;
+    const cardW = 1200;
+    const cardH = 1400;
+    const gap = 40;
     const totalW = numSizes * (cardW + gap) - gap;
-    const totalH = 420 * scale;
+    const totalH = 1500;
 
     const combinedCanvas = document.createElement('canvas');
     combinedCanvas.width = totalW;
@@ -51,18 +51,17 @@ function MultiSizePreview({
       const ref = cardRefs.current[size];
       if (ref && ref.canvas) {
         const x = idx * (cardW + gap);
-        // Draw the card's canvas scaled up
-        combCtx.drawImage(ref.canvas, x, 0, cardW, 350 * scale);
+        combCtx.drawImage(ref.canvas, x, 0, cardW, cardH);
 
         // Draw text below
         const artW = ref.artWidth || 0;
         const artH = ref.artHeight || 0;
         const realSize = size.includes('_') ? size.split('_')[0] : size;
         const text = `Size: ${realSize} | Artwork Size: W ${artW.toFixed(2)}" × H ${artH.toFixed(2)}"`;
-        combCtx.font = `bold ${24}px sans-serif`;
+        combCtx.font = `bold 36px sans-serif`;
         combCtx.fillStyle = '#000000';
         combCtx.textAlign = 'center';
-        combCtx.fillText(text, x + cardW / 2, 380 * scale);
+        combCtx.fillText(text, x + cardW / 2, 1460);
       }
     });
 
@@ -205,8 +204,8 @@ const MSPCard = React.forwardRef(function MSPCard({
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    const W = 300;
-    const H = 350;
+    const W = 1200;
+    const H = 1400;
 
     ctx.clearRect(0, 0, W, H);
 
@@ -216,9 +215,9 @@ const MSPCard = React.forwardRef(function MSPCard({
       const imgW = tshirtImg.naturalWidth || tshirtImg.width;
       const imgH = tshirtImg.naturalHeight || tshirtImg.height;
       const imgAspect = imgW / imgH;
-      // Use only the upper portion (300x300) for the shirt, leaving bottom for text
+      // Use only the upper portion for the shirt, leaving bottom for text
       const drawAreaW = W;
-      const drawAreaH = 300;
+      const drawAreaH = H - 100; // leave 100px for text at bottom
       const canvasAspect = drawAreaW / drawAreaH;
 
       let dw, dh, dx, dy;
@@ -273,8 +272,9 @@ const MSPCard = React.forwardRef(function MSPCard({
       ctx.drawImage(offscreen, 0, 0);
     } else {
       tshirtW = W * 0.52;
-      tshirtH = 300 * 0.68;
+      tshirtH = (H - 100) * 0.68;
       tshirtX = (W - tshirtW) / 2;
+      tshirtY = (H - 100) * 0.18;
       tshirtY = 300 * 0.18;
       drawMiniTshirt(ctx, selectedColor.hex, viewSide, tshirtX, tshirtY, tshirtW, tshirtH);
     }
@@ -325,30 +325,29 @@ const MSPCard = React.forwardRef(function MSPCard({
     }
   }, [artwork, size, selectedColor, artworkDimensions, artworkPosition, artworkScale, artworkAreaSettings, viewSide, tshirtImg, isCustomGarment, sizeArtW, sizeArtH]);
 
-  // Download single card — high resolution (2x)
+  // Download single card — use canvas directly (already high-res at 1200x1400)
   const handleDownloadSingle = () => {
     const sourceCanvas = canvasRef.current;
     if (!sourceCanvas) return;
 
-    const scale = 2; // 2x resolution
     const dlCanvas = document.createElement('canvas');
-    dlCanvas.width = 300 * scale;
-    dlCanvas.height = 420 * scale;
+    dlCanvas.width = 1200;
+    dlCanvas.height = 1500;
     const dlCtx = dlCanvas.getContext('2d');
 
     // White background
     dlCtx.fillStyle = '#ffffff';
-    dlCtx.fillRect(0, 0, dlCanvas.width, dlCanvas.height);
+    dlCtx.fillRect(0, 0, 1200, 1500);
 
-    // Draw shirt canvas scaled up
-    dlCtx.drawImage(sourceCanvas, 0, 0, 300 * scale, 350 * scale);
+    // Draw shirt canvas (already 1200x1400)
+    dlCtx.drawImage(sourceCanvas, 0, 0, 1200, 1400);
 
-    // Draw text below — larger for high-res
+    // Draw text below
     const text = `Size: ${realSize} | Artwork Size: W ${sizeArtW.toFixed(2)}" × H ${sizeArtH.toFixed(2)}"`;
-    dlCtx.font = `bold ${24 * scale / 2}px sans-serif`;
+    dlCtx.font = `bold 36px sans-serif`;
     dlCtx.fillStyle = '#000000';
     dlCtx.textAlign = 'center';
-    dlCtx.fillText(text, dlCanvas.width / 2, 380 * scale);
+    dlCtx.fillText(text, 600, 1460);
 
     const link = document.createElement('a');
     link.download = `mockup-${realSize}.png`;
@@ -361,7 +360,7 @@ const MSPCard = React.forwardRef(function MSPCard({
   return (
     <div className={`msp-card ${size === baseSize ? 'msp-card-base' : ''}`}>
       <div className="msp-canvas-wrapper">
-        <canvas ref={canvasRef} width={300} height={350} className="msp-canvas" />
+        <canvas ref={canvasRef} width={1200} height={1400} className="msp-canvas" />
         <button className="msp-download-single-btn" onClick={handleDownloadSingle} title={`Download ${size} mockup`}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
