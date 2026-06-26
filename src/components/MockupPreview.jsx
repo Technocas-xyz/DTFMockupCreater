@@ -18,8 +18,8 @@ function MockupPreview({
 
   // Render a high-resolution mockup for download
   const renderHighRes = (size, showAnnotations = true) => {
-    const W = 3000;
-    const H = 3600;
+    const W = 4000;
+    const H = 4800;
     const canvas = document.createElement('canvas');
     canvas.width = W;
     canvas.height = H;
@@ -47,8 +47,8 @@ function MockupPreview({
         // Use fixed pxPerInch based on largest size (same as DesignCanvas)
         const maxBodyWidth = 32;
         const maxBodyLength = 35;
-        const maxTshirtW = W * 0.65;
-        const maxTshirtH = H * 0.75;
+        const maxTshirtW = W * 0.85;
+        const maxTshirtH = H * 0.85;
         const pxPerInchW = maxTshirtW / maxBodyWidth;
         const pxPerInchH = maxTshirtH / maxBodyLength;
 
@@ -190,7 +190,7 @@ function MockupPreview({
           ctx.rect(printX - 1, printY - 1, printW + 2, printH + 2);
           ctx.clip();
 
-          // Draw artwork at high quality — use browser's built-in bicubic interpolation
+          // Draw artwork with high quality interpolation
           ctx.imageSmoothingEnabled = true;
           ctx.imageSmoothingQuality = 'high';
           ctx.drawImage(img, drawX2, drawY2, artW, artH);
