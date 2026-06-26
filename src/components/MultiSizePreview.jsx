@@ -57,6 +57,7 @@ function MultiSizePreview({
         // Draw text below
         const artW = ref.artWidth || 0;
         const artH = ref.artHeight || 0;
+        const realSize = size.includes('_') ? size.split('_')[0] : size;
         const text = `Size: ${realSize} | Artwork Size: W ${artW.toFixed(2)}" × H ${artH.toFixed(2)}"`;
         combCtx.font = `bold ${24}px sans-serif`;
         combCtx.fillStyle = '#000000';
