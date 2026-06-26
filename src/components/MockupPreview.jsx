@@ -45,10 +45,11 @@ function MockupPreview({
 
       const drawWithShirt = (shirtImg, isCustomGarment) => {
         // Use fixed pxPerInch based on largest size (same as DesignCanvas)
-        const maxBodyWidth = 32;
-        const maxBodyLength = 35;
-        const maxTshirtW = W * 0.85;
-        const maxTshirtH = H * 0.85;
+        // Use selected size directly to maximize shirt size on canvas
+        const maxBodyWidth = sizeData.bodyWidth;
+        const maxBodyLength = sizeData.bodyLength;
+        const maxTshirtW = W * 0.88;
+        const maxTshirtH = H * 0.80;
         const pxPerInchW = maxTshirtW / maxBodyWidth;
         const pxPerInchH = maxTshirtH / maxBodyLength;
 
