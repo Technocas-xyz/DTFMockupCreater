@@ -319,30 +319,9 @@ const MSPCard = React.forwardRef(function MSPCard({
         const drawX = printX + (printW - artW) / 2 + scaledPosX;
         const drawY = printY + (printH - artH) / 2 + scaledPosY;
 
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(printX - 1, printY - 1, printW + 2, printH + 2);
-        ctx.clip();
         ctx.drawImage(img, drawX, drawY, artW, artH);
-        ctx.restore();
-
-        // Draw text at bottom of canvas — only for live preview (smaller)
-        ctx.save();
-        ctx.font = 'bold 12px sans-serif';
-        ctx.fillStyle = '#1e293b';
-        ctx.textAlign = 'center';
-        ctx.fillText(`Size: ${realSize} | W ${sizeArtW.toFixed(1)}" × H ${sizeArtH.toFixed(1)}"`, W / 2, 335);
-        ctx.restore();
       };
       img.src = artwork;
-    } else {
-      // Draw text even without artwork
-      ctx.save();
-      ctx.font = 'bold 12px sans-serif';
-      ctx.fillStyle = '#1e293b';
-      ctx.textAlign = 'center';
-      ctx.fillText(`Size: ${realSize} | W ${sizeArtW.toFixed(1)}" × H ${sizeArtH.toFixed(1)}"`, W / 2, 335);
-      ctx.restore();
     }
   }, [artwork, size, selectedColor, artworkDimensions, artworkPosition, artworkScale, artworkAreaSettings, viewSide, tshirtImg, isCustomGarment, sizeArtW, sizeArtH]);
 
