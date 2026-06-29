@@ -310,7 +310,13 @@ const MSPCard = React.forwardRef(function MSPCard({
 
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
+        // Clip artwork to shirt area so it doesn't overflow
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(tshirtX, tshirtY, tshirtW, tshirtH);
+        ctx.clip();
         ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, drawX, drawY, artW, artH);
+        ctx.restore();
       };
       img.src = artwork;
     }
