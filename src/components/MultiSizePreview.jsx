@@ -330,9 +330,9 @@ const MSPCard = React.forwardRef(function MSPCard({
         if (imgAR > boxAR) { artW = artworkPxW; artH = artworkPxW / imgAR; }
         else { artH = artworkPxH; artW = artworkPxH * imgAR; }
 
-        // Center within print area + position offset
+        // Center horizontally, align to TOP of print area vertically
         const drawX = printX + (printAreaPxW - artW) / 2 + artworkPosition.x;
-        const drawY = printY + (printAreaPxH - artH) / 2 + artworkPosition.y;
+        const drawY = printY + artworkPosition.y;
 
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';

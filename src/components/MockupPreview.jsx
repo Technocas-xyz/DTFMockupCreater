@@ -185,7 +185,7 @@ function MockupPreview({
           const scaledPosX = artworkPosition.x * scaleFactor;
           const scaledPosY = artworkPosition.y * scaleFactor;
           const drawX2 = printX + (printW - drawW) / 2 + scaledPosX;
-          const drawY2 = printY + (printH - drawH) / 2 + scaledPosY;
+          const drawY2 = printY + scaledPosY;
 
           // Draw at original quality — use source pixels directly
           ctx.imageSmoothingEnabled = true;
@@ -800,7 +800,7 @@ function MockupCard({ size, artwork, color, artworkDimensions, artworkPosition, 
         const scaledPosY = artworkPosition.y * scaleFactor;
 
         const drawX = printX + (printW - artW) / 2 + scaledPosX;
-        const drawY = printY + (printH - artH) / 2 + scaledPosY;
+        const drawY = printY + scaledPosY;
 
         ctx.save();
         ctx.beginPath();

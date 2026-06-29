@@ -263,9 +263,9 @@ function DesignCanvas({
         artW = boxH * imgAspect;
       }
 
-      // Center artwork within print area
+      // Center horizontally, align to TOP of print area vertically
       const drawX = printArea.x + (printArea.width - artW) / 2 + artworkPosition.x;
-      const drawY = printArea.y + (printArea.height - artH) / 2 + artworkPosition.y;
+      const drawY = printArea.y + artworkPosition.y;
 
       // Clip to print area
       ctx.beginPath();
@@ -442,7 +442,7 @@ function DesignCanvas({
     else { artH = boxH; artW = boxH * imgAspect; }
 
     const drawX = printArea.x + (printArea.width - artW) / 2 + artworkPosition.x;
-    const drawY = printArea.y + (printArea.height - artH) / 2 + artworkPosition.y;
+    const drawY = printArea.y + artworkPosition.y;
 
     if (x >= drawX && x <= drawX + artW && y >= drawY && y <= drawY + artH) {
       setIsDragging(true);
