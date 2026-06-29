@@ -242,8 +242,21 @@ const MSPCard = React.forwardRef(function MSPCard({
         tshirtY = H * 0.15; // leave space for collar/sleeves at top
       }
 
-      // Draw garment image fitted to the calculated tshirtW × tshirtH
-      let dw = tshirtW, dh = tshirtH, dx = tshirtX, dy = tshirtY;
+      // Draw garment image — match main DesignCanvas approach
+      const shirtPadding = isCustomGarment ? 1.0 : 1.3;
+      const garImgAspect = (tshirtImg.naturalWidth || tshirtImg.width) / (tshirtImg.naturalHeight || tshirtImg.height);
+      let dw, dh, dx, dy;
+      if (isCustomGarment) {
+        dw = tshirtW;
+        dh = tshirtH;
+        dx = tshirtX;
+        dy = tshirtY;
+      } else {
+        dw = tshirtW * shirtPadding;
+        dh = dw / garImgAspect;
+        dx = (W - dw) / 2;
+        dy = tshirtY - (dh - tshirtH) * 0.15;
+      }
 
       // Draw with color tint
       const offscreen = document.createElement('canvas');
@@ -283,32 +296,38 @@ const MSPCard = React.forwardRef(function MSPCard({
     if (artwork) {
       const img = new Image();
       img.onload = () => {
-        // Use the same pxPerInch for artwork placement
+        // MATCH EXACTLY the DesignCanvas coordinate system
+        // DesignCanvas: 700×850 canvas, artwork positioned relative to printArea
+        // MultiSizePreview: W×H canvas, same ratios
         const artPxPerInch = tshirtW / sizeData.bodyWidth;
 
-        // Use size-specific print area (not the global artworkAreaSettings which may be too large)
-        const sizePrintW = Math.min(artworkAreaSettings.width, sizeData.maxPrintWidth || sizeData.bodyWidth - 2) * artPxPerInch;
-        const sizePrintH = Math.min(artworkAreaSettings.height, sizeData.maxPrintHeight || sizeData.bodyLength - 4) * artPxPerInch;
-        const printX = tshirtX + (tshirtW - sizePrintW) / 2;
+        // Print area — exact same calculation as DesignCanvas getPrintArea()
+        const printAreaPxW = artworkAreaSettings.width * artPxPerInch;
+        const printAreaPxH = artworkAreaSettings.height * artPxPerInch;
+        const printX = tshirtX + (tshirtW - printAreaPxW) / 2;
         const printY = tshirtY + (artworkAreaSettings.topOffset * artPxPerInch);
 
-        // Artwork bounding box — cap to the size-specific print area
-        const cappedArtW = Math.min(sizeArtW, sizeData.maxPrintWidth || sizeData.bodyWidth - 2);
-        const cappedArtH = Math.min(sizeArtH, sizeData.maxPrintHeight || sizeData.bodyLength - 4);
-        const boxW = cappedArtW * artPxPerInch * artworkScale;
-        const boxH = cappedArtH * artPxPerInch * artworkScale;
-        const imgAR = img.naturalWidth / img.naturalHeight;
-        const boxAR = boxW / boxH;
-        let artW, artH;
-        if (imgAR > boxAR) { artW = boxW; artH = boxW / imgAR; }
-        else { artH = boxH; artW = boxH * imgAR; }
+        // Artwork bounding box — exact same as DesignCanvas
+        const artworkPxW = sizeArtW * artPxPerInch;
+        const artworkPxH = sizeArtH * artPxPerInch;
 
-        const scaleFactor = W / 700;
+        // Maintain aspect ratio within bounding box — exact same logic as DesignCanvas
+        const imgNatW = img.naturalWidth;
+        const imgNatH = img.naturalHeight;
+        const imgAR = imgNatW / imgNatH;
+        const boxAR = artworkPxW / artworkPxH;
+        let artW, artH;
+        if (imgAR > boxAR) { artW = artworkPxW; artH = artworkPxW / imgAR; }
+        else { artH = artworkPxH; artW = artworkPxH * imgAR; }
+
+        // Center within print area — exact same as DesignCanvas
+        // Scale position from 700px DesignCanvas to this W canvas
+        const scaleFactor = (tshirtW / sizeData.bodyWidth) / (700 * 0.52 / 32);
         const scaledPosX = artworkPosition.x * scaleFactor;
         const scaledPosY = artworkPosition.y * scaleFactor;
 
-        const drawX = printX + (sizePrintW - artW) / 2 + scaledPosX;
-        const drawY = printY + (sizePrintH - artH) / 2 + scaledPosY;
+        const drawX = printX + (printAreaPxW - artW) / 2 + scaledPosX;
+        const drawY = printY + (printAreaPxH - artH) / 2 + scaledPosY;
 
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
