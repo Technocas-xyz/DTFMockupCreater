@@ -32,11 +32,11 @@ function MultiSizePreview({
   // Download All handler — uses high-res canvas directly
   const handleDownloadAll = () => {
     const numSizes = sortedSizes.length;
-    const cardW = 1200;
-    const cardH = 1400;
+    const cardW = 700;
+    const cardH = 850;
     const gap = 40;
     const totalW = numSizes * (cardW + gap) - gap;
-    const totalH = 1500;
+    const totalH = 950;
 
     const combinedCanvas = document.createElement('canvas');
     combinedCanvas.width = totalW;
@@ -204,46 +204,52 @@ const MSPCard = React.forwardRef(function MSPCard({
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    const W = 1200;
-    const H = 1400;
+    // EXACT SAME dimensions as DesignCanvas
+    const W = 700;
+    const H = 850;
 
     ctx.clearRect(0, 0, W, H);
 
     let tshirtW, tshirtH, tshirtX, tshirtY;
+    let pxPerInch;
 
-    // Each shirt fills its card similarly to how main canvas fills the view
-    // This ensures the BASE size looks identical to the main canvas
-    const drawAreaH = H - 100;
-    const fitW = W * 0.75;
-    const fitH = drawAreaH * 0.65;
-    const fitPxPerInch = Math.min(fitW / sizeData.bodyWidth, fitH / sizeData.bodyLength);
-
+    // EXACT SAME calculation as DesignCanvas getPrintArea()
     if (tshirtImg) {
-      const imgW = tshirtImg.naturalWidth || tshirtImg.width;
-      const imgH = tshirtImg.naturalHeight || tshirtImg.height;
-      const imgAspect = imgW / imgH;
 
       if (isCustomGarment) {
-        // Custom garment — scale proportionally based on stored dimensions
-        const taggedGarment = garmentLibrary && garmentLibrary.find(
-          (g) => g.size === realSize && (g.side || 'front') === viewSide
-        );
-        const garmentBodyWidth = taggedGarment?.bodyMapping?.shirtWidthInches || sizeData.bodyWidth;
-        const garmentBodyHeight = taggedGarment?.bodyMapping?.shirtHeightInches || sizeData.bodyLength;
-        
-        tshirtW = garmentBodyWidth * fitPxPerInch;
-        tshirtH = garmentBodyHeight * fitPxPerInch;
+        const taggedG = garmentLibrary && garmentLibrary.find(g => g.size === realSize && (g.side || 'front') === viewSide);
+        const garmentBodyWidth = taggedG?.bodyMapping?.shirtWidthInches || sizeData.bodyWidth;
+        const garmentBodyHeight = taggedG?.bodyMapping?.shirtHeightInches || sizeData.bodyLength;
+
+        const maxBodyWidth = 32;
+        const maxBodyHeight = 35;
+        const maxTshirtW = W * 0.52;
+        const maxTshirtH = H * 0.68;
+        const refPxPerInchW = maxTshirtW / maxBodyWidth;
+        const refPxPerInchH = maxTshirtH / maxBodyHeight;
+        pxPerInch = Math.min(refPxPerInchW, refPxPerInchH);
+
+        tshirtW = garmentBodyWidth * pxPerInch;
+        tshirtH = garmentBodyHeight * pxPerInch;
         tshirtX = (W - tshirtW) / 2;
-        tshirtY = H * 0.15; // leave space for collar/sleeves at top
+        tshirtY = (H - tshirtH) / 2;
       } else {
-        tshirtW = sizeData.bodyWidth * fitPxPerInch;
-        tshirtH = sizeData.bodyLength * fitPxPerInch;
+        // Default t-shirt: EXACT DesignCanvas formula
+        const maxBodyWidth = 32;
+        const maxBodyLength = 35;
+        const maxTshirtW = W * 0.52;
+        const maxTshirtH = H * 0.68;
+        const pxPerInchW = maxTshirtW / maxBodyWidth;
+        const pxPerInchH = maxTshirtH / maxBodyLength;
+        pxPerInch = Math.min(pxPerInchW, pxPerInchH);
+
+        tshirtW = sizeData.bodyWidth * pxPerInchW;
+        tshirtH = sizeData.bodyLength * pxPerInchH;
         tshirtX = (W - tshirtW) / 2;
-        tshirtY = H * 0.15; // leave space for collar/sleeves at top
+        tshirtY = H * 0.20 + (maxTshirtH - tshirtH) / 2;
       }
 
       // Draw garment image — match main DesignCanvas approach
-      const shirtPadding = isCustomGarment ? 1.0 : 1.3;
       const garImgAspect = (tshirtImg.naturalWidth || tshirtImg.width) / (tshirtImg.naturalHeight || tshirtImg.height);
       let dw, dh, dx, dy;
       if (isCustomGarment) {
@@ -252,6 +258,7 @@ const MSPCard = React.forwardRef(function MSPCard({
         dx = tshirtX;
         dy = tshirtY;
       } else {
+        const shirtPadding = 1.3;
         dw = tshirtW * shirtPadding;
         dh = dw / garImgAspect;
         dx = (W - dw) / 2;
@@ -284,34 +291,36 @@ const MSPCard = React.forwardRef(function MSPCard({
       }
       ctx.drawImage(offscreen, 0, 0);
     } else {
-      // No garment image — use vector fallback at proportional size
-      tshirtW = sizeData.bodyWidth * fitPxPerInch;
-      tshirtH = sizeData.bodyLength * fitPxPerInch;
+      // No garment image — use vector fallback
+      const maxBodyWidth = 32;
+      const maxTshirtW = W * 0.52;
+      const maxTshirtH = H * 0.68;
+      pxPerInch = Math.min(maxTshirtW / maxBodyWidth, maxTshirtH / 35);
+      tshirtW = sizeData.bodyWidth * pxPerInch;
+      tshirtH = sizeData.bodyLength * pxPerInch;
       tshirtX = (W - tshirtW) / 2;
-      tshirtY = H * 0.15; // align to top
+      tshirtY = H * 0.20 + (maxTshirtH - tshirtH) / 2;
       drawMiniTshirt(ctx, selectedColor.hex, viewSide, tshirtX, tshirtY, tshirtW, tshirtH);
     }
 
-    // Draw artwork
+    // Draw artwork — SAME logic as DesignCanvas
     if (artwork) {
       const img = new Image();
       img.onload = () => {
-        // MATCH EXACTLY the DesignCanvas coordinate system
-        // DesignCanvas: 700×850 canvas, artwork positioned relative to printArea
-        // MultiSizePreview: W×H canvas, same ratios
-        const artPxPerInch = tshirtW / sizeData.bodyWidth;
+        // Same pxPerInch as the shirt
+        const artPxPerInch = pxPerInch;
 
-        // Print area — exact same calculation as DesignCanvas getPrintArea()
+        // Print area — exact same as DesignCanvas
         const printAreaPxW = artworkAreaSettings.width * artPxPerInch;
         const printAreaPxH = artworkAreaSettings.height * artPxPerInch;
         const printX = tshirtX + (tshirtW - printAreaPxW) / 2;
         const printY = tshirtY + (artworkAreaSettings.topOffset * artPxPerInch);
 
-        // Artwork bounding box — exact same as DesignCanvas
+        // Artwork dimensions
         const artworkPxW = sizeArtW * artPxPerInch;
         const artworkPxH = sizeArtH * artPxPerInch;
 
-        // Maintain aspect ratio within bounding box — exact same logic as DesignCanvas
+        // Maintain aspect ratio — exact same as DesignCanvas
         const imgNatW = img.naturalWidth;
         const imgNatH = img.naturalHeight;
         const imgAR = imgNatW / imgNatH;
@@ -320,14 +329,9 @@ const MSPCard = React.forwardRef(function MSPCard({
         if (imgAR > boxAR) { artW = artworkPxW; artH = artworkPxW / imgAR; }
         else { artH = artworkPxH; artW = artworkPxH * imgAR; }
 
-        // Center within print area — exact same as DesignCanvas
-        // Scale position from 700px DesignCanvas to this W canvas
-        const scaleFactor = (tshirtW / sizeData.bodyWidth) / (700 * 0.52 / 32);
-        const scaledPosX = artworkPosition.x * scaleFactor;
-        const scaledPosY = artworkPosition.y * scaleFactor;
-
-        const drawX = printX + (printAreaPxW - artW) / 2 + scaledPosX;
-        const drawY = printY + (printAreaPxH - artH) / 2 + scaledPosY;
+        // Center within print area + position offset
+        const drawX = printX + (printAreaPxW - artW) / 2 + artworkPosition.x;
+        const drawY = printY + (printAreaPxH - artH) / 2 + artworkPosition.y;
 
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
@@ -374,29 +378,28 @@ const MSPCard = React.forwardRef(function MSPCard({
     }
   }, [artwork, size, selectedColor, artworkDimensions, artworkPosition, artworkScale, artworkAreaSettings, viewSide, tshirtImg, isCustomGarment, sizeArtW, sizeArtH]);
 
-  // Download single card — use canvas directly (already high-res at 1200x1400)
+  // Download single card
   const handleDownloadSingle = () => {
     const sourceCanvas = canvasRef.current;
     if (!sourceCanvas) return;
 
     const dlCanvas = document.createElement('canvas');
-    dlCanvas.width = 1200;
-    dlCanvas.height = 1500;
+    dlCanvas.width = 700;
+    dlCanvas.height = 950;
     const dlCtx = dlCanvas.getContext('2d');
 
-    // White background
     dlCtx.fillStyle = '#ffffff';
-    dlCtx.fillRect(0, 0, 1200, 1500);
+    dlCtx.fillRect(0, 0, 700, 950);
 
-    // Draw shirt canvas (already 1200x1400)
-    dlCtx.drawImage(sourceCanvas, 0, 0, 1200, 1400);
+    // Draw shirt canvas
+    dlCtx.drawImage(sourceCanvas, 0, 0, 700, 850);
 
     // Draw text below
     const text = `Size: ${realSize} | Artwork Size: W ${sizeArtW.toFixed(2)}" × H ${sizeArtH.toFixed(2)}"`;
-    dlCtx.font = `bold 36px sans-serif`;
+    dlCtx.font = `bold 22px sans-serif`;
     dlCtx.fillStyle = '#000000';
     dlCtx.textAlign = 'center';
-    dlCtx.fillText(text, 600, 1460);
+    dlCtx.fillText(text, 350, 910);
 
     const link = document.createElement('a');
     link.download = `mockup-${realSize}.png`;
@@ -409,7 +412,7 @@ const MSPCard = React.forwardRef(function MSPCard({
   return (
     <div className={`msp-card ${size === baseSize ? 'msp-card-base' : ''}`}>
       <div className="msp-canvas-wrapper">
-        <canvas ref={canvasRef} width={1200} height={1400} className="msp-canvas" />
+        <canvas ref={canvasRef} width={700} height={850} className="msp-canvas" />
         <button className="msp-download-single-btn" onClick={handleDownloadSingle} title={`Download ${size} mockup`}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
