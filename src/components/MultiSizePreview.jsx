@@ -383,6 +383,9 @@ const MSPCard = React.forwardRef(function MSPCard({
           />
           <span className="msp-percent-value">{Math.round(activePercent)}%</span>
         </div>
+        <div className="msp-art-dimensions">
+          W {sizeArtW.toFixed(1)}" × H {sizeArtH.toFixed(1)}"
+        </div>
         <div className="msp-body-info">
           Body: {sizeData.bodyWidth}" × {sizeData.bodyLength}"
         </div>

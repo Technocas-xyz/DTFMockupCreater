@@ -363,6 +363,55 @@ function DesignCanvas({
     ctx.textAlign = 'center';
     ctx.fillText(`Size: ${selectedSize} | ${viewSide.toUpperCase()}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT - 20);
 
+    // Draw rulers (inch marks along top and left)
+    if (printArea.pxPerInch > 0) {
+      const rulerColor = 'rgba(255,255,255,0.5)';
+      const rulerTextColor = 'rgba(255,255,255,0.7)';
+      const ppi = printArea.pxPerInch;
+      const rulerOffset = 20; // padding from edge
+
+      ctx.strokeStyle = rulerColor;
+      ctx.fillStyle = rulerTextColor;
+      ctx.lineWidth = 1;
+      ctx.font = '9px Inter, sans-serif';
+
+      // Top ruler (horizontal) — starts from shirt left edge
+      const rulerTopY = printArea.tshirtY - 12;
+      const rulerStartX = printArea.tshirtX;
+      const maxInchesW = Math.ceil(printArea.tshirtW / ppi);
+      ctx.textAlign = 'center';
+      for (let i = 0; i <= maxInchesW; i++) {
+        const x = rulerStartX + i * ppi;
+        if (x > CANVAS_WIDTH - 10) break;
+        const tickH = i % 5 === 0 ? 8 : 4;
+        ctx.beginPath();
+        ctx.moveTo(x, rulerTopY);
+        ctx.lineTo(x, rulerTopY + tickH);
+        ctx.stroke();
+        if (i % 5 === 0 || i === maxInchesW) {
+          ctx.fillText(`${i}`, x, rulerTopY - 3);
+        }
+      }
+
+      // Left ruler (vertical) — starts from shirt top edge
+      const rulerLeftX = printArea.tshirtX - 12;
+      const rulerStartY = printArea.tshirtY;
+      const maxInchesH = Math.ceil(printArea.tshirtH / ppi);
+      ctx.textAlign = 'right';
+      for (let i = 0; i <= maxInchesH; i++) {
+        const y = rulerStartY + i * ppi;
+        if (y > CANVAS_HEIGHT - 30) break;
+        const tickW = i % 5 === 0 ? 8 : 4;
+        ctx.beginPath();
+        ctx.moveTo(rulerLeftX, y);
+        ctx.lineTo(rulerLeftX + tickW, y);
+        ctx.stroke();
+        if (i % 5 === 0 || i === maxInchesH) {
+          ctx.fillText(`${i}"`, rulerLeftX - 2, y + 3);
+        }
+      }
+    }
+
   }, [artworkImage, tshirtImage, selectedSize, selectedColor, artworkDimensions, viewSide, artworkPosition, artworkScale, isDragging, getPrintArea]);
 
   // Mouse handlers for dragging artwork
