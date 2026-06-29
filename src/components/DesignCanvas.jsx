@@ -365,51 +365,60 @@ function DesignCanvas({
 
     // Draw rulers (inch marks along top and left)
     if (printArea.pxPerInch > 0) {
-      const rulerColor = 'rgba(255,255,255,0.5)';
-      const rulerTextColor = 'rgba(255,255,255,0.7)';
+      const rulerColor = '#94a3b8';
+      const rulerTextColor = '#64748b';
       const ppi = printArea.pxPerInch;
-      const rulerOffset = 20; // padding from edge
 
       ctx.strokeStyle = rulerColor;
       ctx.fillStyle = rulerTextColor;
       ctx.lineWidth = 1;
-      ctx.font = '9px Inter, sans-serif';
+      ctx.font = '10px Inter, sans-serif';
 
       // Top ruler (horizontal) — starts from shirt left edge
-      const rulerTopY = printArea.tshirtY - 12;
+      const rulerTopY = printArea.tshirtY - 14;
       const rulerStartX = printArea.tshirtX;
       const maxInchesW = Math.ceil(printArea.tshirtW / ppi);
       ctx.textAlign = 'center';
       for (let i = 0; i <= maxInchesW; i++) {
         const x = rulerStartX + i * ppi;
         if (x > CANVAS_WIDTH - 10) break;
-        const tickH = i % 5 === 0 ? 8 : 4;
+        const tickH = i % 5 === 0 ? 10 : 5;
         ctx.beginPath();
         ctx.moveTo(x, rulerTopY);
         ctx.lineTo(x, rulerTopY + tickH);
         ctx.stroke();
         if (i % 5 === 0 || i === maxInchesW) {
-          ctx.fillText(`${i}`, x, rulerTopY - 3);
+          ctx.fillText(`${i}"`, x, rulerTopY - 4);
         }
       }
+      // Ruler baseline
+      ctx.beginPath();
+      ctx.moveTo(rulerStartX, rulerTopY);
+      ctx.lineTo(rulerStartX + maxInchesW * ppi, rulerTopY);
+      ctx.stroke();
 
       // Left ruler (vertical) — starts from shirt top edge
-      const rulerLeftX = printArea.tshirtX - 12;
+      const rulerLeftX = printArea.tshirtX - 14;
       const rulerStartY = printArea.tshirtY;
       const maxInchesH = Math.ceil(printArea.tshirtH / ppi);
       ctx.textAlign = 'right';
       for (let i = 0; i <= maxInchesH; i++) {
         const y = rulerStartY + i * ppi;
         if (y > CANVAS_HEIGHT - 30) break;
-        const tickW = i % 5 === 0 ? 8 : 4;
+        const tickW = i % 5 === 0 ? 10 : 5;
         ctx.beginPath();
         ctx.moveTo(rulerLeftX, y);
         ctx.lineTo(rulerLeftX + tickW, y);
         ctx.stroke();
         if (i % 5 === 0 || i === maxInchesH) {
-          ctx.fillText(`${i}"`, rulerLeftX - 2, y + 3);
+          ctx.fillText(`${i}"`, rulerLeftX - 3, y + 4);
         }
       }
+      // Ruler baseline
+      ctx.beginPath();
+      ctx.moveTo(rulerLeftX, rulerStartY);
+      ctx.lineTo(rulerLeftX, rulerStartY + maxInchesH * ppi);
+      ctx.stroke();
     }
 
   }, [artworkImage, tshirtImage, selectedSize, selectedColor, artworkDimensions, viewSide, artworkPosition, artworkScale, isDragging, getPrintArea]);

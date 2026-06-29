@@ -286,15 +286,17 @@ const MSPCard = React.forwardRef(function MSPCard({
         // Use the same pxPerInch for artwork placement
         const artPxPerInch = tshirtW / sizeData.bodyWidth;
 
-        // Fixed print area
-        const printW = artworkAreaSettings.width * artPxPerInch;
-        const printH = artworkAreaSettings.height * artPxPerInch;
-        const printX = tshirtX + (tshirtW - printW) / 2;
+        // Use size-specific print area (not the global artworkAreaSettings which may be too large)
+        const sizePrintW = Math.min(artworkAreaSettings.width, sizeData.maxPrintWidth || sizeData.bodyWidth - 2) * artPxPerInch;
+        const sizePrintH = Math.min(artworkAreaSettings.height, sizeData.maxPrintHeight || sizeData.bodyLength - 4) * artPxPerInch;
+        const printX = tshirtX + (tshirtW - sizePrintW) / 2;
         const printY = tshirtY + (artworkAreaSettings.topOffset * artPxPerInch);
 
-        // Artwork bounding box using this size's calculated dimensions
-        const boxW = sizeArtW * artPxPerInch * artworkScale;
-        const boxH = sizeArtH * artPxPerInch * artworkScale;
+        // Artwork bounding box — cap to the size-specific print area
+        const cappedArtW = Math.min(sizeArtW, sizeData.maxPrintWidth || sizeData.bodyWidth - 2);
+        const cappedArtH = Math.min(sizeArtH, sizeData.maxPrintHeight || sizeData.bodyLength - 4);
+        const boxW = cappedArtW * artPxPerInch * artworkScale;
+        const boxH = cappedArtH * artPxPerInch * artworkScale;
         const imgAR = img.naturalWidth / img.naturalHeight;
         const boxAR = boxW / boxH;
         let artW, artH;
@@ -305,8 +307,8 @@ const MSPCard = React.forwardRef(function MSPCard({
         const scaledPosX = artworkPosition.x * scaleFactor;
         const scaledPosY = artworkPosition.y * scaleFactor;
 
-        const drawX = printX + (printW - artW) / 2 + scaledPosX;
-        const drawY = printY + (printH - artH) / 2 + scaledPosY;
+        const drawX = printX + (sizePrintW - artW) / 2 + scaledPosX;
+        const drawY = printY + (sizePrintH - artH) / 2 + scaledPosY;
 
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
