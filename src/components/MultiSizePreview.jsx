@@ -211,12 +211,12 @@ const MSPCard = React.forwardRef(function MSPCard({
 
     let tshirtW, tshirtH, tshirtX, tshirtY;
 
-    // Use a fixed pxPerInch based on the largest size (5XL = 32" wide)
-    // This ensures smaller sizes appear smaller on canvas
-    const maxBodyWidth = 32;
-    const maxBodyHeight = 35;
+    // Each shirt fills its card similarly to how main canvas fills the view
+    // This ensures the BASE size looks identical to the main canvas
     const drawAreaH = H - 100;
-    const pxPerInch = Math.min(W * 0.85 / maxBodyWidth, drawAreaH * 0.85 / maxBodyHeight);
+    const fitW = W * 0.82;
+    const fitH = drawAreaH * 0.82;
+    const fitPxPerInch = Math.min(fitW / sizeData.bodyWidth, fitH / sizeData.bodyLength);
 
     if (tshirtImg) {
       const imgW = tshirtImg.naturalWidth || tshirtImg.width;
@@ -231,13 +231,13 @@ const MSPCard = React.forwardRef(function MSPCard({
         const garmentBodyWidth = taggedGarment?.bodyMapping?.shirtWidthInches || sizeData.bodyWidth;
         const garmentBodyHeight = taggedGarment?.bodyMapping?.shirtHeightInches || sizeData.bodyLength;
         
-        tshirtW = garmentBodyWidth * pxPerInch;
-        tshirtH = garmentBodyHeight * pxPerInch;
+        tshirtW = garmentbodyWidth * fitPxPerInch;
+        tshirtH = garmentbodyHeight * fitPxPerInch;
         tshirtX = (W - tshirtW) / 2;
         tshirtY = 50; // align to top with small padding
       } else {
-        tshirtW = sizeData.bodyWidth * pxPerInch;
-        tshirtH = sizeData.bodyLength * pxPerInch;
+        tshirtW = sizeData.bodyWidth * fitPxPerInch;
+        tshirtH = sizeData.bodyLength * fitPxPerInch;
         tshirtX = (W - tshirtW) / 2;
         tshirtY = 50; // align to top with small padding
       }
@@ -272,8 +272,8 @@ const MSPCard = React.forwardRef(function MSPCard({
       ctx.drawImage(offscreen, 0, 0);
     } else {
       // No garment image — use vector fallback at proportional size
-      tshirtW = sizeData.bodyWidth * pxPerInch;
-      tshirtH = sizeData.bodyLength * pxPerInch;
+      tshirtW = sizeData.bodyWidth * fitPxPerInch;
+      tshirtH = sizeData.bodyLength * fitPxPerInch;
       tshirtX = (W - tshirtW) / 2;
       tshirtY = 50; // align to top
       drawMiniTshirt(ctx, selectedColor.hex, viewSide, tshirtX, tshirtY, tshirtW, tshirtH);
