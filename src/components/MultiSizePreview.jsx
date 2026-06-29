@@ -34,9 +34,10 @@ function MultiSizePreview({
     const numSizes = sortedSizes.length;
     const cardW = 700;
     const cardH = 850;
-    const gap = 40;
+    const gap = 30;
+    const textHeight = 50;
     const totalW = numSizes * (cardW + gap) - gap;
-    const totalH = 950;
+    const totalH = cardH + textHeight;
 
     const combinedCanvas = document.createElement('canvas');
     combinedCanvas.width = totalW;
@@ -53,15 +54,15 @@ function MultiSizePreview({
         const x = idx * (cardW + gap);
         combCtx.drawImage(ref.canvas, x, 0, cardW, cardH);
 
-        // Draw text below
+        // Draw text below each shirt
         const artW = ref.artWidth || 0;
         const artH = ref.artHeight || 0;
         const realSize = size.includes('_') ? size.split('_')[0] : size;
-        const text = `Size: ${realSize} | Artwork Size: W ${artW.toFixed(2)}" × H ${artH.toFixed(2)}"`;
-        combCtx.font = `bold 36px sans-serif`;
+        const text = `Shirt Size: ${realSize} | Artwork Size: W ${artW.toFixed(1)}" x H ${artH.toFixed(1)}"`;
+        combCtx.font = 'bold 15px sans-serif';
         combCtx.fillStyle = '#000000';
         combCtx.textAlign = 'center';
-        combCtx.fillText(text, x + cardW / 2, 1460);
+        combCtx.fillText(text, x + cardW / 2, cardH + 30);
       }
     });
 
@@ -342,37 +343,6 @@ const MSPCard = React.forwardRef(function MSPCard({
         ctx.clip();
         ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, drawX, drawY, artW, artH);
         ctx.restore();
-
-        // Draw rulers for debugging/verification
-        const rulerPpi = artPxPerInch;
-        ctx.strokeStyle = 'rgba(100,100,100,0.4)';
-        ctx.fillStyle = 'rgba(50,50,50,0.6)';
-        ctx.lineWidth = 1;
-        ctx.font = '18px sans-serif';
-        // Top ruler
-        ctx.textAlign = 'center';
-        const maxW = Math.ceil(sizeData.bodyWidth);
-        for (let i = 0; i <= maxW; i++) {
-          const x = tshirtX + i * rulerPpi;
-          const tick = i % 5 === 0 ? 12 : 6;
-          ctx.beginPath();
-          ctx.moveTo(x, tshirtY - 20);
-          ctx.lineTo(x, tshirtY - 20 + tick);
-          ctx.stroke();
-          if (i % 5 === 0) ctx.fillText(`${i}"`, x, tshirtY - 25);
-        }
-        // Left ruler
-        ctx.textAlign = 'right';
-        const maxH = Math.ceil(sizeData.bodyLength);
-        for (let i = 0; i <= maxH; i++) {
-          const y = tshirtY + i * rulerPpi;
-          const tick = i % 5 === 0 ? 12 : 6;
-          ctx.beginPath();
-          ctx.moveTo(tshirtX - 20, y);
-          ctx.lineTo(tshirtX - 20 + tick, y);
-          ctx.stroke();
-          if (i % 5 === 0) ctx.fillText(`${i}"`, tshirtX - 24, y + 5);
-        }
       };
       img.src = artwork;
     }
