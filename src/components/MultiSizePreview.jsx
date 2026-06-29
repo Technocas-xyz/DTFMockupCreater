@@ -47,7 +47,7 @@ function MultiSizePreview({
         for (let y = 0; y < 850; y++) {
           for (let x = 0; x < 700; x++) {
             const idx = (y * 700 + x) * 4;
-            if (data[idx] < 250 || data[idx+1] < 250 || data[idx+2] < 250 || data[idx+3] > 250) {
+            if (data[idx] < 248 || data[idx+1] < 248 || data[idx+2] < 248) {
               if (y < top) top = y;
               if (y > bottom) bottom = y;
               if (x < left) left = x;
@@ -55,7 +55,7 @@ function MultiSizePreview({
             }
           }
         }
-        const pad = 15;
+        const pad = 10;
         top = Math.max(0, top - pad);
         bottom = Math.min(849, bottom + pad);
         left = Math.max(0, left - pad);
@@ -401,8 +401,9 @@ const MSPCard = React.forwardRef(function MSPCard({
     for (let y = 0; y < 850; y++) {
       for (let x = 0; x < 700; x++) {
         const idx = (y * 700 + x) * 4;
-        // Check if pixel is not white (or not fully transparent)
-        if (data[idx] < 250 || data[idx+1] < 250 || data[idx+2] < 250 || data[idx+3] > 250) {
+        const r = data[idx], g = data[idx+1], b = data[idx+2];
+        // Pixel is not white background (allowing slight variation)
+        if (r < 248 || g < 248 || b < 248) {
           if (y < top) top = y;
           if (y > bottom) bottom = y;
           if (x < left) left = x;
@@ -411,8 +412,8 @@ const MSPCard = React.forwardRef(function MSPCard({
       }
     }
 
-    // Add padding
-    const pad = 20;
+    // Add padding — minimal
+    const pad = 10;
     top = Math.max(0, top - pad);
     bottom = Math.min(849, bottom + pad);
     left = Math.max(0, left - pad);
@@ -420,7 +421,7 @@ const MSPCard = React.forwardRef(function MSPCard({
 
     const cropW = right - left + 1;
     const cropH = bottom - top + 1;
-    const textH = 40;
+    const textH = 25;
 
     const dlCanvas = document.createElement('canvas');
     dlCanvas.width = cropW;
@@ -433,12 +434,12 @@ const MSPCard = React.forwardRef(function MSPCard({
     // Draw cropped shirt
     dlCtx.drawImage(sourceCanvas, left, top, cropW, cropH, 0, 0, cropW, cropH);
 
-    // Draw text below
+    // Draw text immediately below
     const text = `Shirt Size: ${realSize} | Artwork Size: W ${sizeArtW.toFixed(1)}" x H ${sizeArtH.toFixed(1)}"`;
     dlCtx.font = 'bold 15px sans-serif';
     dlCtx.fillStyle = '#000000';
     dlCtx.textAlign = 'center';
-    dlCtx.fillText(text, cropW / 2, cropH + 25);
+    dlCtx.fillText(text, cropW / 2, cropH + 17);
 
     const link = document.createElement('a');
     link.download = `mockup-${realSize}.png`;
