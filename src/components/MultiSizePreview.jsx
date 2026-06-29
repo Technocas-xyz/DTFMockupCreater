@@ -231,8 +231,8 @@ const MSPCard = React.forwardRef(function MSPCard({
         const garmentBodyWidth = taggedGarment?.bodyMapping?.shirtWidthInches || sizeData.bodyWidth;
         const garmentBodyHeight = taggedGarment?.bodyMapping?.shirtHeightInches || sizeData.bodyLength;
         
-        tshirtW = garmentbodyWidth * fitPxPerInch;
-        tshirtH = garmentbodyHeight * fitPxPerInch;
+        tshirtW = garmentBodyWidth * fitPxPerInch;
+        tshirtH = garmentBodyHeight * fitPxPerInch;
         tshirtX = (W - tshirtW) / 2;
         tshirtY = 50; // align to top with small padding
       } else {
