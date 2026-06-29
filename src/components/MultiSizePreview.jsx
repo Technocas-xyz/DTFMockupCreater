@@ -32,29 +32,70 @@ function MultiSizePreview({
   // Download All handler — uses high-res canvas directly
   const handleDownloadAll = () => {
     const numSizes = sortedSizes.length;
-    const cardW = 700;
-    const cardH = 850;
-    const gap = 30;
-    const textHeight = 50;
+    
+    // First pass: find max crop dimensions across all cards
+    let maxCropW = 0, maxCropH = 0;
+    const cropData = [];
+    
+    sortedSizes.forEach((size) => {
+      const ref = cardRefs.current[size];
+      if (ref && ref.canvas) {
+        const sCtx = ref.canvas.getContext('2d');
+        const imgData = sCtx.getImageData(0, 0, 700, 850);
+        const { data } = imgData;
+        let top = 850, bottom = 0, left = 700, right = 0;
+        for (let y = 0; y < 850; y++) {
+          for (let x = 0; x < 700; x++) {
+            const idx = (y * 700 + x) * 4;
+            if (data[idx] < 250 || data[idx+1] < 250 || data[idx+2] < 250 || data[idx+3] > 250) {
+              if (y < top) top = y;
+              if (y > bottom) bottom = y;
+              if (x < left) left = x;
+              if (x > right) right = x;
+            }
+          }
+        }
+        const pad = 15;
+        top = Math.max(0, top - pad);
+        bottom = Math.min(849, bottom + pad);
+        left = Math.max(0, left - pad);
+        right = Math.min(699, right + pad);
+        const w = right - left + 1;
+        const h = bottom - top + 1;
+        if (w > maxCropW) maxCropW = w;
+        if (h > maxCropH) maxCropH = h;
+        cropData.push({ top, left, w, h });
+      } else {
+        cropData.push(null);
+      }
+    });
+
+    // Use uniform card size (max of all crops)
+    const cardW = maxCropW;
+    const cardH = maxCropH;
+    const gap = 20;
+    const textH = 35;
     const totalW = numSizes * (cardW + gap) - gap;
-    const totalH = cardH + textHeight;
+    const totalH = cardH + textH;
 
     const combinedCanvas = document.createElement('canvas');
     combinedCanvas.width = totalW;
     combinedCanvas.height = totalH;
     const combCtx = combinedCanvas.getContext('2d');
-
-    // White background
     combCtx.fillStyle = '#ffffff';
     combCtx.fillRect(0, 0, totalW, totalH);
 
     sortedSizes.forEach((size, idx) => {
       const ref = cardRefs.current[size];
-      if (ref && ref.canvas) {
+      const crop = cropData[idx];
+      if (ref && ref.canvas && crop) {
         const x = idx * (cardW + gap);
-        combCtx.drawImage(ref.canvas, x, 0, cardW, cardH);
+        // Center this card's crop within the uniform card size
+        const offsetX = (cardW - crop.w) / 2;
+        const offsetY = (cardH - crop.h) / 2;
+        combCtx.drawImage(ref.canvas, crop.left, crop.top, crop.w, crop.h, x + offsetX, offsetY, crop.w, crop.h);
 
-        // Draw text below each shirt
+        // Text below
         const artW = ref.artWidth || 0;
         const artH = ref.artHeight || 0;
         const realSize = size.includes('_') ? size.split('_')[0] : size;
@@ -62,11 +103,10 @@ function MultiSizePreview({
         combCtx.font = 'bold 15px sans-serif';
         combCtx.fillStyle = '#000000';
         combCtx.textAlign = 'center';
-        combCtx.fillText(text, x + cardW / 2, cardH + 30);
+        combCtx.fillText(text, x + cardW / 2, cardH + 22);
       }
     });
 
-    // Download
     try {
       combinedCanvas.toBlob((blob) => {
         if (blob) {
@@ -348,28 +388,57 @@ const MSPCard = React.forwardRef(function MSPCard({
     }
   }, [artwork, size, selectedColor, artworkDimensions, artworkPosition, artworkScale, artworkAreaSettings, viewSide, tshirtImg, isCustomGarment, sizeArtW, sizeArtH]);
 
-  // Download single card
+  // Download single card — auto-crop whitespace
   const handleDownloadSingle = () => {
     const sourceCanvas = canvasRef.current;
     if (!sourceCanvas) return;
 
+    // Find non-white bounds to crop
+    const sCtx = sourceCanvas.getContext('2d');
+    const imgData = sCtx.getImageData(0, 0, 700, 850);
+    const { data } = imgData;
+    let top = 850, bottom = 0, left = 700, right = 0;
+    for (let y = 0; y < 850; y++) {
+      for (let x = 0; x < 700; x++) {
+        const idx = (y * 700 + x) * 4;
+        // Check if pixel is not white (or not fully transparent)
+        if (data[idx] < 250 || data[idx+1] < 250 || data[idx+2] < 250 || data[idx+3] > 250) {
+          if (y < top) top = y;
+          if (y > bottom) bottom = y;
+          if (x < left) left = x;
+          if (x > right) right = x;
+        }
+      }
+    }
+
+    // Add padding
+    const pad = 20;
+    top = Math.max(0, top - pad);
+    bottom = Math.min(849, bottom + pad);
+    left = Math.max(0, left - pad);
+    right = Math.min(699, right + pad);
+
+    const cropW = right - left + 1;
+    const cropH = bottom - top + 1;
+    const textH = 40;
+
     const dlCanvas = document.createElement('canvas');
-    dlCanvas.width = 700;
-    dlCanvas.height = 950;
+    dlCanvas.width = cropW;
+    dlCanvas.height = cropH + textH;
     const dlCtx = dlCanvas.getContext('2d');
 
     dlCtx.fillStyle = '#ffffff';
-    dlCtx.fillRect(0, 0, 700, 950);
+    dlCtx.fillRect(0, 0, dlCanvas.width, dlCanvas.height);
 
-    // Draw shirt canvas
-    dlCtx.drawImage(sourceCanvas, 0, 0, 700, 850);
+    // Draw cropped shirt
+    dlCtx.drawImage(sourceCanvas, left, top, cropW, cropH, 0, 0, cropW, cropH);
 
     // Draw text below
-    const text = `Size: ${realSize} | Artwork Size: W ${sizeArtW.toFixed(2)}" × H ${sizeArtH.toFixed(2)}"`;
-    dlCtx.font = `bold 22px sans-serif`;
+    const text = `Shirt Size: ${realSize} | Artwork Size: W ${sizeArtW.toFixed(1)}" x H ${sizeArtH.toFixed(1)}"`;
+    dlCtx.font = 'bold 15px sans-serif';
     dlCtx.fillStyle = '#000000';
     dlCtx.textAlign = 'center';
-    dlCtx.fillText(text, 350, 910);
+    dlCtx.fillText(text, cropW / 2, cropH + 25);
 
     const link = document.createElement('a');
     link.download = `mockup-${realSize}.png`;
