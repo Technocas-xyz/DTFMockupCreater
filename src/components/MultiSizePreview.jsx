@@ -211,39 +211,39 @@ const MSPCard = React.forwardRef(function MSPCard({
 
     let tshirtW, tshirtH, tshirtX, tshirtY;
 
+    // Use a fixed pxPerInch based on the largest size (5XL = 32" wide)
+    // This ensures smaller sizes appear smaller on canvas
+    const maxBodyWidth = 32;
+    const maxBodyHeight = 35;
+    const drawAreaH = H - 100;
+    const pxPerInch = Math.min(W * 0.85 / maxBodyWidth, drawAreaH * 0.85 / maxBodyHeight);
+
     if (tshirtImg) {
       const imgW = tshirtImg.naturalWidth || tshirtImg.width;
       const imgH = tshirtImg.naturalHeight || tshirtImg.height;
       const imgAspect = imgW / imgH;
-      // Use only the upper portion for the shirt, leaving bottom for text
-      const drawAreaW = W;
-      const drawAreaH = H - 100; // leave 100px for text at bottom
-      const canvasAspect = drawAreaW / drawAreaH;
-
-      let dw, dh, dx, dy;
-      if (imgAspect > canvasAspect) {
-        dw = drawAreaW;
-        dh = drawAreaW / imgAspect;
-        dx = 0;
-        dy = (drawAreaH - dh) / 2;
-      } else {
-        dh = drawAreaH;
-        dw = drawAreaH * imgAspect;
-        dx = (drawAreaW - dw) / 2;
-        dy = 0;
-      }
 
       if (isCustomGarment) {
-        tshirtW = dw;
-        tshirtH = dh;
-        tshirtX = dx;
-        tshirtY = dy;
-      } else {
-        tshirtW = W * 0.52;
-        tshirtH = drawAreaH * 0.68;
+        // Custom garment — scale proportionally based on stored dimensions
+        const taggedGarment = garmentLibrary && garmentLibrary.find(
+          (g) => g.size === realSize && (g.side || 'front') === viewSide
+        );
+        const garmentBodyWidth = taggedGarment?.bodyMapping?.shirtWidthInches || sizeData.bodyWidth;
+        const garmentBodyHeight = taggedGarment?.bodyMapping?.shirtHeightInches || sizeData.bodyLength;
+        
+        tshirtW = garmentBodyWidth * pxPerInch;
+        tshirtH = garmentBodyHeight * pxPerInch;
         tshirtX = (W - tshirtW) / 2;
-        tshirtY = drawAreaH * 0.18;
+        tshirtY = (drawAreaH - tshirtH) / 2;
+      } else {
+        tshirtW = sizeData.bodyWidth * pxPerInch;
+        tshirtH = sizeData.bodyLength * pxPerInch;
+        tshirtX = (W - tshirtW) / 2;
+        tshirtY = (drawAreaH - tshirtH) / 2;
       }
+
+      // Draw garment image fitted to the calculated tshirtW × tshirtH
+      let dw = tshirtW, dh = tshirtH, dx = tshirtX, dy = tshirtY;
 
       // Draw with color tint
       const offscreen = document.createElement('canvas');
@@ -271,11 +271,11 @@ const MSPCard = React.forwardRef(function MSPCard({
       }
       ctx.drawImage(offscreen, 0, 0);
     } else {
-      tshirtW = W * 0.52;
-      tshirtH = (H - 100) * 0.68;
+      // No garment image — use vector fallback at proportional size
+      tshirtW = sizeData.bodyWidth * pxPerInch;
+      tshirtH = sizeData.bodyLength * pxPerInch;
       tshirtX = (W - tshirtW) / 2;
-      tshirtY = (H - 100) * 0.18;
-      tshirtY = 300 * 0.18;
+      tshirtY = ((H - 100) - tshirtH) / 2;
       drawMiniTshirt(ctx, selectedColor.hex, viewSide, tshirtX, tshirtY, tshirtW, tshirtH);
     }
 
@@ -283,29 +283,18 @@ const MSPCard = React.forwardRef(function MSPCard({
     if (artwork) {
       const img = new Image();
       img.onload = () => {
-        let pxPerInch;
-        if (isCustomGarment) {
-          const taggedGarment = garmentLibrary && garmentLibrary.find(
-            (g) => g.size === realSize && (g.side || 'front') === viewSide
-          );
-          const garmentBodyWidth = taggedGarment?.bodyMapping?.shirtWidthInches || sizeData.bodyWidth;
-          pxPerInch = tshirtW / garmentBodyWidth;
-        } else {
-          pxPerInch = tshirtW / sizeData.bodyWidth;
-        }
-
-        const pxPerInchW = pxPerInch;
-        const pxPerInchH = pxPerInch;
+        // Use the same pxPerInch for artwork placement
+        const artPxPerInch = tshirtW / sizeData.bodyWidth;
 
         // Fixed print area
-        const printW = artworkAreaSettings.width * pxPerInchW;
-        const printH = artworkAreaSettings.height * pxPerInchH;
+        const printW = artworkAreaSettings.width * artPxPerInch;
+        const printH = artworkAreaSettings.height * artPxPerInch;
         const printX = tshirtX + (tshirtW - printW) / 2;
-        const printY = tshirtY + (artworkAreaSettings.topOffset * pxPerInchH);
+        const printY = tshirtY + (artworkAreaSettings.topOffset * artPxPerInch);
 
         // Artwork bounding box using this size's calculated dimensions
-        const boxW = sizeArtW * pxPerInchW * artworkScale;
-        const boxH = sizeArtH * pxPerInchH * artworkScale;
+        const boxW = sizeArtW * artPxPerInch * artworkScale;
+        const boxH = sizeArtH * artPxPerInch * artworkScale;
         const imgAR = img.naturalWidth / img.naturalHeight;
         const boxAR = boxW / boxH;
         let artW, artH;
@@ -319,7 +308,9 @@ const MSPCard = React.forwardRef(function MSPCard({
         const drawX = printX + (printW - artW) / 2 + scaledPosX;
         const drawY = printY + (printH - artH) / 2 + scaledPosY;
 
-        ctx.drawImage(img, drawX, drawY, artW, artH);
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, drawX, drawY, artW, artH);
       };
       img.src = artwork;
     }
