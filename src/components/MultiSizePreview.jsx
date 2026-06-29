@@ -234,12 +234,12 @@ const MSPCard = React.forwardRef(function MSPCard({
         tshirtW = garmentBodyWidth * pxPerInch;
         tshirtH = garmentBodyHeight * pxPerInch;
         tshirtX = (W - tshirtW) / 2;
-        tshirtY = (drawAreaH - tshirtH) / 2;
+        tshirtY = 50; // align to top with small padding
       } else {
         tshirtW = sizeData.bodyWidth * pxPerInch;
         tshirtH = sizeData.bodyLength * pxPerInch;
         tshirtX = (W - tshirtW) / 2;
-        tshirtY = (drawAreaH - tshirtH) / 2;
+        tshirtY = 50; // align to top with small padding
       }
 
       // Draw garment image fitted to the calculated tshirtW × tshirtH
@@ -275,7 +275,7 @@ const MSPCard = React.forwardRef(function MSPCard({
       tshirtW = sizeData.bodyWidth * pxPerInch;
       tshirtH = sizeData.bodyLength * pxPerInch;
       tshirtX = (W - tshirtW) / 2;
-      tshirtY = ((H - 100) - tshirtH) / 2;
+      tshirtY = 50; // align to top
       drawMiniTshirt(ctx, selectedColor.hex, viewSide, tshirtX, tshirtY, tshirtW, tshirtH);
     }
 
