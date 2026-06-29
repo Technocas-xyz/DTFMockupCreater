@@ -441,11 +441,113 @@ function MockupPreview({
     });
   };
 
+  // Magenta background crop detection for high-res canvas
+  const cropHighResCanvas = (sourceCanvas, size) => {
+    const W = sourceCanvas.width;
+    const H = sourceCanvas.height;
+    // Create detection canvas with magenta background
+    const detectCanvas = document.createElement('canvas');
+    detectCanvas.width = W;
+    detectCanvas.height = H;
+    const dCtx = detectCanvas.getContext('2d');
+    dCtx.fillStyle = '#FF00FF';
+    dCtx.fillRect(0, 0, W, H);
+    dCtx.drawImage(sourceCanvas, 0, 0);
+
+    const imgData = dCtx.getImageData(0, 0, W, H);
+    const { data } = imgData;
+    let top = H, bottom = 0, left = W, right = 0;
+
+    // Sample rows for speed on large canvas (every 2nd pixel)
+    for (let y = 0; y < H; y += 2) {
+      for (let x = 0; x < W; x += 2) {
+        const idx = (y * W + x) * 4;
+        const r = data[idx], g = data[idx + 1], b = data[idx + 2], a = data[idx + 3];
+        // Not magenta
+        if (a > 10 && !(r > 240 && g < 15 && b > 240)) {
+          if (y < top) top = y;
+          if (y > bottom) bottom = y;
+          if (x < left) left = x;
+          if (x > right) right = x;
+        }
+      }
+    }
+
+    // Refine edges by scanning individual pixels near the detected bounds
+    // Top edge refinement
+    for (let y = Math.max(0, top - 2); y <= Math.min(top + 2, H - 1); y++) {
+      for (let x = left; x <= right; x++) {
+        const idx = (y * W + x) * 4;
+        const r = data[idx], g = data[idx + 1], b = data[idx + 2], a = data[idx + 3];
+        if (a > 10 && !(r > 240 && g < 15 && b > 240)) {
+          if (y < top) top = y;
+        }
+      }
+    }
+    // Left edge refinement
+    for (let x = Math.max(0, left - 2); x <= Math.min(left + 2, W - 1); x++) {
+      for (let y = top; y <= bottom; y += 2) {
+        const idx = (y * W + x) * 4;
+        const r = data[idx], g = data[idx + 1], b = data[idx + 2], a = data[idx + 3];
+        if (a > 10 && !(r > 240 && g < 15 && b > 240)) {
+          if (x < left) left = x;
+        }
+      }
+    }
+
+    if (top >= bottom || left >= right) {
+      return { top: 0, left: 0, w: W, h: H };
+    }
+    return { top, left, w: right - left + 1, h: bottom - top + 1 };
+  };
+
+  // Create tightly cropped download canvas with layout:
+  // 20px top → shirt → 20px gap → text → 20px bottom
+  const createCroppedDownload = (sourceCanvas, size) => {
+    const bounds = cropHighResCanvas(sourceCanvas, size);
+    
+    const topMargin = 20;
+    const gap = 20;
+    const textHeight = 30;
+    const bottomMargin = 20;
+    const sideMargin = 20;
+    
+    const cropW = bounds.w;
+    const cropH = bounds.h;
+    
+    const finalW = cropW + sideMargin * 2;
+    const finalH = topMargin + cropH + gap + textHeight + bottomMargin;
+    
+    const dlCanvas = document.createElement('canvas');
+    dlCanvas.width = finalW;
+    dlCanvas.height = finalH;
+    const dlCtx = dlCanvas.getContext('2d');
+    
+    dlCtx.fillStyle = '#ffffff';
+    dlCtx.fillRect(0, 0, finalW, finalH);
+    
+    // Draw cropped shirt
+    dlCtx.drawImage(sourceCanvas, bounds.left, bounds.top, cropW, cropH, sideMargin, topMargin, cropW, cropH);
+    
+    // Draw text: Shirt Size: XL | Artwork Size: W 15.3" × H 18.3"
+    const sizeData = TSHIRT_SIZES[size];
+    const artWidthInches = (artworkDimensions.width * artworkScale).toFixed(1);
+    const artHeightInches = (artworkDimensions.height * artworkScale).toFixed(1);
+    const text = `Shirt Size: ${size} | Artwork Size: W ${artWidthInches}" x H ${artHeightInches}"`;
+    dlCtx.font = 'bold 18px Inter, sans-serif';
+    dlCtx.fillStyle = '#000000';
+    dlCtx.textAlign = 'center';
+    dlCtx.fillText(text, finalW / 2, topMargin + cropH + gap + 20);
+    
+    return dlCanvas;
+  };
+
   // Download a single mockup with dimensions
   const downloadSingle = async (size) => {
     const canvas = await renderHighRes(size, true);
+    const croppedCanvas = createCroppedDownload(canvas, size);
     try {
-      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+      const blob = await new Promise((resolve) => croppedCanvas.toBlob(resolve, 'image/png'));
       if (blob && blob.size > 0) {
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
@@ -458,7 +560,7 @@ function MockupPreview({
       } else {
         const link = document.createElement('a');
         link.download = `mockup-${selectedColor.name}-${size}-${viewSide}.png`;
-        link.href = canvas.toDataURL('image/png');
+        link.href = croppedCanvas.toDataURL('image/png');
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -466,7 +568,7 @@ function MockupPreview({
     } catch (e) {
       const link = document.createElement('a');
       link.download = `mockup-${selectedColor.name}-${size}-${viewSide}.png`;
-      link.href = canvas.toDataURL('image/png');
+      link.href = croppedCanvas.toDataURL('image/png');
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -476,8 +578,9 @@ function MockupPreview({
   // Download a single clean mockup (no annotations)
   const downloadClean = async (size) => {
     const canvas = await renderHighRes(size, false);
+    const croppedCanvas = createCroppedDownload(canvas, size);
     try {
-      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+      const blob = await new Promise((resolve) => croppedCanvas.toBlob(resolve, 'image/png'));
       if (blob && blob.size > 0) {
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
@@ -490,7 +593,7 @@ function MockupPreview({
       } else {
         const link = document.createElement('a');
         link.download = `mockup-clean-${selectedColor.name}-${size}-${viewSide}.png`;
-        link.href = canvas.toDataURL('image/png');
+        link.href = croppedCanvas.toDataURL('image/png');
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -498,23 +601,33 @@ function MockupPreview({
     } catch (e) {
       const link = document.createElement('a');
       link.download = `mockup-clean-${selectedColor.name}-${size}-${viewSide}.png`;
-      link.href = canvas.toDataURL('image/png');
+      link.href = croppedCanvas.toDataURL('image/png');
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
     }
   };
 
-  // Download all mockups with dimensions — 2 column grid in single file
+  // Download all mockups with dimensions — 2 column grid in single file (cropped)
   const downloadAll = async () => {
     if (activeSizes.length === 0) { alert('Please select at least one size in "Generate Mockups" section.'); return; }
+    
+    // Render and crop each mockup
+    const croppedCanvases = [];
+    let maxW = 0, maxH = 0;
+    for (let i = 0; i < activeSizes.length; i++) {
+      const canvas = await renderHighRes(activeSizes[i], true);
+      const cropped = createCroppedDownload(canvas, activeSizes[i]);
+      croppedCanvases.push(cropped);
+      if (cropped.width > maxW) maxW = cropped.width;
+      if (cropped.height > maxH) maxH = cropped.height;
+    }
+    
     const cols = 2;
     const rows = Math.ceil(activeSizes.length / cols);
-    const cellW = 2000;
-    const cellH = 2400;
     const gap = 40;
-    const totalW = cols * cellW + (cols - 1) * gap;
-    const totalH = rows * cellH + (rows - 1) * gap;
+    const totalW = cols * maxW + (cols - 1) * gap;
+    const totalH = rows * maxH + (rows - 1) * gap;
 
     const gridCanvas = document.createElement('canvas');
     gridCanvas.width = totalW;
@@ -523,13 +636,12 @@ function MockupPreview({
     gCtx.fillStyle = '#ffffff';
     gCtx.fillRect(0, 0, totalW, totalH);
 
-    for (let i = 0; i < activeSizes.length; i++) {
-      const canvas = await renderHighRes(activeSizes[i], true);
+    for (let i = 0; i < croppedCanvases.length; i++) {
       const col = i % cols;
       const row = Math.floor(i / cols);
-      const x = col * (cellW + gap);
-      const y = row * (cellH + gap);
-      gCtx.drawImage(canvas, x, y, cellW, cellH);
+      const x = col * (maxW + gap) + (maxW - croppedCanvases[i].width) / 2;
+      const y = row * (maxH + gap) + (maxH - croppedCanvases[i].height) / 2;
+      gCtx.drawImage(croppedCanvases[i], x, y);
     }
 
     try {
@@ -545,7 +657,6 @@ function MockupPreview({
         setTimeout(() => URL.revokeObjectURL(url), 2000);
       }
     } catch (e) {
-      // Fallback: download individually
       for (let i = 0; i < activeSizes.length; i++) {
         await downloadSingle(activeSizes[i]);
         await new Promise((r) => setTimeout(r, 300));
@@ -553,16 +664,25 @@ function MockupPreview({
     }
   };
 
-  // Download all clean mockups (no annotations) — 2 column grid
+  // Download all clean mockups (no annotations) — 2 column grid (cropped)
   const downloadAllClean = async () => {
     if (activeSizes.length === 0) { alert('Please select at least one size in "Generate Mockups" section.'); return; }
+    
+    const croppedCanvases = [];
+    let maxW = 0, maxH = 0;
+    for (let i = 0; i < activeSizes.length; i++) {
+      const canvas = await renderHighRes(activeSizes[i], false);
+      const cropped = createCroppedDownload(canvas, activeSizes[i]);
+      croppedCanvases.push(cropped);
+      if (cropped.width > maxW) maxW = cropped.width;
+      if (cropped.height > maxH) maxH = cropped.height;
+    }
+    
     const cols = 2;
     const rows = Math.ceil(activeSizes.length / cols);
-    const cellW = 2000;
-    const cellH = 2400;
     const gap = 40;
-    const totalW = cols * cellW + (cols - 1) * gap;
-    const totalH = rows * cellH + (rows - 1) * gap;
+    const totalW = cols * maxW + (cols - 1) * gap;
+    const totalH = rows * maxH + (rows - 1) * gap;
 
     const gridCanvas = document.createElement('canvas');
     gridCanvas.width = totalW;
@@ -571,13 +691,12 @@ function MockupPreview({
     gCtx.fillStyle = '#ffffff';
     gCtx.fillRect(0, 0, totalW, totalH);
 
-    for (let i = 0; i < activeSizes.length; i++) {
-      const canvas = await renderHighRes(activeSizes[i], false);
+    for (let i = 0; i < croppedCanvases.length; i++) {
       const col = i % cols;
       const row = Math.floor(i / cols);
-      const x = col * (cellW + gap);
-      const y = row * (cellH + gap);
-      gCtx.drawImage(canvas, x, y, cellW, cellH);
+      const x = col * (maxW + gap) + (maxW - croppedCanvases[i].width) / 2;
+      const y = row * (maxH + gap) + (maxH - croppedCanvases[i].height) / 2;
+      gCtx.drawImage(croppedCanvases[i], x, y);
     }
 
     try {

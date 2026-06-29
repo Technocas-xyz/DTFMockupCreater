@@ -29,37 +29,61 @@ function MultiSizePreview({
   const baseBodyWidth = baseSizeData ? baseSizeData.bodyWidth : 22;
   const basePercentage = (artworkDimensions.width / baseBodyWidth) * 100;
 
+  // Magenta background crop detection — works for all shirt colors including white
+  const detectShirtBounds = (sourceCanvas) => {
+    const W = 700, H = 850;
+    // Draw the shirt on a magenta background to detect bounds
+    const detectCanvas = document.createElement('canvas');
+    detectCanvas.width = W;
+    detectCanvas.height = H;
+    const dCtx = detectCanvas.getContext('2d');
+    // Fill with magenta
+    dCtx.fillStyle = '#FF00FF';
+    dCtx.fillRect(0, 0, W, H);
+    // Draw the source canvas on top
+    dCtx.drawImage(sourceCanvas, 0, 0);
+    // Scan for non-magenta pixels
+    const imgData = dCtx.getImageData(0, 0, W, H);
+    const { data } = imgData;
+    let top = H, bottom = 0, left = W, right = 0;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const idx = (y * W + x) * 4;
+        const r = data[idx], g = data[idx + 1], b = data[idx + 2], a = data[idx + 3];
+        // Check if pixel is NOT magenta (R=255, G=0, B=255)
+        // Allow small tolerance for anti-aliased edges
+        if (a > 10 && !(r > 240 && g < 15 && b > 240)) {
+          if (y < top) top = y;
+          if (y > bottom) bottom = y;
+          if (x < left) left = x;
+          if (x > right) right = x;
+        }
+      }
+    }
+    // If nothing found, return full canvas
+    if (top >= bottom || left >= right) {
+      return { top: 0, left: 0, w: W, h: H };
+    }
+    return { top, left, w: right - left + 1, h: bottom - top + 1 };
+  };
+
   // Download All handler — uses high-res canvas directly
   const handleDownloadAll = () => {
     const numSizes = sortedSizes.length;
     
-    // First pass: find max crop dimensions across all cards
+    // First pass: find max crop dimensions across all cards using magenta detection
     let maxCropW = 0, maxCropH = 0;
     const cropData = [];
     
     sortedSizes.forEach((size) => {
       const ref = cardRefs.current[size];
       if (ref && ref.canvas) {
-        const sCtx = ref.canvas.getContext('2d');
-        const imgData = sCtx.getImageData(0, 0, 700, 850);
-        const { data } = imgData;
-        let top = 850, bottom = 0, left = 700, right = 0;
-        for (let y = 0; y < 850; y++) {
-          for (let x = 0; x < 700; x++) {
-            const idx = (y * 700 + x) * 4;
-            if (data[idx] < 248 || data[idx+1] < 248 || data[idx+2] < 248) {
-              if (y < top) top = y;
-              if (y > bottom) bottom = y;
-              if (x < left) left = x;
-              if (x > right) right = x;
-            }
-          }
-        }
+        const bounds = detectShirtBounds(ref.canvas);
         const pad = 10;
-        top = Math.max(0, top - pad);
-        bottom = Math.min(849, bottom + pad);
-        left = Math.max(0, left - pad);
-        right = Math.min(699, right + pad);
+        const top = Math.max(0, bounds.top - pad);
+        const left = Math.max(0, bounds.left - pad);
+        const bottom = Math.min(849, bounds.top + bounds.h - 1 + pad);
+        const right = Math.min(699, bounds.left + bounds.w - 1 + pad);
         const w = right - left + 1;
         const h = bottom - top + 1;
         if (w > maxCropW) maxCropW = w;
@@ -73,10 +97,13 @@ function MultiSizePreview({
     // Use uniform card size (max of all crops)
     const cardW = maxCropW;
     const cardH = maxCropH;
+    const topMargin = 20;
     const gap = 20;
     const textH = 35;
-    const totalW = numSizes * (cardW + gap) - gap;
-    const totalH = cardH + textH;
+    const bottomMargin = 20;
+    const cardGap = 20;
+    const totalW = numSizes * (cardW + cardGap) - cardGap;
+    const totalH = topMargin + cardH + gap + textH + bottomMargin;
 
     const combinedCanvas = document.createElement('canvas');
     combinedCanvas.width = totalW;
@@ -89,13 +116,13 @@ function MultiSizePreview({
       const ref = cardRefs.current[size];
       const crop = cropData[idx];
       if (ref && ref.canvas && crop) {
-        const x = idx * (cardW + gap);
+        const x = idx * (cardW + cardGap);
         // Center this card's crop within the uniform card size
         const offsetX = (cardW - crop.w) / 2;
         const offsetY = (cardH - crop.h) / 2;
-        combCtx.drawImage(ref.canvas, crop.left, crop.top, crop.w, crop.h, x + offsetX, offsetY, crop.w, crop.h);
+        combCtx.drawImage(ref.canvas, crop.left, crop.top, crop.w, crop.h, x + offsetX, topMargin + offsetY, crop.w, crop.h);
 
-        // Text below
+        // Text below shirt with 20px gap
         const artW = ref.artWidth || 0;
         const artH = ref.artHeight || 0;
         const realSize = size.includes('_') ? size.split('_')[0] : size;
@@ -103,7 +130,7 @@ function MultiSizePreview({
         combCtx.font = 'bold 15px sans-serif';
         combCtx.fillStyle = '#000000';
         combCtx.textAlign = 'center';
-        combCtx.fillText(text, x + cardW / 2, cardH + 22);
+        combCtx.fillText(text, x + cardW / 2, topMargin + cardH + gap + 15);
       }
     });
 
@@ -388,22 +415,30 @@ const MSPCard = React.forwardRef(function MSPCard({
     }
   }, [artwork, size, selectedColor, artworkDimensions, artworkPosition, artworkScale, artworkAreaSettings, viewSide, tshirtImg, isCustomGarment, sizeArtW, sizeArtH]);
 
-  // Download single card — auto-crop whitespace
+  // Download single card — magenta background crop detection (works for white shirts)
   const handleDownloadSingle = () => {
     const sourceCanvas = canvasRef.current;
     if (!sourceCanvas) return;
 
-    // Find non-white bounds to crop
-    const sCtx = sourceCanvas.getContext('2d');
-    const imgData = sCtx.getImageData(0, 0, 700, 850);
+    const W = 700, H = 850;
+    // Use magenta background to detect shirt bounds
+    const detectCanvas = document.createElement('canvas');
+    detectCanvas.width = W;
+    detectCanvas.height = H;
+    const dCtx = detectCanvas.getContext('2d');
+    dCtx.fillStyle = '#FF00FF';
+    dCtx.fillRect(0, 0, W, H);
+    dCtx.drawImage(sourceCanvas, 0, 0);
+
+    const imgData = dCtx.getImageData(0, 0, W, H);
     const { data } = imgData;
-    let top = 850, bottom = 0, left = 700, right = 0;
-    for (let y = 0; y < 850; y++) {
-      for (let x = 0; x < 700; x++) {
-        const idx = (y * 700 + x) * 4;
-        const r = data[idx], g = data[idx+1], b = data[idx+2];
-        // Pixel is not white background (allowing slight variation)
-        if (r < 248 || g < 248 || b < 248) {
+    let top = H, bottom = 0, left = W, right = 0;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const idx = (y * W + x) * 4;
+        const r = data[idx], g = data[idx + 1], b = data[idx + 2], a = data[idx + 3];
+        // Not magenta (R=255, G=0, B=255) — this is part of the shirt/artwork
+        if (a > 10 && !(r > 240 && g < 15 && b > 240)) {
           if (y < top) top = y;
           if (y > bottom) bottom = y;
           if (x < left) left = x;
@@ -412,34 +447,37 @@ const MSPCard = React.forwardRef(function MSPCard({
       }
     }
 
-    // Add padding — minimal
-    const pad = 10;
-    top = Math.max(0, top - pad);
-    bottom = Math.min(849, bottom + pad);
-    left = Math.max(0, left - pad);
-    right = Math.min(699, right + pad);
+    // Fallback if nothing detected
+    if (top >= bottom || left >= right) {
+      top = 0; bottom = H - 1; left = 0; right = W - 1;
+    }
+
+    // Layout: 20px top → shirt → 20px gap → text (15px bold) → 20px bottom
+    const topMargin = 20;
+    const gap = 20;
+    const textLineH = 20;
+    const bottomMargin = 20;
 
     const cropW = right - left + 1;
     const cropH = bottom - top + 1;
-    const textH = 25;
 
     const dlCanvas = document.createElement('canvas');
-    dlCanvas.width = cropW;
-    dlCanvas.height = cropH + textH;
+    dlCanvas.width = cropW + 40; // 20px margin each side
+    dlCanvas.height = topMargin + cropH + gap + textLineH + bottomMargin;
     const dlCtx = dlCanvas.getContext('2d');
 
     dlCtx.fillStyle = '#ffffff';
     dlCtx.fillRect(0, 0, dlCanvas.width, dlCanvas.height);
 
-    // Draw cropped shirt
-    dlCtx.drawImage(sourceCanvas, left, top, cropW, cropH, 0, 0, cropW, cropH);
+    // Draw cropped shirt centered horizontally
+    dlCtx.drawImage(sourceCanvas, left, top, cropW, cropH, 20, topMargin, cropW, cropH);
 
-    // Draw text immediately below
+    // Draw text below with 20px gap
     const text = `Shirt Size: ${realSize} | Artwork Size: W ${sizeArtW.toFixed(1)}" x H ${sizeArtH.toFixed(1)}"`;
     dlCtx.font = 'bold 15px sans-serif';
     dlCtx.fillStyle = '#000000';
     dlCtx.textAlign = 'center';
-    dlCtx.fillText(text, cropW / 2, cropH + 17);
+    dlCtx.fillText(text, dlCanvas.width / 2, topMargin + cropH + gap + 15);
 
     const link = document.createElement('a');
     link.download = `mockup-${realSize}.png`;
