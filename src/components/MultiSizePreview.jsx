@@ -338,6 +338,37 @@ const MSPCard = React.forwardRef(function MSPCard({
         ctx.clip();
         ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, drawX, drawY, artW, artH);
         ctx.restore();
+
+        // Draw rulers for debugging/verification
+        const rulerPpi = artPxPerInch;
+        ctx.strokeStyle = 'rgba(100,100,100,0.4)';
+        ctx.fillStyle = 'rgba(50,50,50,0.6)';
+        ctx.lineWidth = 1;
+        ctx.font = '18px sans-serif';
+        // Top ruler
+        ctx.textAlign = 'center';
+        const maxW = Math.ceil(sizeData.bodyWidth);
+        for (let i = 0; i <= maxW; i++) {
+          const x = tshirtX + i * rulerPpi;
+          const tick = i % 5 === 0 ? 12 : 6;
+          ctx.beginPath();
+          ctx.moveTo(x, tshirtY - 20);
+          ctx.lineTo(x, tshirtY - 20 + tick);
+          ctx.stroke();
+          if (i % 5 === 0) ctx.fillText(`${i}"`, x, tshirtY - 25);
+        }
+        // Left ruler
+        ctx.textAlign = 'right';
+        const maxH = Math.ceil(sizeData.bodyLength);
+        for (let i = 0; i <= maxH; i++) {
+          const y = tshirtY + i * rulerPpi;
+          const tick = i % 5 === 0 ? 12 : 6;
+          ctx.beginPath();
+          ctx.moveTo(tshirtX - 20, y);
+          ctx.lineTo(tshirtX - 20 + tick, y);
+          ctx.stroke();
+          if (i % 5 === 0) ctx.fillText(`${i}"`, tshirtX - 24, y + 5);
+        }
       };
       img.src = artwork;
     }
