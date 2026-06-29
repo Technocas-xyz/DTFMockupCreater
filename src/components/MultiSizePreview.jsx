@@ -214,8 +214,8 @@ const MSPCard = React.forwardRef(function MSPCard({
     // Each shirt fills its card similarly to how main canvas fills the view
     // This ensures the BASE size looks identical to the main canvas
     const drawAreaH = H - 100;
-    const fitW = W * 0.82;
-    const fitH = drawAreaH * 0.82;
+    const fitW = W * 0.75;
+    const fitH = drawAreaH * 0.65;
     const fitPxPerInch = Math.min(fitW / sizeData.bodyWidth, fitH / sizeData.bodyLength);
 
     if (tshirtImg) {
@@ -234,12 +234,12 @@ const MSPCard = React.forwardRef(function MSPCard({
         tshirtW = garmentBodyWidth * fitPxPerInch;
         tshirtH = garmentBodyHeight * fitPxPerInch;
         tshirtX = (W - tshirtW) / 2;
-        tshirtY = 50; // align to top with small padding
+        tshirtY = H * 0.15; // leave space for collar/sleeves at top
       } else {
         tshirtW = sizeData.bodyWidth * fitPxPerInch;
         tshirtH = sizeData.bodyLength * fitPxPerInch;
         tshirtX = (W - tshirtW) / 2;
-        tshirtY = 50; // align to top with small padding
+        tshirtY = H * 0.15; // leave space for collar/sleeves at top
       }
 
       // Draw garment image fitted to the calculated tshirtW × tshirtH
@@ -275,7 +275,7 @@ const MSPCard = React.forwardRef(function MSPCard({
       tshirtW = sizeData.bodyWidth * fitPxPerInch;
       tshirtH = sizeData.bodyLength * fitPxPerInch;
       tshirtX = (W - tshirtW) / 2;
-      tshirtY = 50; // align to top
+      tshirtY = H * 0.15; // align to top
       drawMiniTshirt(ctx, selectedColor.hex, viewSide, tshirtX, tshirtY, tshirtW, tshirtH);
     }
 
