@@ -29,7 +29,7 @@ function App() {
   const [artworkAreaSettings, setArtworkAreaSettings] = useState({
     width: 18,
     height: 24,
-    topOffset: 3,
+    topOffset: 5,
   });
   const [selectedMockupSizes, setSelectedMockupSizes] = useState(
     SIZE_ORDER.reduce((acc, size) => ({ ...acc, [size]: false }), {})
