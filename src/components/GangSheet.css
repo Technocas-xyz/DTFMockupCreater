@@ -287,6 +287,12 @@
   text-align: center;
 }
 
+.gs-sheet-separator {
+  color: var(--border);
+  margin: 0 4px;
+  font-size: 14px;
+}
+
 .gs-canvas-container {
   flex: 1;
   width: 100%;
