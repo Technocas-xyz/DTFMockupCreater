@@ -525,10 +525,8 @@ function GangSheet({ sharedArtwork }) {
     const ctx = exportCanvas.getContext('2d');
     if (!ctx) return null;
 
-    // Transparent top (header area), white artwork area
+    // Fully transparent background for DTF printing (no white BG)
     ctx.clearRect(0, 0, exportWidth, totalHeightPx);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, HEADER_HEIGHT + HEADER_MARGIN_TOP, exportWidth, sheetContentHeight);
 
     // === DRAW HEADER STRIP ===
     const headerStartY = HEADER_MARGIN_TOP;
