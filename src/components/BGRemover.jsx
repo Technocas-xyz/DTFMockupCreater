@@ -1,6 +1,10 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   removeBackground,
+  removeBackgroundFast,
+  removeBackgroundBalanced,
+  removeBackgroundAI,
+  detectArtworkType,
   detectObjects,
   generateObjectThumbnail,
   removeObjects,
@@ -132,11 +136,13 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
   const [historyIndex, setHistoryIndex] = useState(-1);
 
   // Processing controls
-  const [processingMode, setProcessingMode] = useState('auto');
+  const [processingMode, setProcessingMode] = useState('balanced');
+  const [bgRemovalMode, setBgRemovalMode] = useState('balanced'); // fast | balanced | ai | manual
   const [sensitivity, setSensitivity] = useState(40);
   const [feather, setFeather] = useState(0);
   const [removeInteriorWhite, setRemoveInteriorWhite] = useState(true);
   const [bgRemoved, setBgRemoved] = useState(false);
+  const [artworkDetection, setArtworkDetection] = useState(null);
 
   // Object selection
   const [detectedObjects, setDetectedObjects] = useState([]);
@@ -268,7 +274,7 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
       setRotation(0);
       setFlipH(false);
       setFlipV(false);
-      // Run quality analysis
+      // Run quality analysis + artwork detection
       const canvas = document.createElement('canvas');
       canvas.width = img.naturalWidth;
       canvas.height = img.naturalHeight;
@@ -276,6 +282,9 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
       ctx.drawImage(img, 0, 0);
       const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       setQualityReport(analyzeImageQuality(imgData));
+      const detection = detectArtworkType(imgData);
+      setArtworkDetection(detection);
+      setBgRemovalMode(detection.recommended);
     };
     img.src = dataUrl;
   };
@@ -330,11 +339,25 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
     setTimeout(async () => {
       try {
         const imgData = await getImageDataFromUrl(originalImage);
-        const processed = removeBackground(imgData, sensitivity, feather, removeInteriorWhite);
+        let processed;
+
+        switch (bgRemovalMode) {
+          case 'fast':
+            processed = removeBackgroundFast(imgData);
+            break;
+          case 'ai':
+            processed = removeBackgroundAI(imgData);
+            break;
+          case 'balanced':
+          default:
+            processed = removeBackgroundBalanced(imgData);
+            break;
+        }
+
         setProcessedImageData(processed);
         setDisplayUrl(imageDataToUrl(processed));
         setBgRemoved(true);
-        pushHistory(processed, 'Remove Background');
+        pushHistory(processed, `Remove BG (${bgRemovalMode})`);
         setImageDimensions({ width: processed.width, height: processed.height });
         // Detect objects
         const objects = detectObjects(processed, processed.width, processed.height);
@@ -350,6 +373,63 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
     }, 50);
   };
 
+  // One-Click AI Optimize
+  const handleOneClickOptimize = async () => {
+    if (!originalImage) return;
+    setIsProcessing(true);
+    setTimeout(async () => {
+      try {
+        const imgData = await getImageDataFromUrl(originalImage);
+        // Step 1: Detect type and use best mode
+        const detection = detectArtworkType(imgData);
+        let processed;
+        if (detection.recommended === 'fast') processed = removeBackgroundFast(imgData);
+        else if (detection.recommended === 'ai') processed = removeBackgroundAI(imgData);
+        else processed = removeBackgroundBalanced(imgData);
+
+        // Step 2: Clean edges
+        processed = cleanEdges(processed, processed.width, processed.height);
+
+        // Step 3: Trim
+        const { data, width: w, height: h } = processed;
+        let minX = w, minY = h, maxX = 0, maxY = 0;
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            if (data[(y * w + x) * 4 + 3] > 0) {
+              if (x < minX) minX = x; if (x > maxX) maxX = x;
+              if (y < minY) minY = y; if (y > maxY) maxY = y;
+            }
+          }
+        }
+        if (maxX >= minX && maxY >= minY) {
+          minX = Math.max(0, minX - 2); minY = Math.max(0, minY - 2);
+          maxX = Math.min(w - 1, maxX + 2); maxY = Math.min(h - 1, maxY + 2);
+          const nw = maxX - minX + 1, nh = maxY - minY + 1;
+          const tc = document.createElement('canvas');
+          tc.width = nw; tc.height = nh;
+          const tctx = tc.getContext('2d');
+          const sc = document.createElement('canvas');
+          sc.width = w; sc.height = h;
+          sc.getContext('2d').putImageData(processed, 0, 0);
+          tctx.drawImage(sc, minX, minY, nw, nh, 0, 0, nw, nh);
+          processed = tctx.getImageData(0, 0, nw, nh);
+        }
+
+        setProcessedImageData(processed);
+        setDisplayUrl(imageDataToUrl(processed));
+        setBgRemoved(true);
+        pushHistory(processed, 'AI Optimize');
+        setImageDimensions({ width: processed.width, height: processed.height });
+        setQualityReport(analyzeImageQuality(processed));
+        const objects = detectObjects(processed, processed.width, processed.height);
+        const objectsWithThumbs = objects.map(obj => ({ ...obj, thumbnail: generateObjectThumbnail(processed, obj.bounds) }));
+        setDetectedObjects(objectsWithThumbs);
+        setSelectedObjectIds(new Set(objectsWithThumbs.map(o => o.id)));
+      } catch (err) { console.error('AI Optimize failed:', err); }
+      setIsProcessing(false);
+    }, 50);
+  };
+
   const handleReset = () => {
     setDisplayUrl(originalImage);
     setProcessedImageData(null);
@@ -358,6 +438,29 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
     setSelectedObjectIds(new Set());
     resetEnhancements();
     setRotation(0); setFlipH(false); setFlipV(false);
+  };
+
+  // Manual mode removal (uses sensitivity/feather sliders)
+  const handleRemoveBackgroundManual = async () => {
+    if (!originalImage) return;
+    setIsProcessing(true);
+    setTimeout(async () => {
+      try {
+        const imgData = await getImageDataFromUrl(originalImage);
+        const processed = removeBackground(imgData, sensitivity, feather, removeInteriorWhite);
+        setProcessedImageData(processed);
+        setDisplayUrl(imageDataToUrl(processed));
+        setBgRemoved(true);
+        pushHistory(processed, 'Remove BG (manual)');
+        setImageDimensions({ width: processed.width, height: processed.height });
+        const objects = detectObjects(processed, processed.width, processed.height);
+        const objectsWithThumbs = objects.map(obj => ({ ...obj, thumbnail: generateObjectThumbnail(processed, obj.bounds) }));
+        setDetectedObjects(objectsWithThumbs);
+        setSelectedObjectIds(new Set(objectsWithThumbs.map(o => o.id)));
+        setQualityReport(analyzeImageQuality(processed));
+      } catch (err) { console.error('Manual BG removal failed:', err); }
+      setIsProcessing(false);
+    }, 50);
   };
 
   // Object selection handlers
@@ -847,30 +950,70 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
               Background Removal {expandedSections.bgRemoval ? '▾' : '▸'}
             </h3>
             {expandedSections.bgRemoval && (<>
-              <div className="bgr-control-group">
-                <label className="bgr-label">Mode</label>
-                <div className="bgr-toggle-group">
-                  <button className={`bgr-toggle-btn ${processingMode === 'auto' ? 'active' : ''}`} onClick={() => setProcessingMode('auto')}>Auto</button>
-                  <button className={`bgr-toggle-btn ${processingMode === 'manual' ? 'active' : ''}`} onClick={() => setProcessingMode('manual')}>Manual</button>
+              {/* Mode Selection */}
+              <div className="bgr-mode-selector">
+                <div className={`bgr-mode-option ${bgRemovalMode === 'fast' ? 'active' : ''}`} onClick={() => setBgRemovalMode('fast')}>
+                  <span className="bgr-mode-icon">⚡</span>
+                  <span className="bgr-mode-name">Fast</span>
+                  <span className="bgr-mode-time">&lt;2s</span>
+                </div>
+                <div className={`bgr-mode-option ${bgRemovalMode === 'balanced' ? 'active' : ''}`} onClick={() => setBgRemovalMode('balanced')}>
+                  <span className="bgr-mode-icon">⭐</span>
+                  <span className="bgr-mode-name">Balanced</span>
+                  <span className="bgr-mode-time">2-5s</span>
+                </div>
+                <div className={`bgr-mode-option ${bgRemovalMode === 'ai' ? 'active' : ''}`} onClick={() => setBgRemovalMode('ai')}>
+                  <span className="bgr-mode-icon">🧠</span>
+                  <span className="bgr-mode-name">AI Precision</span>
+                  <span className="bgr-mode-time">5-15s</span>
+                </div>
+                <div className={`bgr-mode-option ${bgRemovalMode === 'manual' ? 'active' : ''}`} onClick={() => setBgRemovalMode('manual')}>
+                  <span className="bgr-mode-icon">✋</span>
+                  <span className="bgr-mode-name">Manual</span>
+                  <span className="bgr-mode-time">—</span>
                 </div>
               </div>
-              <div className="bgr-control-group">
-                <label className="bgr-label">Sensitivity <span className="bgr-label-value">{sensitivity}</span></label>
-                <input type="range" min="0" max="100" value={sensitivity} onChange={(e) => setSensitivity(Number(e.target.value))} className="bgr-slider" />
+
+              {/* Mode Info */}
+              <div className="bgr-mode-info">
+                {bgRemovalMode === 'fast' && <p className="bgr-hint">Best for: Logos, clipart, SVG-style graphics, solid backgrounds</p>}
+                {bgRemovalMode === 'balanced' && <p className="bgr-hint">Best for: DTF/POD artwork, vintage designs, multi-color graphics, distressed art</p>}
+                {bgRemovalMode === 'ai' && <p className="bgr-hint">Best for: Photographs, hair, watercolor, smoke, transparent objects, fine details</p>}
+                {bgRemovalMode === 'manual' && <p className="bgr-hint">Full manual control with sensitivity and feather adjustments</p>}
               </div>
-              <div className="bgr-control-group">
-                <label className="bgr-label">Edge Feather <span className="bgr-label-value">{feather}px</span></label>
-                <input type="range" min="0" max="5" step="0.5" value={feather} onChange={(e) => setFeather(Number(e.target.value))} className="bgr-slider" />
-              </div>
-              <div className="bgr-control-group">
-                <label className="bgr-label bgr-toggle-label">
-                  <span>Remove Interior BG</span>
-                  <button className={`bgr-toggle-btn ${removeInteriorWhite ? 'active' : ''}`} onClick={() => setRemoveInteriorWhite(v => !v)}>{removeInteriorWhite ? 'ON' : 'OFF'}</button>
-                </label>
-              </div>
+
+              {/* Artwork Detection */}
+              {artworkDetection && (
+                <div className="bgr-detection-badge">
+                  <span className="bgr-detection-type">Detected: {artworkDetection.type}</span>
+                  <span className="bgr-detection-reason">{artworkDetection.reason}</span>
+                </div>
+              )}
+
+              {/* Manual controls (only show in manual mode) */}
+              {bgRemovalMode === 'manual' && (<>
+                <div className="bgr-control-group">
+                  <label className="bgr-label">Sensitivity <span className="bgr-label-value">{sensitivity}</span></label>
+                  <input type="range" min="0" max="100" value={sensitivity} onChange={(e) => setSensitivity(Number(e.target.value))} className="bgr-slider" />
+                </div>
+                <div className="bgr-control-group">
+                  <label className="bgr-label">Edge Feather <span className="bgr-label-value">{feather}px</span></label>
+                  <input type="range" min="0" max="5" step="0.5" value={feather} onChange={(e) => setFeather(Number(e.target.value))} className="bgr-slider" />
+                </div>
+                <div className="bgr-control-group">
+                  <label className="bgr-label bgr-toggle-label">
+                    <span>Remove Interior BG</span>
+                    <button className={`bgr-toggle-btn ${removeInteriorWhite ? 'active' : ''}`} onClick={() => setRemoveInteriorWhite(v => !v)}>{removeInteriorWhite ? 'ON' : 'OFF'}</button>
+                  </label>
+                </div>
+              </>)}
+
               <div className="bgr-button-group">
-                <button className="bgr-btn bgr-btn-primary" onClick={handleRemoveBackground} disabled={!originalImage || isProcessing}>
+                <button className="bgr-btn bgr-btn-primary" onClick={bgRemovalMode === 'manual' ? handleRemoveBackgroundManual : handleRemoveBackground} disabled={!originalImage || isProcessing}>
                   {isProcessing ? 'Processing...' : 'Remove Background'}
+                </button>
+                <button className="bgr-btn bgr-btn-accent" onClick={handleOneClickOptimize} disabled={!originalImage || isProcessing}>
+                  🪄 AI Optimize Artwork
                 </button>
                 <button className="bgr-btn bgr-btn-outline" onClick={handleReset} disabled={!bgRemoved}>Reset to Original</button>
               </div>

@@ -1,8 +1,238 @@
 /**
  * Background Removal Utilities
+ * Multi-mode system: Fast, Balanced, AI Precision, Manual
  * Provides flood-fill based background removal, object detection,
  * edge cleaning, and image enhancement functions.
  */
+
+// ─── ARTWORK TYPE DETECTION ──────────────────────────────────────────────────
+export function detectArtworkType(imageData) {
+  const { data, width, height } = imageData;
+  const totalPixels = width * height;
+  let transparentCount = 0;
+  let uniqueColors = new Set();
+  let edgeComplexity = 0;
+  let colorVariance = 0;
+
+  // Sample every 4th pixel for speed
+  const sampleColors = [];
+  for (let i = 0; i < data.length; i += 16) {
+    const a = data[i + 3];
+    if (a === 0) { transparentCount++; continue; }
+    const r = data[i], g = data[i + 1], b = data[i + 2];
+    const quantized = `${Math.round(r/16)},${Math.round(g/16)},${Math.round(b/16)}`;
+    uniqueColors.add(quantized);
+    sampleColors.push([r, g, b]);
+  }
+
+  const colorCount = uniqueColors.size;
+  const hasTransparency = transparentCount > totalPixels * 0.01;
+
+  // Check color variance
+  if (sampleColors.length > 0) {
+    const avgR = sampleColors.reduce((s, c) => s + c[0], 0) / sampleColors.length;
+    const avgG = sampleColors.reduce((s, c) => s + c[1], 0) / sampleColors.length;
+    const avgB = sampleColors.reduce((s, c) => s + c[2], 0) / sampleColors.length;
+    colorVariance = sampleColors.reduce((s, c) => s + Math.abs(c[0] - avgR) + Math.abs(c[1] - avgG) + Math.abs(c[2] - avgB), 0) / sampleColors.length;
+  }
+
+  // Classify
+  let type = 'illustration';
+  let recommended = 'balanced';
+  let reason = '';
+
+  if (hasTransparency && colorCount < 50) {
+    type = 'transparent-png'; recommended = 'fast';
+    reason = 'Already has transparency with simple colors.';
+  } else if (colorCount < 30) {
+    type = 'logo'; recommended = 'fast';
+    reason = 'Simple solid-color artwork, fast mode works best.';
+  } else if (colorCount < 100 && colorVariance < 40) {
+    type = 'clipart'; recommended = 'fast';
+    reason = 'Clean vector-style artwork with limited colors.';
+  } else if (colorVariance > 80 && colorCount > 500) {
+    type = 'photograph'; recommended = 'ai';
+    reason = 'High color complexity suggests photograph. AI mode preserves fine details.';
+  } else if (colorCount > 300 && colorVariance > 60) {
+    type = 'watercolor'; recommended = 'ai';
+    reason = 'Complex color gradients need AI precision for clean edges.';
+  } else if (colorCount >= 100 && colorCount <= 500) {
+    type = 'vintage-design'; recommended = 'balanced';
+    reason = 'Contains distressed texture and decorative elements. Balanced preserves details.';
+  } else {
+    type = 'illustration'; recommended = 'balanced';
+    reason = 'Standard illustration. Balanced mode handles this well.';
+  }
+
+  return { type, recommended, reason, colorCount, colorVariance: Math.round(colorVariance), hasTransparency };
+}
+
+/**
+ * FAST MODE: Quick processing for simple artwork
+ * Uses aggressive flood-fill + auto-trim
+ */
+export function removeBackgroundFast(imageData) {
+  const result = removeBackground(imageData, 45, 0, true);
+  // Auto-clean: remove tiny floating clusters
+  return cleanSmallClusters(result, 20);
+}
+
+/**
+ * BALANCED MODE: Intelligent removal for most POD artwork
+ * Preserves distressed effects, thin lines, small elements
+ * Removes dust, floating pixels, JPEG artifacts
+ */
+export function removeBackgroundBalanced(imageData) {
+  const { width, height } = imageData;
+  // Step 1: Intelligent BG removal with moderate tolerance
+  let result = removeBackground(imageData, 35, 0, true);
+
+  // Step 2: Remove halos (white and black)
+  result = removeHaloPixels(result, width, height);
+
+  // Step 3: Clean noise but preserve small details (threshold 15px)
+  result = cleanSmallClusters(result, 15);
+
+  // Step 4: Smooth edges slightly
+  result = smoothEdges(result, width, height, 1);
+
+  return result;
+}
+
+/**
+ * AI PRECISION MODE: Highest quality for photos/complex art
+ * Uses multi-pass segmentation + alpha matting simulation
+ */
+export function removeBackgroundAI(imageData) {
+  const { data, width, height } = imageData;
+
+  // Step 1: Multi-threshold background detection
+  // Run flood fill at multiple tolerances, use voting
+  const votes = new Float32Array(width * height);
+  const tolerances = [25, 35, 45, 55];
+
+  for (const tol of tolerances) {
+    const pass = removeBackground(
+      new ImageData(new Uint8ClampedArray(data), width, height),
+      tol, 0, true
+    );
+    for (let i = 0; i < width * height; i++) {
+      if (pass.data[i * 4 + 3] === 0) votes[i] += 1;
+    }
+  }
+
+  // Step 2: Create confidence-based alpha
+  const result = new Uint8ClampedArray(data);
+  for (let i = 0; i < width * height; i++) {
+    const confidence = votes[i] / tolerances.length;
+    if (confidence >= 0.75) {
+      // Definitely background
+      result[i * 4 + 3] = 0;
+    } else if (confidence >= 0.5) {
+      // Probably background — apply soft alpha
+      result[i * 4 + 3] = Math.round(result[i * 4 + 3] * (1 - confidence));
+    }
+    // else: keep as foreground
+  }
+
+  // Step 3: Edge refinement — smooth the alpha channel at edges
+  let imgData = new ImageData(result, width, height);
+  imgData = smoothEdges(imgData, width, height, 2);
+
+  // Step 4: Remove halos
+  imgData = removeHaloPixels(imgData, width, height);
+
+  // Step 5: Clean very small noise (< 10px clusters)
+  imgData = cleanSmallClusters(imgData, 10);
+
+  return imgData;
+}
+
+/**
+ * Remove white and black halo pixels at edges
+ */
+function removeHaloPixels(imageData, width, height) {
+  const data = new Uint8ClampedArray(imageData.data);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = (y * width + x) * 4;
+      const a = data[idx + 3];
+      if (a === 0 || a > 200) continue;
+      // Semi-transparent pixel — check if it's a halo
+      const r = data[idx], g = data[idx + 1], b = data[idx + 2];
+      // White halo
+      if (r > 220 && g > 220 && b > 220 && a < 180) { data[idx + 3] = 0; continue; }
+      // Black halo
+      if (r < 35 && g < 35 && b < 35 && a < 180) { data[idx + 3] = 0; continue; }
+    }
+  }
+  return new ImageData(data, width, height);
+}
+
+/**
+ * Smooth edge alpha values using a small box blur on alpha only
+ */
+function smoothEdges(imageData, width, height, radius = 1) {
+  const data = new Uint8ClampedArray(imageData.data);
+  const original = imageData.data;
+
+  for (let y = radius; y < height - radius; y++) {
+    for (let x = radius; x < width - radius; x++) {
+      const idx = (y * width + x) * 4;
+      const a = original[idx + 3];
+      if (a === 0 || a === 255) continue; // Only smooth partial alpha
+      let sum = 0, count = 0;
+      for (let dy = -radius; dy <= radius; dy++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          sum += original[((y + dy) * width + (x + dx)) * 4 + 3];
+          count++;
+        }
+      }
+      data[idx + 3] = Math.round(sum / count);
+    }
+  }
+  return new ImageData(data, width, height);
+}
+
+/**
+ * Remove clusters smaller than minSize pixels
+ */
+function cleanSmallClusters(imageData, minSize = 20) {
+  const { data, width, height } = imageData;
+  const result = new Uint8ClampedArray(data);
+  const totalPixels = width * height;
+  const visited = new Uint8Array(totalPixels);
+
+  for (let i = 0; i < totalPixels; i++) {
+    if (visited[i] || result[i * 4 + 3] < 10) continue;
+    // BFS to find cluster
+    const cluster = [i];
+    const queue = [i];
+    visited[i] = 1;
+    let head = 0;
+    while (head < queue.length) {
+      const p = queue[head++];
+      const px = p % width, py = Math.floor(p / width);
+      const neighbors = [];
+      if (px > 0) neighbors.push(p - 1);
+      if (px < width - 1) neighbors.push(p + 1);
+      if (py > 0) neighbors.push(p - width);
+      if (py < height - 1) neighbors.push(p + width);
+      for (const n of neighbors) {
+        if (!visited[n] && result[n * 4 + 3] >= 10) {
+          visited[n] = 1;
+          queue.push(n);
+          cluster.push(n);
+        }
+      }
+    }
+    // Remove if too small
+    if (cluster.length < minSize) {
+      for (const p of cluster) result[p * 4 + 3] = 0;
+    }
+  }
+  return new ImageData(result, width, height);
+}
 
 /**
  * Remove background using flood fill from edges
