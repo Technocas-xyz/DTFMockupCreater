@@ -16,7 +16,7 @@ import './BGRemover.css';
 
 // ─── CONSTANTS ──────────────────────────────────────────────────────────────────
 const MAX_HISTORY = 50;
-const ZOOM_LEVELS = [25, 50, 100, 200, 400, 800];
+const ZOOM_LEVELS = [25, 50, 100, 200, 400, 800, 1600];
 const CROP_RATIOS = [
   { label: 'Free', value: null },
   { label: '1:1', value: 1 },
@@ -184,6 +184,9 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [showGrid, setShowGrid] = useState(false);
   const [showRulers, setShowRulers] = useState(false);
+  const [handToolActive, setHandToolActive] = useState(false);
+  const [spaceHeld, setSpaceHeld] = useState(false);
+  const [viewMode, setViewMode] = useState('normal'); // normal | transparency | alpha
 
   // Collapsible sections state
   const [expandedSections, setExpandedSections] = useState({
@@ -242,13 +245,42 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
 
   // Keyboard shortcuts
   useEffect(() => {
-    const handleKey = (e) => {
+    const handleKeyDown = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
       if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); redo(); }
+      // Spacebar = temporary hand tool
+      if (e.code === 'Space' && !e.repeat && e.target.tagName !== 'INPUT') { e.preventDefault(); setSpaceHeld(true); }
+      // H = toggle hand tool
+      if (e.key === 'h' || e.key === 'H') { if (e.target.tagName !== 'INPUT') setHandToolActive(prev => !prev); }
+      // + / - zoom
+      if ((e.ctrlKey || e.metaKey) && (e.key === '=' || e.key === '+')) { e.preventDefault(); zoomIn(); }
+      if ((e.ctrlKey || e.metaKey) && e.key === '-') { e.preventDefault(); zoomOut(); }
+      if ((e.ctrlKey || e.metaKey) && e.key === '0') { e.preventDefault(); zoomFit(); }
     };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
+    const handleKeyUp = (e) => {
+      if (e.code === 'Space') { setSpaceHeld(false); }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); };
   }, [undo, redo]);
+
+  // Mouse wheel zoom on preview area
+  const handleWheel = useCallback((e) => {
+    e.preventDefault();
+    if (e.ctrlKey || e.metaKey) {
+      // Ctrl+Wheel = zoom to cursor
+      if (e.deltaY < 0) setZoom(prev => { const idx = ZOOM_LEVELS.findIndex(z => z > prev); return idx >= 0 ? ZOOM_LEVELS[idx] : prev; });
+      else setZoom(prev => { const idx = ZOOM_LEVELS.slice().reverse().findIndex(z => z < prev); return idx >= 0 ? ZOOM_LEVELS[ZOOM_LEVELS.length - 1 - idx] : prev; });
+    } else if (e.shiftKey) {
+      // Shift+Wheel = horizontal pan
+      setPanOffset(prev => ({ ...prev, x: prev.x - e.deltaY }));
+    } else {
+      // Wheel = zoom
+      if (e.deltaY < 0) setZoom(prev => { const idx = ZOOM_LEVELS.findIndex(z => z > prev); return idx >= 0 ? ZOOM_LEVELS[idx] : prev; });
+      else setZoom(prev => { const idx = ZOOM_LEVELS.slice().reverse().findIndex(z => z < prev); return idx >= 0 ? ZOOM_LEVELS[ZOOM_LEVELS.length - 1 - idx] : prev; });
+    }
+  }, []);
 
   // ─── IMAGE LOADING ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -365,7 +397,8 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
           ...obj, thumbnail: generateObjectThumbnail(processed, obj.bounds),
         }));
         setDetectedObjects(objectsWithThumbs);
-        setSelectedObjectIds(new Set(objectsWithThumbs.map(o => o.id)));
+        // Auto-select artwork, deselect noise
+        setSelectedObjectIds(new Set(objectsWithThumbs.filter(o => o.category === 'artwork').map(o => o.id)));
         // Update quality report
         setQualityReport(analyzeImageQuality(processed));
       } catch (err) { console.error('Background removal failed:', err); }
@@ -865,9 +898,18 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
   const zoomFit = () => { setZoom(100); setPanOffset({ x: 0, y: 0 }); };
   const zoomActual = () => { setZoom(100); setPanOffset({ x: 0, y: 0 }); };
 
-  const handlePanStart = (e) => { if (zoom <= 100) return; e.preventDefault(); setIsPanning(true); setPanStart({ x: e.clientX - panOffset.x, y: e.clientY - panOffset.y }); };
+  const canPan = zoom > 100 || handToolActive || spaceHeld;
+  const handlePanStart = (e) => { if (!canPan) return; e.preventDefault(); setIsPanning(true); setPanStart({ x: e.clientX - panOffset.x, y: e.clientY - panOffset.y }); };
   const handlePanMove = (e) => { if (!isPanning) return; setPanOffset({ x: e.clientX - panStart.x, y: e.clientY - panStart.y }); };
   const handlePanEnd = () => setIsPanning(false);
+  // Middle mouse button pan
+  const handleMiddleDown = (e) => { if (e.button === 1) { e.preventDefault(); setIsPanning(true); setPanStart({ x: e.clientX - panOffset.x, y: e.clientY - panOffset.y }); } };
+
+  const getCursor = () => {
+    if (handToolActive || spaceHeld) return isPanning ? 'grabbing' : 'grab';
+    if (zoom > 100) return isPanning ? 'grabbing' : 'grab';
+    return 'default';
+  };
 
   // Section toggle
   const toggleSection = (key) => setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }));
@@ -1030,11 +1072,12 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
                 <button className={`bgr-view-tab ${showBeforeAfter ? 'active' : ''}`} onClick={() => setShowBeforeAfter(true)} disabled={!bgRemoved}>Before/After</button>
               </div>
               <div className="bgr-zoom-controls">
-                <button className="bgr-zoom-btn" onClick={zoomOut}>−</button>
+                <button className="bgr-zoom-btn" onClick={zoomOut} title="Zoom Out (Ctrl+-)">−</button>
                 <span className="bgr-zoom-value">{zoom}%</span>
-                <button className="bgr-zoom-btn" onClick={zoomIn}>+</button>
-                <button className="bgr-zoom-btn" onClick={zoomFit}>Fit</button>
-                <button className="bgr-zoom-btn" onClick={zoomActual}>1:1</button>
+                <button className="bgr-zoom-btn" onClick={zoomIn} title="Zoom In (Ctrl++)">+</button>
+                <button className="bgr-zoom-btn" onClick={zoomFit} title="Fit (Ctrl+0)">Fit</button>
+                <button className="bgr-zoom-btn" onClick={zoomActual} title="1:1 Actual Pixels">1:1</button>
+                <button className={`bgr-zoom-btn ${handToolActive ? 'active' : ''}`} onClick={() => setHandToolActive(h => !h)} title="Hand Tool (H) / Hold Space">✋</button>
               </div>
             </div>
 
@@ -1064,8 +1107,9 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
                 </div>
               ) : (
                 <div className="bgr-image-display"
-                  style={{ transform: `scale(${zoom / 100}) translate(${panOffset.x / (zoom / 100)}px, ${panOffset.y / (zoom / 100)}px)`, cursor: zoom > 100 ? (isPanning ? 'grabbing' : 'grab') : 'default' }}
-                  onMouseDown={handlePanStart} onMouseMove={handlePanMove} onMouseUp={handlePanEnd} onMouseLeave={handlePanEnd}>
+                  style={{ transform: `scale(${zoom / 100}) translate(${panOffset.x / (zoom / 100)}px, ${panOffset.y / (zoom / 100)}px)`, cursor: getCursor() }}
+                  onMouseDown={handlePanStart} onMouseMove={handlePanMove} onMouseUp={handlePanEnd} onMouseLeave={handlePanEnd}
+                  onAuxClick={handleMiddleDown} onWheel={handleWheel}>
                   <img src={displayUrl} alt="Preview" className="bgr-preview-image" ref={canvasRef} />
                 </div>
               )}
@@ -1083,18 +1127,27 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
           {bgRemoved && detectedObjects.length > 0 && (
             <div className="bgr-objects-panel">
               <div className="bgr-objects-header">
-                <h3 className="bgr-panel-title">Detected Objects ({detectedObjects.length})</h3>
+                <h3 className="bgr-panel-title">
+                  {detectedObjects.filter(o => o.category === 'artwork').length > 0 ? 'Artwork' : 'Objects'} 
+                  {detectedObjects.filter(o => o.category === 'noise').length > 0 && (
+                    <span className="bgr-noise-count"> · {detectedObjects.filter(o => o.category === 'noise').length} noise</span>
+                  )}
+                </h3>
                 <div className="bgr-objects-actions">
-                  <button className="bgr-btn bgr-btn-sm bgr-btn-primary" onClick={handleKeepSelected} disabled={selectedObjectIds.size === 0}>Keep ✓</button>
-                  <button className="bgr-btn bgr-btn-sm bgr-btn-danger" onClick={handleDeleteSelected} disabled={detectedObjects.length === selectedObjectIds.size}>Delete ✕</button>
+                  {detectedObjects.filter(o => o.category === 'noise').length > 0 && (
+                    <button className="bgr-btn bgr-btn-sm bgr-btn-danger" onClick={handleDeleteSelected} title="Remove all noise objects">
+                      Remove Noise
+                    </button>
+                  )}
                 </div>
               </div>
               <div className="bgr-objects-grid">
                 {detectedObjects.map(obj => (
-                  <div key={obj.id} className={`bgr-object-thumb ${selectedObjectIds.has(obj.id) ? 'selected' : 'deselected'}`} onClick={() => toggleObjectSelection(obj.id)}>
+                  <div key={obj.id} className={`bgr-object-thumb ${obj.category === 'artwork' ? 'selected' : 'deselected'} ${obj.category === 'noise' ? 'noise' : ''}`}
+                    onClick={() => toggleObjectSelection(obj.id)}>
                     {obj.thumbnail && <img src={obj.thumbnail} alt={`Object ${obj.id}`} />}
-                    <span className="bgr-object-id">#{obj.id}</span>
-                    <span className="bgr-object-size">{obj.pixelCount}px</span>
+                    <span className="bgr-object-id">{obj.category === 'artwork' ? '✓ Artwork' : `#${obj.id} noise`}</span>
+                    <span className="bgr-object-size">{obj.pixelCount > 1000 ? `${(obj.pixelCount/1000).toFixed(1)}k` : obj.pixelCount}px</span>
                     {selectedObjectIds.has(obj.id) ? <span className="bgr-object-check">✓</span> : <span className="bgr-object-x">✕</span>}
                   </div>
                 ))}

@@ -466,16 +466,18 @@ export function removeBackground(imageData, tolerance = 30, feather = 0, removeI
 
 /**
  * Detect separate objects/regions in the foreground
+ * SMART MODE: Merges decorative elements into main artwork,
+ * only reports genuinely isolated noise as separate objects.
  * @param {ImageData} imageData - image with background already removed
  * @param {number} width
  * @param {number} height
- * @returns {Array<{id: number, pixels: Array, bounds: {x,y,w,h}, thumbnail: string}>}
+ * @returns {Array<{id: number, pixels: Array, bounds: {x,y,w,h}, category: string}>}
  */
 export function detectObjects(imageData, width, height) {
   const data = imageData.data;
   const totalPixels = width * height;
   const labels = new Int32Array(totalPixels);
-  const objects = [];
+  const rawComponents = [];
   let currentLabel = 0;
 
   // Connected component labeling on non-transparent pixels
@@ -483,14 +485,12 @@ export function detectObjects(imageData, width, height) {
     for (let x = 0; x < width; x++) {
       const idx = y * width + x;
       if (labels[idx] !== 0) continue;
-      if (data[idx * 4 + 3] < 10) continue; // skip transparent
+      if (data[idx * 4 + 3] < 10) continue;
 
-      // BFS to find connected component
       currentLabel++;
       const component = [];
       const bfsQueue = [idx];
       labels[idx] = currentLabel;
-
       let minX = x, maxX = x, minY = y, maxY = y;
 
       let bfsHead = 0;
@@ -499,46 +499,120 @@ export function detectObjects(imageData, width, height) {
         const px = pIdx % width;
         const py = Math.floor(pIdx / width);
         component.push(pIdx);
-
         if (px < minX) minX = px;
         if (px > maxX) maxX = px;
         if (py < minY) minY = py;
         if (py > maxY) maxY = py;
 
-        // 4-connected neighbors
-        const neighbors = [];
-        if (px > 0) neighbors.push(pIdx - 1);
-        if (px < width - 1) neighbors.push(pIdx + 1);
-        if (py > 0) neighbors.push(pIdx - width);
-        if (py < height - 1) neighbors.push(pIdx + width);
-
-        for (const nIdx of neighbors) {
-          if (labels[nIdx] !== 0) continue;
-          if (data[nIdx * 4 + 3] < 10) continue;
-          labels[nIdx] = currentLabel;
-          bfsQueue.push(nIdx);
+        // 8-connected for better grouping of diagonal elements
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue;
+            const nx = px + dx, ny = py + dy;
+            if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+            const nIdx = ny * width + nx;
+            if (labels[nIdx] !== 0) continue;
+            if (data[nIdx * 4 + 3] < 10) continue;
+            labels[nIdx] = currentLabel;
+            bfsQueue.push(nIdx);
+          }
         }
       }
 
-      // Only keep objects with at least 50 pixels (filter noise)
-      if (component.length >= 50) {
-        objects.push({
+      if (component.length >= 5) {
+        rawComponents.push({
           id: currentLabel,
           pixels: component,
           bounds: { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 },
           pixelCount: component.length,
-          thumbnail: null, // will be generated in component
+          centerX: (minX + maxX) / 2,
+          centerY: (minY + maxY) / 2,
         });
       }
     }
   }
 
-  // Sort by size (largest first)
-  objects.sort((a, b) => b.pixelCount - a.pixelCount);
+  if (rawComponents.length === 0) return [];
 
-  // Re-assign IDs after sorting
-  objects.forEach((obj, i) => {
-    obj.id = i + 1;
+  // Sort by size (largest first)
+  rawComponents.sort((a, b) => b.pixelCount - a.pixelCount);
+
+  // SMART MERGING: The largest component is the "main artwork"
+  // Merge components that are close to it or reasonably sized
+  const mainComponent = rawComponents[0];
+  const mainArea = mainComponent.pixelCount;
+  const imgDiagonal = Math.sqrt(width * width + height * height);
+
+  // Merge threshold: components within this distance of the main bounds are "part of artwork"
+  const mergeDistance = imgDiagonal * 0.08; // 8% of diagonal
+  // Size threshold: anything above 0.1% of main artwork is "decorative", not noise
+  const decorativeThreshold = mainArea * 0.001;
+
+  const mainBounds = mainComponent.bounds;
+  const mainCenterX = mainComponent.centerX;
+  const mainCenterY = mainComponent.centerY;
+
+  // Expand main bounds for proximity check
+  const expandedBounds = {
+    x: mainBounds.x - mergeDistance,
+    y: mainBounds.y - mergeDistance,
+    w: mainBounds.w + mergeDistance * 2,
+    h: mainBounds.h + mergeDistance * 2,
+  };
+
+  const mergedPixels = [...mainComponent.pixels];
+  const noiseObjects = [];
+
+  for (let i = 1; i < rawComponents.length; i++) {
+    const comp = rawComponents[i];
+    // Check if this component should be merged into main artwork
+    const isNearMain = (
+      comp.centerX >= expandedBounds.x &&
+      comp.centerX <= expandedBounds.x + expandedBounds.w &&
+      comp.centerY >= expandedBounds.y &&
+      comp.centerY <= expandedBounds.y + expandedBounds.h
+    );
+    const isDecorativeSize = comp.pixelCount >= decorativeThreshold;
+
+    if (isNearMain || isDecorativeSize) {
+      // Merge into main artwork
+      mergedPixels.push(...comp.pixels);
+    } else {
+      // Genuine noise — isolated AND tiny
+      noiseObjects.push(comp);
+    }
+  }
+
+  // Build final objects list
+  const objects = [];
+
+  // Main artwork (merged)
+  const allMainX = [], allMainY = [];
+  let mMinX = width, mMaxX = 0, mMinY = height, mMaxY = 0;
+  for (const p of mergedPixels) {
+    const px = p % width, py = Math.floor(p / width);
+    if (px < mMinX) mMinX = px; if (px > mMaxX) mMaxX = px;
+    if (py < mMinY) mMinY = py; if (py > mMaxY) mMaxY = py;
+  }
+  objects.push({
+    id: 1,
+    pixels: mergedPixels,
+    bounds: { x: mMinX, y: mMinY, w: mMaxX - mMinX + 1, h: mMaxY - mMinY + 1 },
+    pixelCount: mergedPixels.length,
+    category: 'artwork',
+    thumbnail: null,
+  });
+
+  // Noise objects
+  noiseObjects.forEach((comp, idx) => {
+    objects.push({
+      id: idx + 2,
+      pixels: comp.pixels,
+      bounds: comp.bounds,
+      pixelCount: comp.pixelCount,
+      category: 'noise',
+      thumbnail: null,
+    });
   });
 
   return objects;

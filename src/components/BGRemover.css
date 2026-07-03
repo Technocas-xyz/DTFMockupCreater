@@ -954,3 +954,24 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* ─── SMART OBJECTS & HAND TOOL ────────────────────────────────────────────── */
+.bgr-noise-count {
+  font-weight: 400;
+  font-size: 11px;
+  color: #dc2626;
+}
+
+.bgr-object-thumb.noise {
+  border-color: #fca5a5;
+  background: #fef2f2;
+}
+
+.bgr-zoom-btn.active {
+  background: var(--primary);
+  color: white;
+}
+
+.bgr-preview-area {
+  position: relative;
+}
