@@ -791,7 +791,6 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
     if (!sourceUrl) return;
     setIsUpscaling(true);
 
-    // Use setTimeout to avoid blocking UI
     setTimeout(async () => {
       try {
         const img = await new Promise((resolve) => {
@@ -805,103 +804,212 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
         const dstW = Math.round(srcW * factor);
         const dstH = Math.round(srcH * factor);
 
-        // Multi-pass upscaling for better quality (step by 2x each pass)
-        let currentCanvas = document.createElement('canvas');
-        currentCanvas.width = srcW;
-        currentCanvas.height = srcH;
-        let currentCtx = currentCanvas.getContext('2d');
-        currentCtx.drawImage(img, 0, 0);
+        // ═══ STEP 1: Extract source pixels ═══
+        const srcCanvas = document.createElement('canvas');
+        srcCanvas.width = srcW;
+        srcCanvas.height = srcH;
+        const srcCtx = srcCanvas.getContext('2d');
+        srcCtx.drawImage(img, 0, 0);
+        const srcData = srcCtx.getImageData(0, 0, srcW, srcH);
 
-        let cW = srcW, cH = srcH;
-        // Step up by 2x until we reach or exceed target
-        while (cW * 2 <= dstW && cH * 2 <= dstH) {
-          const nextW = cW * 2;
-          const nextH = cH * 2;
-          const nextCanvas = document.createElement('canvas');
-          nextCanvas.width = nextW;
-          nextCanvas.height = nextH;
-          const nextCtx = nextCanvas.getContext('2d');
-          nextCtx.imageSmoothingEnabled = true;
-          nextCtx.imageSmoothingQuality = 'high';
-          nextCtx.drawImage(currentCanvas, 0, 0, cW, cH, 0, 0, nextW, nextH);
-          currentCanvas = nextCanvas;
-          cW = nextW;
-          cH = nextH;
+        // ═══ STEP 2: Separate RGB and Alpha channels ═══
+        const rgbCanvas = document.createElement('canvas');
+        rgbCanvas.width = srcW;
+        rgbCanvas.height = srcH;
+        const rgbCtx = rgbCanvas.getContext('2d');
+        const rgbData = rgbCtx.createImageData(srcW, srcH);
+
+        const alphaCanvas = document.createElement('canvas');
+        alphaCanvas.width = srcW;
+        alphaCanvas.height = srcH;
+        const alphaCtx = alphaCanvas.getContext('2d');
+        const alphaData = alphaCtx.createImageData(srcW, srcH);
+
+        for (let i = 0; i < srcData.data.length; i += 4) {
+          // RGB channel (premultiply-safe: fill transparent areas with edge color)
+          rgbData.data[i] = srcData.data[i];
+          rgbData.data[i + 1] = srcData.data[i + 1];
+          rgbData.data[i + 2] = srcData.data[i + 2];
+          rgbData.data[i + 3] = 255; // fully opaque RGB
+          // Alpha as grayscale
+          const a = srcData.data[i + 3];
+          alphaData.data[i] = a;
+          alphaData.data[i + 1] = a;
+          alphaData.data[i + 2] = a;
+          alphaData.data[i + 3] = 255;
+        }
+        rgbCtx.putImageData(rgbData, 0, 0);
+        alphaCtx.putImageData(alphaData, 0, 0);
+
+        // ═══ STEP 3: Multi-pass upscale RGB ═══
+        let curRGB = rgbCanvas, curW = srcW, curH = srcH;
+        while (curW * 2 <= dstW && curH * 2 <= dstH) {
+          const nw = curW * 2, nh = curH * 2;
+          const nc = document.createElement('canvas');
+          nc.width = nw; nc.height = nh;
+          const nctx = nc.getContext('2d');
+          nctx.imageSmoothingEnabled = true;
+          nctx.imageSmoothingQuality = 'high';
+          nctx.drawImage(curRGB, 0, 0, curW, curH, 0, 0, nw, nh);
+          curRGB = nc; curW = nw; curH = nh;
+        }
+        if (curW !== dstW || curH !== dstH) {
+          const fc = document.createElement('canvas');
+          fc.width = dstW; fc.height = dstH;
+          const fctx = fc.getContext('2d');
+          fctx.imageSmoothingEnabled = true;
+          fctx.imageSmoothingQuality = 'high';
+          fctx.drawImage(curRGB, 0, 0, curW, curH, 0, 0, dstW, dstH);
+          curRGB = fc;
         }
 
-        // Final step to exact target size if not yet reached
-        if (cW !== dstW || cH !== dstH) {
-          const finalCanvas = document.createElement('canvas');
-          finalCanvas.width = dstW;
-          finalCanvas.height = dstH;
-          const finalCtx = finalCanvas.getContext('2d');
-          finalCtx.imageSmoothingEnabled = true;
-          finalCtx.imageSmoothingQuality = 'high';
-          finalCtx.drawImage(currentCanvas, 0, 0, cW, cH, 0, 0, dstW, dstH);
-          currentCanvas = finalCanvas;
+        // ═══ STEP 4: Multi-pass upscale ALPHA (independently) ═══
+        let curAlpha = alphaCanvas, caW = srcW, caH = srcH;
+        while (caW * 2 <= dstW && caH * 2 <= dstH) {
+          const nw = caW * 2, nh = caH * 2;
+          const nc = document.createElement('canvas');
+          nc.width = nw; nc.height = nh;
+          const nctx = nc.getContext('2d');
+          nctx.imageSmoothingEnabled = true;
+          nctx.imageSmoothingQuality = 'high';
+          nctx.drawImage(curAlpha, 0, 0, caW, caH, 0, 0, nw, nh);
+          curAlpha = nc; caW = nw; caH = nh;
+        }
+        if (caW !== dstW || caH !== dstH) {
+          const fc = document.createElement('canvas');
+          fc.width = dstW; fc.height = dstH;
+          const fctx = fc.getContext('2d');
+          fctx.imageSmoothingEnabled = true;
+          fctx.imageSmoothingQuality = 'high';
+          fctx.drawImage(curAlpha, 0, 0, caW, caH, 0, 0, dstW, dstH);
+          curAlpha = fc;
         }
 
-        // Enhancement pass: sharpen + denoise + edge protection
-        const ctx = currentCanvas.getContext('2d');
-        const imgData = ctx.getImageData(0, 0, dstW, dstH);
-        const data = imgData.data;
+        // ═══ STEP 5: Alpha edge refinement ═══
+        const alphaUpCtx = curAlpha.getContext('2d');
+        const alphaUpData = alphaUpCtx.getImageData(0, 0, dstW, dstH);
+        const aData = alphaUpData.data;
+        const edgeQuality = upscaleEdgeProtection / 100;
 
-        // Sharpening via unsharp mask
-        const sharpAmount = (upscaleSharpness / 100) * (enhanceStrength / 100);
-        if (sharpAmount > 0) {
-          const original = new Uint8ClampedArray(data);
-          for (let y = 1; y < dstH - 1; y++) {
-            for (let x = 1; x < dstW - 1; x++) {
-              const idx = (y * dstW + x) * 4;
-              if (original[idx + 3] < 10) continue; // skip transparent
-              for (let c = 0; c < 3; c++) {
-                const center = original[idx + c];
-                const neighbors = (
-                  original[((y-1)*dstW+x)*4+c] + original[((y+1)*dstW+x)*4+c] +
-                  original[(y*dstW+(x-1))*4+c] + original[(y*dstW+(x+1))*4+c]
-                ) / 4;
-                const sharpened = center + sharpAmount * 1.5 * (center - neighbors);
-                data[idx + c] = Math.max(0, Math.min(255, Math.round(sharpened)));
+        // Pass 1: Smooth alpha at edges (gaussian-like 3x3 on edge pixels)
+        const alphaCopy = new Uint8ClampedArray(aData);
+        for (let y = 1; y < dstH - 1; y++) {
+          for (let x = 1; x < dstW - 1; x++) {
+            const idx = (y * dstW + x) * 4;
+            const a = alphaCopy[idx];
+            if (a === 0 || a === 255) continue; // only process edge pixels
+            // Weighted average with neighbors (gaussian-like kernel)
+            let sum = a * 4;
+            let weight = 4;
+            for (let dy = -1; dy <= 1; dy++) {
+              for (let dx = -1; dx <= 1; dx++) {
+                if (dx === 0 && dy === 0) continue;
+                const w = (dx === 0 || dy === 0) ? 2 : 1;
+                sum += alphaCopy[((y+dy)*dstW+(x+dx))*4] * w;
+                weight += w;
+              }
+            }
+            const smoothed = sum / weight;
+            aData[idx] = aData[idx+1] = aData[idx+2] = Math.round(a * (1 - edgeQuality * 0.7) + smoothed * edgeQuality * 0.7);
+          }
+        }
+
+        // Pass 2: Remove halo (white/black contamination at semi-transparent edges)
+        const rgbUpCtx = curRGB.getContext('2d');
+        const rgbUpData = rgbUpCtx.getImageData(0, 0, dstW, dstH);
+        const rData = rgbUpData.data;
+
+        for (let y = 0; y < dstH; y++) {
+          for (let x = 0; x < dstW; x++) {
+            const idx = (y * dstW + x) * 4;
+            const a = aData[idx]; // alpha value
+            if (a > 20 && a < 220) {
+              // Semi-transparent edge pixel — check for halo
+              const r = rData[idx], g = rData[idx+1], b = rData[idx+2];
+              // White halo: bright pixel at low alpha
+              if (r > 230 && g > 230 && b > 230 && a < 150) {
+                aData[idx] = aData[idx+1] = aData[idx+2] = Math.round(a * 0.3);
+              }
+              // Black halo: dark pixel at low alpha
+              else if (r < 25 && g < 25 && b < 25 && a < 150) {
+                aData[idx] = aData[idx+1] = aData[idx+2] = Math.round(a * 0.3);
               }
             }
           }
         }
 
-        // Noise reduction (simple median-like smoothing on low-contrast areas)
-        const nrAmount = (upscaleNoiseReduction / 100) * (enhanceStrength / 100);
-        if (nrAmount > 0.1) {
-          const before = new Uint8ClampedArray(data);
+        alphaUpCtx.putImageData(alphaUpData, 0, 0);
+
+        // ═══ STEP 6: Recombine RGB + refined Alpha ═══
+        const finalCanvas = document.createElement('canvas');
+        finalCanvas.width = dstW;
+        finalCanvas.height = dstH;
+        const finalCtx = finalCanvas.getContext('2d');
+        const finalRGB = rgbUpCtx.getImageData(0, 0, dstW, dstH);
+        const finalAlpha = alphaUpCtx.getImageData(0, 0, dstW, dstH);
+        const finalData = finalCtx.createImageData(dstW, dstH);
+
+        for (let i = 0; i < finalData.data.length; i += 4) {
+          finalData.data[i] = finalRGB.data[i];
+          finalData.data[i + 1] = finalRGB.data[i + 1];
+          finalData.data[i + 2] = finalRGB.data[i + 2];
+          finalData.data[i + 3] = finalAlpha.data[i]; // R channel of alpha image = alpha value
+        }
+
+        // ═══ STEP 7: Sharpen RGB (only opaque areas) ═══
+        const sharpAmount = (upscaleSharpness / 100) * (enhanceStrength / 100);
+        if (sharpAmount > 0) {
+          const before = new Uint8ClampedArray(finalData.data);
+          const d = finalData.data;
           for (let y = 1; y < dstH - 1; y++) {
             for (let x = 1; x < dstW - 1; x++) {
               const idx = (y * dstW + x) * 4;
-              if (before[idx + 3] < 10) continue;
-              // Only smooth if local contrast is low (flat area)
+              if (before[idx + 3] < 128) continue; // skip low-alpha
+              for (let c = 0; c < 3; c++) {
+                const center = before[idx + c];
+                const avg = (before[((y-1)*dstW+x)*4+c] + before[((y+1)*dstW+x)*4+c] +
+                  before[(y*dstW+(x-1))*4+c] + before[(y*dstW+(x+1))*4+c]) / 4;
+                d[idx + c] = Math.max(0, Math.min(255, Math.round(center + sharpAmount * 1.5 * (center - avg))));
+              }
+            }
+          }
+        }
+
+        // ═══ STEP 8: Noise reduction on flat areas ═══
+        const nrAmount = (upscaleNoiseReduction / 100) * (enhanceStrength / 100);
+        if (nrAmount > 0.1) {
+          const before = new Uint8ClampedArray(finalData.data);
+          const d = finalData.data;
+          for (let y = 1; y < dstH - 1; y++) {
+            for (let x = 1; x < dstW - 1; x++) {
+              const idx = (y * dstW + x) * 4;
+              if (before[idx + 3] < 128) continue;
               let maxDiff = 0;
               for (let c = 0; c < 3; c++) {
                 const center = before[idx + c];
-                const n1 = before[((y-1)*dstW+x)*4+c];
-                const n2 = before[((y+1)*dstW+x)*4+c];
-                const n3 = before[(y*dstW+(x-1))*4+c];
-                const n4 = before[(y*dstW+(x+1))*4+c];
-                maxDiff = Math.max(maxDiff, Math.abs(center-n1), Math.abs(center-n2), Math.abs(center-n3), Math.abs(center-n4));
+                maxDiff = Math.max(maxDiff,
+                  Math.abs(center - before[((y-1)*dstW+x)*4+c]),
+                  Math.abs(center - before[((y+1)*dstW+x)*4+c]),
+                  Math.abs(center - before[(y*dstW+(x-1))*4+c]),
+                  Math.abs(center - before[(y*dstW+(x+1))*4+c])
+                );
               }
               if (maxDiff < 30) {
                 for (let c = 0; c < 3; c++) {
-                  const avg = (before[idx+c] * 2 +
-                    before[((y-1)*dstW+x)*4+c] + before[((y+1)*dstW+x)*4+c] +
+                  const avg = (before[idx+c]*2 + before[((y-1)*dstW+x)*4+c] + before[((y+1)*dstW+x)*4+c] +
                     before[(y*dstW+(x-1))*4+c] + before[(y*dstW+(x+1))*4+c]) / 6;
-                  data[idx+c] = Math.round(before[idx+c] * (1 - nrAmount) + avg * nrAmount);
+                  d[idx+c] = Math.round(before[idx+c] * (1 - nrAmount) + avg * nrAmount);
                 }
               }
             }
           }
         }
 
-        ctx.putImageData(imgData, 0, 0);
+        finalCtx.putImageData(finalData, 0, 0);
 
-        // Convert to data URL and update state
-        const resultUrl = currentCanvas.toDataURL('image/png');
-        const resultData = ctx.getImageData(0, 0, dstW, dstH);
+        // Convert and update state
+        const resultUrl = finalCanvas.toDataURL('image/png');
+        const resultData = finalCtx.getImageData(0, 0, dstW, dstH);
 
         setProcessedImageData(resultData);
         setDisplayUrl(resultUrl);
