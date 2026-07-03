@@ -742,3 +742,112 @@
   line-height: 1.4;
   margin: 2px 0 0 0;
 }
+
+/* ─── NEW STYLES FOR PRINT ARTWORK EDITOR ─────────────────────────────────── */
+
+.bgr-collapsible {
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.bgr-collapsible:hover {
+  color: var(--primary);
+}
+
+.bgr-button-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.bgr-color-replace-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.bgr-color-replace-row input[type="color"] {
+  width: 36px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.bgr-quality-report {
+  font-size: 12px;
+}
+
+.bgr-quality-score {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--primary);
+  margin-bottom: 8px;
+  padding: 4px 8px;
+  background: #f0f9ff;
+  border-radius: 4px;
+  text-align: center;
+}
+
+.bgr-quality-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bgr-quality-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.bgr-quality-row span:first-child {
+  color: var(--text-secondary);
+}
+
+.bgr-quality-row span:last-child {
+  font-weight: 500;
+}
+
+.bgr-warn {
+  color: #dc2626 !important;
+  font-weight: 600 !important;
+}
+
+.bgr-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.bgr-history-item {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 3px;
+  color: var(--text-secondary);
+  background: #f8fafc;
+}
+
+.bgr-history-item.active {
+  background: #e0f2fe;
+  color: var(--primary);
+  font-weight: 500;
+}
+
+.bgr-bottom-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
