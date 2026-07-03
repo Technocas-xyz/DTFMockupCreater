@@ -9,6 +9,7 @@ import QADefectAnalysis from './components/QADefectAnalysis';
 import BGRemover from './components/BGRemover';
 import GarmentManager from './components/GarmentManager';
 import GangSheet from './components/GangSheet';
+import AIArtworkLab from './components/AIArtworkLab';
 import { TSHIRT_SIZES, TSHIRT_COLORS, SIZE_ORDER } from './constants/tshirtSizes';
 import { GARMENTS_API, SERVE_IMAGE_URL, detectApiBase, getGarmentsUrl, getServeImageUrl } from './utils/apiConfig';
 import './App.css';
@@ -257,6 +258,16 @@ function App() {
 
     if (currentPage === 'gangsheet') {
       return <GangSheet sharedArtwork={sharedArtwork} />;
+    }
+
+    if (currentPage === 'ailab') {
+      return (
+        <AIArtworkLab
+          sharedArtwork={sharedArtwork}
+          onSendToQA={sendToQA}
+          onSendToMockup={sendToMockup}
+        />
+      );
     }
 
     // Default: Design Preview page (orders)
