@@ -193,7 +193,7 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
     upload: true, crop: false, transform: false, bgRemoval: true,
     enhancement: true, sharpness: false, edgeCleanup: false,
     colorTools: false, optimization: false, effects: false,
-    quality: false, exportSection: false,
+    quality: false, exportSection: false, upscaler: true,
   });
 
   // Quality analysis
@@ -203,6 +203,18 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
   const [rotation, setRotation] = useState(0);
   const [flipH, setFlipH] = useState(false);
   const [flipV, setFlipV] = useState(false);
+
+  // Upscaler state
+  const [upscaleFactor, setUpscaleFactor] = useState(4);
+  const [targetDpi, setTargetDpi] = useState(300);
+  const [enhanceStrength, setEnhanceStrength] = useState(70);
+  const [upscaleSharpness, setUpscaleSharpness] = useState(50);
+  const [upscaleNoiseReduction, setUpscaleNoiseReduction] = useState(30);
+  const [upscaleEdgeProtection, setUpscaleEdgeProtection] = useState(70);
+  const [isUpscaling, setIsUpscaling] = useState(false);
+  const [upscalePreview, setUpscalePreview] = useState(null);
+  const [desiredPrintW, setDesiredPrintW] = useState('');
+  const [desiredPrintH, setDesiredPrintH] = useState('');
 
   const fileInputRef = useRef(null);
   const canvasRef = useRef(null);
@@ -773,6 +785,158 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
     }, 50);
   };
 
+  // ─── AI UPSCALER ────────────────────────────────────────────────────────────
+  const performUpscale = useCallback(async (factor = upscaleFactor) => {
+    const sourceUrl = displayUrl || originalImage;
+    if (!sourceUrl) return;
+    setIsUpscaling(true);
+
+    // Use setTimeout to avoid blocking UI
+    setTimeout(async () => {
+      try {
+        const img = await new Promise((resolve) => {
+          const i = new Image();
+          i.onload = () => resolve(i);
+          i.src = sourceUrl;
+        });
+
+        const srcW = img.naturalWidth;
+        const srcH = img.naturalHeight;
+        const dstW = Math.round(srcW * factor);
+        const dstH = Math.round(srcH * factor);
+
+        // Multi-pass upscaling for better quality (step by 2x each pass)
+        let currentCanvas = document.createElement('canvas');
+        currentCanvas.width = srcW;
+        currentCanvas.height = srcH;
+        let currentCtx = currentCanvas.getContext('2d');
+        currentCtx.drawImage(img, 0, 0);
+
+        let cW = srcW, cH = srcH;
+        // Step up by 2x until we reach or exceed target
+        while (cW * 2 <= dstW && cH * 2 <= dstH) {
+          const nextW = cW * 2;
+          const nextH = cH * 2;
+          const nextCanvas = document.createElement('canvas');
+          nextCanvas.width = nextW;
+          nextCanvas.height = nextH;
+          const nextCtx = nextCanvas.getContext('2d');
+          nextCtx.imageSmoothingEnabled = true;
+          nextCtx.imageSmoothingQuality = 'high';
+          nextCtx.drawImage(currentCanvas, 0, 0, cW, cH, 0, 0, nextW, nextH);
+          currentCanvas = nextCanvas;
+          cW = nextW;
+          cH = nextH;
+        }
+
+        // Final step to exact target size if not yet reached
+        if (cW !== dstW || cH !== dstH) {
+          const finalCanvas = document.createElement('canvas');
+          finalCanvas.width = dstW;
+          finalCanvas.height = dstH;
+          const finalCtx = finalCanvas.getContext('2d');
+          finalCtx.imageSmoothingEnabled = true;
+          finalCtx.imageSmoothingQuality = 'high';
+          finalCtx.drawImage(currentCanvas, 0, 0, cW, cH, 0, 0, dstW, dstH);
+          currentCanvas = finalCanvas;
+        }
+
+        // Enhancement pass: sharpen + denoise + edge protection
+        const ctx = currentCanvas.getContext('2d');
+        const imgData = ctx.getImageData(0, 0, dstW, dstH);
+        const data = imgData.data;
+
+        // Sharpening via unsharp mask
+        const sharpAmount = (upscaleSharpness / 100) * (enhanceStrength / 100);
+        if (sharpAmount > 0) {
+          const original = new Uint8ClampedArray(data);
+          for (let y = 1; y < dstH - 1; y++) {
+            for (let x = 1; x < dstW - 1; x++) {
+              const idx = (y * dstW + x) * 4;
+              if (original[idx + 3] < 10) continue; // skip transparent
+              for (let c = 0; c < 3; c++) {
+                const center = original[idx + c];
+                const neighbors = (
+                  original[((y-1)*dstW+x)*4+c] + original[((y+1)*dstW+x)*4+c] +
+                  original[(y*dstW+(x-1))*4+c] + original[(y*dstW+(x+1))*4+c]
+                ) / 4;
+                const sharpened = center + sharpAmount * 1.5 * (center - neighbors);
+                data[idx + c] = Math.max(0, Math.min(255, Math.round(sharpened)));
+              }
+            }
+          }
+        }
+
+        // Noise reduction (simple median-like smoothing on low-contrast areas)
+        const nrAmount = (upscaleNoiseReduction / 100) * (enhanceStrength / 100);
+        if (nrAmount > 0.1) {
+          const before = new Uint8ClampedArray(data);
+          for (let y = 1; y < dstH - 1; y++) {
+            for (let x = 1; x < dstW - 1; x++) {
+              const idx = (y * dstW + x) * 4;
+              if (before[idx + 3] < 10) continue;
+              // Only smooth if local contrast is low (flat area)
+              let maxDiff = 0;
+              for (let c = 0; c < 3; c++) {
+                const center = before[idx + c];
+                const n1 = before[((y-1)*dstW+x)*4+c];
+                const n2 = before[((y+1)*dstW+x)*4+c];
+                const n3 = before[(y*dstW+(x-1))*4+c];
+                const n4 = before[(y*dstW+(x+1))*4+c];
+                maxDiff = Math.max(maxDiff, Math.abs(center-n1), Math.abs(center-n2), Math.abs(center-n3), Math.abs(center-n4));
+              }
+              if (maxDiff < 30) {
+                for (let c = 0; c < 3; c++) {
+                  const avg = (before[idx+c] * 2 +
+                    before[((y-1)*dstW+x)*4+c] + before[((y+1)*dstW+x)*4+c] +
+                    before[(y*dstW+(x-1))*4+c] + before[(y*dstW+(x+1))*4+c]) / 6;
+                  data[idx+c] = Math.round(before[idx+c] * (1 - nrAmount) + avg * nrAmount);
+                }
+              }
+            }
+          }
+        }
+
+        ctx.putImageData(imgData, 0, 0);
+
+        // Convert to data URL and update state
+        const resultUrl = currentCanvas.toDataURL('image/png');
+        const resultData = ctx.getImageData(0, 0, dstW, dstH);
+
+        setProcessedImageData(resultData);
+        setDisplayUrl(resultUrl);
+        setImageDimensions({ width: dstW, height: dstH });
+        pushHistory(resultData, `AI Upscale ${factor}×`);
+        if (!bgRemoved) setBgRemoved(true);
+        setQualityReport(analyzeImageQuality(resultData));
+      } catch (err) {
+        console.error('Upscale failed:', err);
+      }
+      setIsUpscaling(false);
+    }, 50);
+  }, [displayUrl, originalImage, upscaleFactor, upscaleSharpness, upscaleNoiseReduction, enhanceStrength, upscaleEdgeProtection]);
+
+  // One-click AI Enhance for Print
+  const handleAIEnhanceForPrint = useCallback(() => {
+    if (!imageDimensions) return;
+    // Calculate needed factor to reach 300 DPI at 10.75" print width
+    const targetPixels = targetDpi * 10.75;
+    const currentW = imageDimensions.width;
+    let factor = Math.ceil(targetPixels / currentW);
+    factor = Math.max(2, Math.min(8, factor));
+    setUpscaleFactor(factor);
+    performUpscale(factor);
+  }, [imageDimensions, targetDpi, performUpscale]);
+
+  // Calculate required pixels from desired print size
+  const requiredPixels = useMemo(() => {
+    if (!desiredPrintW || !desiredPrintH) return null;
+    const w = parseFloat(desiredPrintW);
+    const h = parseFloat(desiredPrintH);
+    if (!w || !h) return null;
+    return { w: Math.round(w * targetDpi), h: Math.round(h * targetDpi) };
+  }, [desiredPrintW, desiredPrintH, targetDpi]);
+
   // ─── ENHANCEMENT APPLICATION ─────────────────────────────────────────────────
   const applyEnhancements = useCallback(() => {
     if (!processedImageData) return;
@@ -1303,6 +1467,98 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Export */}
+          <div className="bgr-panel-card">
+            <h3 className="bgr-panel-title bgr-collapsible" onClick={() => toggleSection('upscaler')}>
+              AI Image Upscaler {expandedSections.upscaler ? '▾' : '▸'}
+            </h3>
+            {expandedSections.upscaler && (<>
+              {/* Current Analysis */}
+              {imageDimensions && (
+                <div className="bgr-upscale-analysis">
+                  <div className="bgr-quality-row"><span>Current</span><span>{imageDimensions.width} × {imageDimensions.height}px</span></div>
+                  <div className="bgr-quality-row"><span>DPI (at 10.75")</span><span>~{Math.round(imageDimensions.width / 10.75)}</span></div>
+                  <div className="bgr-quality-row"><span>Print Size (300dpi)</span><span>{(imageDimensions.width / 300).toFixed(1)}" × {(imageDimensions.height / 300).toFixed(1)}"</span></div>
+                  <div className="bgr-quality-row"><span>After {upscaleFactor}× Upscale</span><span>{imageDimensions.width * upscaleFactor} × {imageDimensions.height * upscaleFactor}px</span></div>
+                  <div className="bgr-quality-row"><span>New Print Size</span><span>{(imageDimensions.width * upscaleFactor / targetDpi).toFixed(1)}" × {(imageDimensions.height * upscaleFactor / targetDpi).toFixed(1)}"</span></div>
+                </div>
+              )}
+
+              {/* One-Click Button */}
+              <button className="bgr-btn bgr-btn-accent bgr-btn-full" onClick={handleAIEnhanceForPrint}
+                disabled={!displayUrl && !originalImage || isUpscaling}>
+                {isUpscaling ? '⏳ Enhancing...' : '✨ AI Enhance for Print'}
+              </button>
+
+              {/* Upscale Factor */}
+              <div className="bgr-control-group">
+                <label className="bgr-label">Upscale Factor</label>
+                <div className="bgr-factor-grid">
+                  {[2, 3, 4, 6, 8].map(f => (
+                    <button key={f} className={`bgr-factor-btn ${upscaleFactor === f ? 'active' : ''}`}
+                      onClick={() => setUpscaleFactor(f)}>{f}×</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Target DPI */}
+              <div className="bgr-control-group">
+                <label className="bgr-label">Target DPI</label>
+                <div className="bgr-factor-grid">
+                  {[150, 300, 600].map(d => (
+                    <button key={d} className={`bgr-factor-btn ${targetDpi === d ? 'active' : ''}`}
+                      onClick={() => setTargetDpi(d)}>{d}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Enhancement Sliders */}
+              <div className="bgr-control-group">
+                <label className="bgr-label">Enhancement Strength <span className="bgr-label-value">{enhanceStrength}</span></label>
+                <input type="range" min="0" max="100" value={enhanceStrength} onChange={(e) => setEnhanceStrength(Number(e.target.value))} className="bgr-slider" />
+              </div>
+              <div className="bgr-control-group">
+                <label className="bgr-label">Sharpness <span className="bgr-label-value">{upscaleSharpness}</span></label>
+                <input type="range" min="0" max="100" value={upscaleSharpness} onChange={(e) => setUpscaleSharpness(Number(e.target.value))} className="bgr-slider" />
+              </div>
+              <div className="bgr-control-group">
+                <label className="bgr-label">Noise Reduction <span className="bgr-label-value">{upscaleNoiseReduction}</span></label>
+                <input type="range" min="0" max="100" value={upscaleNoiseReduction} onChange={(e) => setUpscaleNoiseReduction(Number(e.target.value))} className="bgr-slider" />
+              </div>
+              <div className="bgr-control-group">
+                <label className="bgr-label">Edge Protection <span className="bgr-label-value">{upscaleEdgeProtection}</span></label>
+                <input type="range" min="0" max="100" value={upscaleEdgeProtection} onChange={(e) => setUpscaleEdgeProtection(Number(e.target.value))} className="bgr-slider" />
+              </div>
+
+              {/* Print Size Calculator */}
+              <div className="bgr-control-group">
+                <label className="bgr-label">Print Size Calculator</label>
+                <div className="bgr-print-calc-row">
+                  <input type="number" placeholder="W (inches)" value={desiredPrintW} onChange={(e) => setDesiredPrintW(e.target.value)} className="bgr-calc-input" step="0.5" min="1" max="60" />
+                  <span>×</span>
+                  <input type="number" placeholder="H (inches)" value={desiredPrintH} onChange={(e) => setDesiredPrintH(e.target.value)} className="bgr-calc-input" step="0.5" min="1" max="60" />
+                </div>
+                {requiredPixels && imageDimensions && (
+                  <div className="bgr-calc-result">
+                    <div className="bgr-quality-row"><span>Required</span><span>{requiredPixels.w} × {requiredPixels.h}px</span></div>
+                    <div className="bgr-quality-row"><span>Need Upscale</span><span>{Math.max(1, Math.ceil(requiredPixels.w / imageDimensions.width))}×</span></div>
+                    <button className="bgr-btn bgr-btn-sm bgr-btn-outline" onClick={() => {
+                      const f = Math.max(2, Math.min(8, Math.ceil(requiredPixels.w / imageDimensions.width)));
+                      setUpscaleFactor(f);
+                      performUpscale(f);
+                    }} disabled={isUpscaling}>Upscale to Fit</button>
+                  </div>
+                )}
+              </div>
+
+              {/* Manual Upscale Button */}
+              <button className="bgr-btn bgr-btn-primary bgr-btn-full" onClick={() => performUpscale()}
+                disabled={!displayUrl && !originalImage || isUpscaling}>
+                {isUpscaling ? '⏳ Processing...' : `Upscale ${upscaleFactor}× Now`}
+              </button>
+            </>)}
           </div>
 
           {/* Export */}

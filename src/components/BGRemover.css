@@ -975,3 +975,73 @@
 .bgr-preview-area {
   position: relative;
 }
+
+/* ─── AI UPSCALER PANEL ────────────────────────────────────────────────────── */
+.bgr-upscale-analysis {
+  background: #f8fafc;
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  font-size: 11px;
+}
+
+.bgr-btn-full {
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+.bgr-factor-grid {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.bgr-factor-btn {
+  padding: 5px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: 4px;
+  background: white;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.bgr-factor-btn:hover {
+  border-color: var(--primary);
+}
+
+.bgr-factor-btn.active {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+.bgr-print-calc-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.bgr-calc-input {
+  width: 70px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.bgr-calc-result {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-top: 4px;
+}
+
+.bgr-calc-result .bgr-quality-row {
+  font-size: 11px;
+  border-bottom: none;
+  padding: 2px 0;
+}
