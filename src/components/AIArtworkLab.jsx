@@ -1,5 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { removeBackgroundBalanced, cleanEdges } from '../utils/bgRemovalUtils';
+import { runPreservationPipeline, ImageAnalysisService, ArtworkClassificationService } from '../utils/artworkPreservationEngine';
 import './AIArtworkLab.css';
 
 // ─── PIPELINE MODULES (modular, replaceable) ─────────────────────────────────
@@ -199,124 +200,58 @@ function AIArtworkLab({ sharedArtwork, onSendToQA, onSendToMockup }) {
     canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
     const ctx = canvas.getContext('2d');
     ctx.drawImage(img, 0, 0);
-    let imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-    const runStage = (id, label, fn) => {
-      return new Promise(resolve => setTimeout(() => {
-        if (!enabledStages[id]) { setPipelineStatus(p => ({...p, [id]: 'skipped'})); addLog(`⏭ ${label} (skipped)`); resolve(imgData); return; }
-        addLog(`⏳ ${label}...`);
-        setPipelineStatus(p => ({...p, [id]: 'running'}));
-        try {
-          imgData = fn(imgData);
-          setPipelineStatus(p => ({...p, [id]: 'done'}));
-          addLog(`✓ ${label} complete`);
-        } catch(e) {
-          setPipelineStatus(p => ({...p, [id]: 'error'}));
-          addLog(`✕ ${label} failed: ${e.message}`);
-        }
-        resolve(imgData);
-      }, 80));
-    };
+    try {
+      const pipelineResult = await runPreservationPipeline(imgData, (msg) => {
+        addLog(msg);
+        // Update stage statuses based on message
+        if (msg.includes('Analyzing image')) setPipelineStatus(p => ({...p, analyze: 'running'}));
+        if (msg.includes('Classifying')) { setPipelineStatus(p => ({...p, analyze: 'done', classify: 'running'})); }
+        if (msg.includes('protection mask')) { setPipelineStatus(p => ({...p, classify: 'done', bgDetect: 'running'})); }
+        if (msg.includes('Analyzing background')) { setPipelineStatus(p => ({...p, bgDetect: 'running'})); }
+        if (msg.includes('connected components')) { setPipelineStatus(p => ({...p, bgDetect: 'done', segment: 'done', components: 'running'})); }
+        if (msg.includes('Context-aware')) { setPipelineStatus(p => ({...p, components: 'done'})); }
+        if (msg.includes('Removing background')) { setPipelineStatus(p => ({...p, bgRemove: 'running'})); }
+        if (msg.includes('Refining alpha')) { setPipelineStatus(p => ({...p, bgRemove: 'done', alphaRefine: 'running'})); }
+        if (msg.includes('Reconstructing')) { setPipelineStatus(p => ({...p, alphaRefine: 'done', edgeRepair: 'running'})); }
+        if (msg.includes('Removing halos')) { setPipelineStatus(p => ({...p, edgeRepair: 'done', haloRemove: 'running'})); }
+        if (msg.includes('print quality')) { setPipelineStatus(p => ({...p, haloRemove: 'done', qa: 'running'})); }
+        if (msg.includes('Pipeline complete')) { setPipelineStatus(p => ({...p, qa: 'done'})); }
+      });
 
-    // Stage 1: Analysis
-    await runStage('analyze', 'Image Analysis', (d) => { setAnalysis(analyzeImage(d)); return d; });
+      // Set results
+      const outCanvas = document.createElement('canvas');
+      outCanvas.width = pipelineResult.result.width;
+      outCanvas.height = pipelineResult.result.height;
+      outCanvas.getContext('2d').putImageData(pipelineResult.result, 0, 0);
+      setProcessedImage(outCanvas.toDataURL('image/png'));
+      setImageDimensions({ width: pipelineResult.result.width, height: pipelineResult.result.height });
 
-    // Stage 2: Classification
-    await runStage('classify', 'Artwork Classification', (d) => d);
+      // Update quality report with validation data
+      setQualityReport({
+        ...pipelineResult.printQuality,
+        artworkPreservation: pipelineResult.validation.artworkPreservation,
+        texturePreservation: pipelineResult.validation.texturePreservation,
+        fineDetailPreservation: pipelineResult.validation.fineDetailPreservation,
+        componentCount: pipelineResult.componentCount,
+        noiseRemoved: pipelineResult.noiseCount,
+      });
 
-    // Stage 3: Background Detection
-    await runStage('bgDetect', 'Background Detection', (d) => d);
+      // Update analysis with classification
+      setAnalysis(prev => ({
+        ...prev,
+        ...pipelineResult.analysis,
+        classification: pipelineResult.classification,
+        bgAnalysis: pipelineResult.bgAnalysis,
+      }));
 
-    // Stage 4: Subject Segmentation (placeholder for SAM2/BiRefNet)
-    await runStage('segment', 'Subject Segmentation', (d) => d);
-
-    // Stage 5: Connected Components
-    await runStage('components', 'Connected Components', (d) => d);
-
-    // Stage 6: Background Removal (using balanced algo from utils)
-    await runStage('bgRemove', 'Background Removal', (d) => {
-      return removeBackgroundBalanced(d);
-    });
-
-    // Stage 7: Alpha Refinement
-    await runStage('alphaRefine', 'Alpha Refinement', (d) => {
-      const { data, width, height } = d;
-      const result = new Uint8ClampedArray(data);
-      // Smooth alpha at edges
-      for (let y = 1; y < height - 1; y++) {
-        for (let x = 1; x < width - 1; x++) {
-          const idx = (y * width + x) * 4;
-          const a = data[idx + 3];
-          if (a === 0 || a === 255) continue;
-          let sum = a * 4, w = 4;
-          for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-            if (dx === 0 && dy === 0) continue;
-            sum += data[((y+dy)*width+(x+dx))*4+3] * (dx===0||dy===0 ? 2 : 1);
-            w += (dx===0||dy===0 ? 2 : 1);
-          }
-          result[idx+3] = Math.round(sum / w);
-        }
-      }
-      return new ImageData(result, width, height);
-    });
-
-    // Stage 8: Edge Repair
-    await runStage('edgeRepair', 'Edge Repair', (d) => {
-      return cleanEdges(d, d.width, d.height);
-    });
-
-    // Stage 9: Halo Removal
-    await runStage('haloRemove', 'Halo Removal', (d) => {
-      const { data, width, height } = d;
-      const result = new Uint8ClampedArray(data);
-      for (let i = 0; i < result.length; i += 4) {
-        const a = result[i + 3];
-        if (a > 0 && a < 200) {
-          const r = result[i], g = result[i+1], b = result[i+2];
-          if ((r > 220 && g > 220 && b > 220) || (r < 35 && g < 35 && b < 35)) {
-            result[i+3] = Math.round(a * 0.2);
-          }
-        }
-      }
-      return new ImageData(result, width, height);
-    });
-
-    // Stage 10: Quality Analysis
-    await runStage('qa', 'Quality Analysis', (d) => {
-      setQualityReport(buildQAReport(d));
-      return d;
-    });
-
-    // Output
-    const outCanvas = document.createElement('canvas');
-    outCanvas.width = imgData.width; outCanvas.height = imgData.height;
-    outCanvas.getContext('2d').putImageData(imgData, 0, 0);
-    setProcessedImage(outCanvas.toDataURL('image/png'));
-    setImageDimensions({ width: imgData.width, height: imgData.height });
-    addLog('🎉 Pipeline complete');
+    } catch (err) {
+      addLog(`✕ Pipeline error: ${err.message}`);
+      console.error(err);
+    }
     setIsProcessing(false);
   };
-
-  function buildQAReport(imgData) {
-    const { data, width, height } = imgData;
-    let opaque = 0, semiTrans = 0, transparent = 0, haloPixels = 0, jaggedPixels = 0;
-    for (let i = 0; i < data.length; i += 4) {
-      const a = data[i+3];
-      if (a === 0) transparent++;
-      else if (a === 255) opaque++;
-      else { semiTrans++; if (data[i]>220&&data[i+1]>220&&data[i+2]>220) haloPixels++; }
-    }
-    const total = width * height;
-    const bgRemoved = ((transparent / total) * 100).toFixed(1);
-    const edgeScore = semiTrans < total * 0.02 ? 5 : semiTrans < total * 0.05 ? 4 : 3;
-    return {
-      bgRemoved, edgeScore, haloPixels,
-      transparency: transparent > 0 ? 'Excellent' : 'None',
-      printReady: haloPixels < 100 && edgeScore >= 4,
-      resolution: `${width} × ${height}`,
-      dpi: Math.round(width / 10.75),
-    };
-  }
 
   // ─── NAVIGATION ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -481,13 +416,17 @@ function AIArtworkLab({ sharedArtwork, onSendToQA, onSendToMockup }) {
             <div className="ailab-card">
               <h3 className="ailab-card-title">Quality Report</h3>
               <div className="ailab-qa">
+                <div className="ailab-info-row"><span>Artwork Preservation</span><span className="ailab-highlight">{qualityReport.artworkPreservation || '—'}%</span></div>
+                <div className="ailab-info-row"><span>Texture Preservation</span><span>{qualityReport.texturePreservation || '—'}%</span></div>
+                <div className="ailab-info-row"><span>Fine Detail</span><span>{qualityReport.fineDetailPreservation || '—'}%</span></div>
                 <div className="ailab-info-row"><span>BG Removed</span><span>{qualityReport.bgRemoved}%</span></div>
                 <div className="ailab-info-row"><span>Edge Score</span><span>{'★'.repeat(qualityReport.edgeScore)}{'☆'.repeat(5-qualityReport.edgeScore)}</span></div>
-                <div className="ailab-info-row"><span>Halo Pixels</span><span>{qualityReport.haloPixels}</span></div>
+                <div className="ailab-info-row"><span>Halo</span><span>{qualityReport.halo || (qualityReport.haloPixels < 50 ? 'None' : 'Detected')}</span></div>
                 <div className="ailab-info-row"><span>Transparency</span><span>{qualityReport.transparency}</span></div>
-                <div className="ailab-info-row"><span>Print Ready</span><span>{qualityReport.printReady ? '✓ YES' : '✕ NO'}</span></div>
+                <div className="ailab-info-row"><span>Print Ready</span><span>{qualityReport.printReady ? '✓ PASS' : '✕ FAIL'}</span></div>
                 <div className="ailab-info-row"><span>Resolution</span><span>{qualityReport.resolution}</span></div>
-                <div className="ailab-info-row"><span>DPI</span><span>~{qualityReport.dpi}</span></div>
+                <div className="ailab-info-row"><span>Components</span><span>{qualityReport.componentCount || '—'}</span></div>
+                <div className="ailab-info-row"><span>Noise Removed</span><span>{qualityReport.noiseRemoved || 0}</span></div>
               </div>
             </div>
           )}
