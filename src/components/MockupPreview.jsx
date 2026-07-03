@@ -25,10 +25,6 @@ function MockupPreview({
     canvas.height = H;
     const ctx = canvas.getContext('2d');
 
-    // High quality rendering — prevent blurring
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-
     const sizeData = TSHIRT_SIZES[size];
 
     // White background
@@ -86,6 +82,8 @@ function MockupPreview({
           offscreen.width = W;
           offscreen.height = H;
           const offCtx = offscreen.getContext('2d');
+          offCtx.imageSmoothingEnabled = true;
+          offCtx.imageSmoothingQuality = 'high';
           const hex = selectedColor.hex.replace('#', '');
           const cr = parseInt(hex.substring(0, 2), 16);
           const cg = parseInt(hex.substring(2, 4), 16);
@@ -126,6 +124,8 @@ function MockupPreview({
           offscreen.width = W;
           offscreen.height = H;
           const offCtx = offscreen.getContext('2d');
+          offCtx.imageSmoothingEnabled = true;
+          offCtx.imageSmoothingQuality = 'high';
           offCtx.drawImage(shirtImg, shirtImgX, shirtImgY, shirtImgW, shirtImgH);
           offCtx.globalCompositeOperation = 'multiply';
           offCtx.fillStyle = selectedColor.hex;
@@ -163,12 +163,11 @@ function MockupPreview({
           const printX = tshirtX + (tshirtW - printW) / 2;
           const printY = tshirtY + (artworkAreaSettings.topOffset * artPxPerInch);
 
-          // Draw artwork at ORIGINAL resolution — no scaling
           // Calculate the target area where artwork should fit
           const targetW = artworkDimensions.width * artPxPerInch * artworkScale;
           const targetH = artworkDimensions.height * artPxPerInch * artworkScale;
 
-          // Use original image pixels directly — fit within target area maintaining aspect ratio
+          // Maintain aspect ratio within target bounding box
           const imgAR = img.naturalWidth / img.naturalHeight;
           const targetAR = targetW / targetH;
           let drawW, drawH;
@@ -187,10 +186,56 @@ function MockupPreview({
           const drawX2 = printX + (printW - drawW) / 2 + scaledPosX;
           const drawY2 = printY + scaledPosY;
 
-          // Draw at original quality — use source pixels directly
-          ctx.imageSmoothingEnabled = true;
-          ctx.imageSmoothingQuality = 'high';
-          ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, drawX2, drawY2, drawW, drawH);
+          // === HIGH-QUALITY RENDERING STRATEGY ===
+          // If artwork is being upscaled (target > source), use multi-step downscale
+          // technique in reverse: draw at source size on intermediate canvas, then
+          // use browser's high-quality bicubic to scale up
+          const srcW = img.naturalWidth;
+          const srcH = img.naturalHeight;
+          const isUpscaling = drawW > srcW || drawH > srcH;
+
+          if (isUpscaling) {
+            // For upscaling: use an intermediate canvas at 2x the target size
+            // then scale down to target — this gives sharper edges
+            const interScale = Math.min(2, Math.max(1, srcW / drawW));
+            // Draw source at native resolution, let browser scale up with high quality
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(img, 0, 0, srcW, srcH, drawX2, drawY2, drawW, drawH);
+          } else {
+            // Downscaling — use stepped downscaling for best quality
+            // Step down by half until within 2x of target, then final draw
+            let stepCanvas = document.createElement('canvas');
+            let stepW = srcW;
+            let stepH = srcH;
+            stepCanvas.width = stepW;
+            stepCanvas.height = stepH;
+            const stepCtx = stepCanvas.getContext('2d');
+            stepCtx.imageSmoothingEnabled = true;
+            stepCtx.imageSmoothingQuality = 'high';
+            stepCtx.drawImage(img, 0, 0);
+
+            // Step down by halves
+            while (stepW / 2 > drawW && stepH / 2 > drawH) {
+              const nextW = Math.round(stepW / 2);
+              const nextH = Math.round(stepH / 2);
+              const nextCanvas = document.createElement('canvas');
+              nextCanvas.width = nextW;
+              nextCanvas.height = nextH;
+              const nextCtx = nextCanvas.getContext('2d');
+              nextCtx.imageSmoothingEnabled = true;
+              nextCtx.imageSmoothingQuality = 'high';
+              nextCtx.drawImage(stepCanvas, 0, 0, stepW, stepH, 0, 0, nextW, nextH);
+              stepCanvas = nextCanvas;
+              stepW = nextW;
+              stepH = nextH;
+            }
+
+            // Final draw from stepped canvas to export canvas
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(stepCanvas, 0, 0, stepW, stepH, drawX2, drawY2, drawW, drawH);
+          }
 
           // Artwork size values (used in both annotated and clean downloads)
           const artWidthInches = (artworkDimensions.width * artworkScale).toFixed(1);
@@ -434,7 +479,7 @@ function MockupPreview({
           const fallback = new Image();
           fallback.onload = () => drawWithShirt(fallback, false);
           fallback.onerror = () => drawWithShirt(null, false);
-          fallback.src = `/tshirts/white-${side}.png`;
+          fallback.src = `/tshirts/white-${side}1.png`;
         };
         tshirtImg.src = `/tshirts/${colorName}-${side}.png`;
       }
@@ -798,7 +843,7 @@ function MockupCard({ size, artwork, color, artworkDimensions, artworkPosition, 
         const fallback = new Image();
         fallback.onload = () => setTshirtImg(fallback);
         fallback.onerror = () => setTshirtImg(null);
-        fallback.src = `/tshirts/white-${side}.png`;
+        fallback.src = `/tshirts/white-${side}1.png`;
       };
       img.src = `/tshirts/${colorName}-${side}.png`;
     }

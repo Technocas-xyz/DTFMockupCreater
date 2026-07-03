@@ -115,7 +115,7 @@ function DesignCanvas({
       fallback.crossOrigin = 'anonymous';
       fallback.onload = () => setTshirtImage(fallback);
       fallback.onerror = () => setTshirtImage(null);
-      fallback.src = `/tshirts/white-${side}.png`;
+      fallback.src = `/tshirts/white-${side}1.png`;
     };
     img.src = `/tshirts/${colorName}-${side}.png`;
   }, [viewSide, selectedColor, customGarment]);

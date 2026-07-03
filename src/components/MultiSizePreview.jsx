@@ -261,9 +261,9 @@ const MSPCard = React.forwardRef(function MSPCard({
         const fallback = new Image();
         fallback.onload = () => setTshirtImg(fallback);
         fallback.onerror = () => setTshirtImg(null);
-        fallback.src = `/tshirts/white-${side}.png`;
+        fallback.src = `/tshirts/white-${side}1.png`;
       };
-      img.src = `/tshirts/white-${side}.png`;
+      img.src = `/tshirts/white-${side}1.png`;
     }
   }, [viewSide, selectedColor, size, garmentLibrary]);
 
