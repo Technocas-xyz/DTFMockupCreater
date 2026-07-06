@@ -21,6 +21,29 @@ function App() {
   const [authToken, setAuthToken] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
 
+  // ─── APP STATE (must be declared before any early returns — React hooks rule) ──
+  const [currentPage, setCurrentPage] = useState('bgremover');
+  const [sharedArtwork, setSharedArtwork] = useState(null);
+  const [artwork, setArtwork] = useState(null);
+  const [artworkFile, setArtworkFile] = useState(null);
+  const [selectedSize, setSelectedSize] = useState('L');
+  const [selectedColor, setSelectedColor] = useState(TSHIRT_COLORS[0]);
+  const [artworkDimensions, setArtworkDimensions] = useState({ width: 10.75, height: 10.75 });
+  const [lockProportion, setLockProportion] = useState(true);
+  const [viewSide, setViewSide] = useState('front');
+  const [artworkPosition, setArtworkPosition] = useState({ x: 0, y: 0 });
+  const artworkScale = 1;
+  const [artworkAreaSettings, setArtworkAreaSettings] = useState({ width: 18, height: 24, topOffset: 5 });
+  const [selectedMockupSizes, setSelectedMockupSizes] = useState(
+    SIZE_ORDER.reduce((acc, size) => ({ ...acc, [size]: false }), {})
+  );
+  const [showMockups, setShowMockups] = useState(false);
+  const [customGarment, setCustomGarment] = useState(null);
+  const [garmentLibrary, setGarmentLibrary] = useState([]);
+  const [selectedGarmentId, setSelectedGarmentId] = useState(null);
+  const [comparisonSizes, setComparisonSizes] = useState([]);
+  const [scalingMode, setScalingMode] = useState('proportional');
+
   // Restore session on mount
   useEffect(() => {
     const token = localStorage.getItem('auth_token');
@@ -40,7 +63,6 @@ function App() {
   };
 
   const handleLogout = () => {
-    // Call logout API
     const token = localStorage.getItem('auth_token');
     if (token) {
       detectApiBase().then(base => {
@@ -66,34 +88,6 @@ function App() {
   // Show login if not authenticated
   if (authLoading) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh'}}>Loading...</div>;
   if (!authUser) return <Login onLogin={handleLogin} />;
-
-  // ─── APP STATE ──────────────────────────────────────────────────────────────
-  const [currentPage, setCurrentPage] = useState('bgremover');
-  const [sharedArtwork, setSharedArtwork] = useState(null);
-  const [artwork, setArtwork] = useState(null);
-  const [artworkFile, setArtworkFile] = useState(null);
-  const [selectedSize, setSelectedSize] = useState('L');
-  const [selectedColor, setSelectedColor] = useState(TSHIRT_COLORS[0]);
-  const [artworkDimensions, setArtworkDimensions] = useState({ width: 10.75, height: 10.75 });
-  const [lockProportion, setLockProportion] = useState(true);
-  const [viewSide, setViewSide] = useState('front');
-  const [artworkPosition, setArtworkPosition] = useState({ x: 0, y: 0 });
-  const artworkScale = 1; // Fixed at 1 — size controlled by width/height inputs only
-  // Artwork area placement settings — default 18x24 offset 3
-  const [artworkAreaSettings, setArtworkAreaSettings] = useState({
-    width: 18,
-    height: 24,
-    topOffset: 5,
-  });
-  const [selectedMockupSizes, setSelectedMockupSizes] = useState(
-    SIZE_ORDER.reduce((acc, size) => ({ ...acc, [size]: false }), {})
-  );
-  const [showMockups, setShowMockups] = useState(false);
-  const [customGarment, setCustomGarment] = useState(null);
-  const [garmentLibrary, setGarmentLibrary] = useState([]);
-  const [selectedGarmentId, setSelectedGarmentId] = useState(null);
-  const [comparisonSizes, setComparisonSizes] = useState([]);
-  const [scalingMode, setScalingMode] = useState('proportional');
 
   // Load garment library from server API (shared for all users), fallback to localStorage
   const loadGarmentLibrary = async () => {
