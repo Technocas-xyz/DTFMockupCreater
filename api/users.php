@@ -11,7 +11,7 @@ header('Access-Control-Allow-Headers: Content-Type, Authorization');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(200); exit; }
 
 require_once __DIR__ . '/db.php';
-require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/auth-helpers.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
 $currentUser = requireAuth();

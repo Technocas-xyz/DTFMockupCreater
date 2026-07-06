@@ -11,6 +11,7 @@ header('Access-Control-Allow-Headers: Content-Type, Authorization');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(200); exit; }
 
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/auth-helpers.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
 $action = isset($_GET['action']) ? $_GET['action'] : '';
@@ -125,23 +126,4 @@ if ($method === 'POST' && $action === 'change-password') {
 http_response_code(404);
 echo json_encode(['error' => 'Unknown action']);
 
-// ─── HELPERS ─────────────────────────────────────────────────────────────────
-function getAuthToken() {
-    $headers = getallheaders();
-    $auth = $headers['Authorization'] ?? $headers['authorization'] ?? '';
-    if (strpos($auth, 'Bearer ') === 0) return substr($auth, 7);
-    return $_GET['token'] ?? null;
-}
-
-function requireAuth() {
-    $token = getAuthToken();
-    if (!$token) { http_response_code(401); echo json_encode(['error' => 'Authentication required']); exit; }
-    $db = getDB();
-    $stmt = $db->prepare("SELECT u.* FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.token = ? AND s.expires_at > NOW() AND u.is_active = 1");
-    $stmt->execute([$token]);
-    $user = $stmt->fetch();
-    if (!$user) { http_response_code(401); echo json_encode(['error' => 'Invalid session']); exit; }
-    unset($user['password_hash']);
-    $user['page_access'] = json_decode($user['page_access'] ?? '[]', true);
-    return $user;
-}
+// Helper functions are in auth-helpers.php (shared with users.php)
