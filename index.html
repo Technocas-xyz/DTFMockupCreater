@@ -4,11 +4,94 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex" />
+    <meta name="googlebot" content="noindex, nofollow" />
+    <meta http-equiv="X-Robots-Tag" content="noindex, nofollow" />
     <title>DTF Print Portal - T-Shirt Designer</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      /* Prevent text selection globally */
+      body { -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; }
+      /* Allow selection in inputs/textareas */
+      input, textarea, [contenteditable] { -webkit-user-select: text; -moz-user-select: text; -ms-user-select: text; user-select: text; }
+      /* Prevent image dragging */
+      img { -webkit-user-drag: none; user-drag: none; pointer-events: auto; }
+    </style>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    <script>
+      // ═══ CLIENT-SIDE SECURITY ═══════════════════════════════════════════════
+      (function() {
+        'use strict';
+
+        // 1. Disable right-click context menu
+        document.addEventListener('contextmenu', function(e) {
+          e.preventDefault();
+          return false;
+        });
+
+        // 2. Block common keyboard shortcuts for DevTools / View Source / Copy
+        document.addEventListener('keydown', function(e) {
+          // F12 - DevTools
+          if (e.key === 'F12') { e.preventDefault(); return false; }
+          // Ctrl+Shift+I - DevTools
+          if (e.ctrlKey && e.shiftKey && e.key === 'I') { e.preventDefault(); return false; }
+          // Ctrl+Shift+J - Console
+          if (e.ctrlKey && e.shiftKey && e.key === 'J') { e.preventDefault(); return false; }
+          // Ctrl+Shift+C - Inspect Element
+          if (e.ctrlKey && e.shiftKey && e.key === 'C') { e.preventDefault(); return false; }
+          // Ctrl+U - View Source
+          if (e.ctrlKey && e.key === 'u') { e.preventDefault(); return false; }
+          // Ctrl+S - Save Page
+          if (e.ctrlKey && e.key === 's') { e.preventDefault(); return false; }
+          // Ctrl+A - Select All (outside inputs)
+          if (e.ctrlKey && e.key === 'a' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); return false; }
+          // Ctrl+C - Copy (outside inputs)
+          if (e.ctrlKey && e.key === 'c' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); return false; }
+          // Ctrl+P - Print
+          if (e.ctrlKey && e.key === 'p') { e.preventDefault(); return false; }
+        });
+
+        // 3. Disable drag on all elements except designated drag zones
+        document.addEventListener('dragstart', function(e) {
+          if (!e.target.closest('.bgr-upload-zone, .ailab-upload-zone, .gs-artwork-item, [data-allow-drag]')) {
+            e.preventDefault();
+            return false;
+          }
+        });
+
+        // 4. DevTools detection (debugger-based)
+        var devToolsOpen = false;
+        var threshold = 160;
+        setInterval(function() {
+          var widthDiff = window.outerWidth - window.innerWidth > threshold;
+          var heightDiff = window.outerHeight - window.innerHeight > threshold;
+          if (widthDiff || heightDiff) {
+            if (!devToolsOpen) {
+              devToolsOpen = true;
+              // Optional: could redirect or show warning
+              console.clear();
+              console.log('%c⚠️ This is a proprietary application. Unauthorized access to source code is prohibited.', 'font-size:16px;color:red;font-weight:bold;');
+            }
+          } else {
+            devToolsOpen = false;
+          }
+        }, 1000);
+
+        // 5. Disable console methods in production
+        if (window.location.hostname !== 'localhost' && !window.location.hostname.startsWith('127.')) {
+          var noop = function(){};
+          // Don't completely disable — just clear periodically
+          setInterval(function() { console.clear(); }, 5000);
+        }
+
+        // 6. Prevent iframe embedding
+        if (window.top !== window.self) {
+          window.top.location = window.self.location;
+        }
+      })();
+    </script>
   </body>
 </html>

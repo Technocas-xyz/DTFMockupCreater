@@ -1,0 +1,59 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# SECURITY: Block crawlers, bots, scrapers, hotlinking
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Block known bot user agents
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Block common crawlers and scraping bots
+    RewriteCond %{HTTP_USER_AGENT} (Googlebot|Bingbot|Slurp|DuckDuckBot|Baiduspider|YandexBot|Sogou|Exabot|ia_archiver|MJ12bot|AhrefsBot|SemrushBot|DotBot|PetalBot|GPTBot|CCBot|anthropic|ChatGPT|Claude|Google-Extended|facebookexternalhit|Twitterbot|rogerbot|linkedinbot|embedly|showyoubot|outbrain|pinterest|applebot|developers.google.com) [NC]
+    RewriteRule .* - [F,L]
+
+    # Block empty user agents (common for scrapers)
+    RewriteCond %{HTTP_USER_AGENT} ^$ [NC]
+    RewriteRule .* - [F,L]
+
+    # Block wget, curl, libwww, python scrapers
+    RewriteCond %{HTTP_USER_AGENT} (wget|curl|libwww|python|scrapy|httpclient|java|fetch|node-fetch|axios|phantom|headless|selenium|puppeteer|playwright|crawl|spider|bot|scrape) [NC]
+    RewriteRule .* - [F,L]
+
+    # Block hotlinking of images and assets from external domains
+    RewriteCond %{HTTP_REFERER} !^$ [NC]
+    RewriteCond %{HTTP_REFERER} !^https?://(www\.)?localhost [NC]
+    RewriteCond %{HTTP_REFERER} !^https?://(www\.)?31\.97\.110\.197 [NC]
+    RewriteCond %{HTTP_REFERER} !^https?://(www\.)?technocas [NC]
+    RewriteRule \.(png|jpg|jpeg|gif|svg|webp|js|css)$ - [F,L]
+</IfModule>
+
+# Prevent directory listing
+Options -Indexes
+
+# Security headers
+<IfModule mod_headers.c>
+    # Prevent MIME sniffing
+    Header set X-Content-Type-Options "nosniff"
+    # Prevent clickjacking
+    Header set X-Frame-Options "SAMEORIGIN"
+    # XSS Protection
+    Header set X-XSS-Protection "1; mode=block"
+    # Referrer policy
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+    # No caching for HTML (prevents cached source viewing)
+    <FilesMatch "\.(html|htm)$">
+        Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        Header set Pragma "no-cache"
+    </FilesMatch>
+    # No indexing
+    Header set X-Robots-Tag "noindex, nofollow, noarchive, nosnippet"
+</IfModule>
+
+# Block access to source maps
+<FilesMatch "\.map$">
+    Require all denied
+</FilesMatch>
+
+# Block access to hidden files
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
