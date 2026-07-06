@@ -14,6 +14,7 @@ function MultiSizePreview({
   garmentLibrary,
   scalingMode,
   baseSize,
+  customGarment,
 }) {
   const cardRefs = useRef({});
 
@@ -192,6 +193,7 @@ function MultiSizePreview({
             baseSize={baseSize}
             baseBodyWidth={baseBodyWidth}
             basePercentage={basePercentage}
+            customGarment={customGarment}
             ref={(el) => { cardRefs.current[size] = el; }}
           />
         ))}
@@ -214,6 +216,7 @@ const MSPCard = React.forwardRef(function MSPCard({
   baseSize,
   baseBodyWidth,
   basePercentage,
+  customGarment,
 }, ref) {
   const canvasRef = useRef(null);
   const [tshirtImg, setTshirtImg] = useState(null);
@@ -243,8 +246,16 @@ const MSPCard = React.forwardRef(function MSPCard({
     size,
   }));
 
-  // Load garment image
+  // Load garment image — use customGarment (from type selection) if available
   useEffect(() => {
+    // Priority 1: Use the customGarment passed from parent (matches selected type like Hoodie)
+    if (customGarment && customGarment.dataUrl) {
+      const img = new Image();
+      img.onload = () => { setTshirtImg(img); setIsCustomGarment(true); };
+      img.src = customGarment.dataUrl;
+      return;
+    }
+    // Priority 2: Find a tagged garment for this exact size + side in library
     const taggedGarment = garmentLibrary && garmentLibrary.find(
       (g) => g.size === realSize && (g.side || 'front') === viewSide
     );
@@ -265,7 +276,7 @@ const MSPCard = React.forwardRef(function MSPCard({
       };
       img.src = `/tshirts/white-${side}1.png`;
     }
-  }, [viewSide, selectedColor, size, garmentLibrary]);
+  }, [viewSide, selectedColor, size, garmentLibrary, customGarment]);
 
   // Draw canvas
   useEffect(() => {

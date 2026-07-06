@@ -365,6 +365,7 @@ function App() {
                   garmentLibrary={garmentLibrary}
                   scalingMode={scalingMode}
                   baseSize={selectedSize}
+                  customGarment={customGarment}
                 />
               )}
             </div>
