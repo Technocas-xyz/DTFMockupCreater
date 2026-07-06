@@ -75,6 +75,15 @@ export const TSHIRT_SIZES = {
     maxPrintWidth: 11,
     maxPrintHeight: 14,
   },
+  XS: {
+    label: 'XS',
+    bodyLength: 27,
+    bodyWidth: 16.5,
+    fullBodyLength: 27,
+    sleeveLength: 15,
+    maxPrintWidth: 11,
+    maxPrintHeight: 14.5,
+  },
   S: {
     label: 'S',
     bodyLength: 28,
@@ -182,4 +191,4 @@ export const TSHIRT_COLORS = [
   { name: 'Pink', hex: '#ec4899' },
 ];
 
-export const SIZE_ORDER = ['2T', '3T', '4T', '5T', 'YS', 'YM', 'YL', 'YXL', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL'];
+export const SIZE_ORDER = ['2T', '3T', '4T', '5T', 'YS', 'YM', 'YL', 'YXL', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL'];

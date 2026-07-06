@@ -136,18 +136,8 @@ function App() {
     }
   };
 
-  // Auto-load tagged garment when size changes (don't change artwork area)
-  useEffect(() => {
-    // Only load garment if one is specifically tagged for this exact size AND side
-    const taggedGarment = garmentLibrary.find(g => g.size === selectedSize && (g.side || 'front') === viewSide);
-    if (taggedGarment) {
-      setCustomGarment(taggedGarment);
-      setSelectedGarmentId(taggedGarment.id);
-    } else {
-      setCustomGarment(null);
-      setSelectedGarmentId(null);
-    }
-  }, [selectedSize, garmentLibrary, viewSide]);
+  // Garment selection is handled by ControlPanel's useEffect (type+size matching)
+  // handleGarmentChange is called from ControlPanel when type/size changes
 
   const handleArtworkUpload = (file) => {
     const reader = new FileReader();

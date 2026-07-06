@@ -47,23 +47,32 @@ function ControlPanel({
     ? garmentLibrary.filter(g => g.type === selectedType)
     : [];
 
-  // Auto-select garment when type or size changes (find matching garment for current size+type+side)
+  // Auto-select garment when type or size changes (find matching garment for current size+type)
   useEffect(() => {
     if (!garmentLibrary || garmentLibrary.length === 0) return;
     if (selectedType === 'T-Shirt') {
-      // T-Shirt uses default template unless manually selected
+      // T-Shirt type: check if there's a tagged t-shirt garment for this size
+      const match = garmentLibrary.find(g => g.type === 'T-Shirt' && g.size === selectedSize);
+      if (match) {
+        onGarmentChange(match.id);
+      } else {
+        // No custom t-shirt — use default template
+        onGarmentChange(null);
+      }
       return;
     }
-    // Find a garment matching the selected type, size, and side
-    const viewSideStr = 'front'; // default
-    const match = garmentLibrary.find(g =>
-      g.type === selectedType && g.size === selectedSize
-    );
+    // Non-T-Shirt types: find a garment matching the selected type + size
+    const match = garmentLibrary.find(g => g.type === selectedType && g.size === selectedSize);
     if (match) {
       onGarmentChange(match.id);
     } else {
-      // No matching garment for this type+size — fall back to default
-      onGarmentChange(null);
+      // No matching garment for this type+size — try same type any size as fallback
+      const fallback = garmentLibrary.find(g => g.type === selectedType);
+      if (fallback) {
+        onGarmentChange(fallback.id);
+      } else {
+        onGarmentChange(null);
+      }
     }
   }, [selectedType, selectedSize, garmentLibrary]);
 
