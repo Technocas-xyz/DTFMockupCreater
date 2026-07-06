@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { TSHIRT_COLORS, ARTWORK_SIZES, SIZE_ORDER, TSHIRT_SIZES } from '../constants/tshirtSizes';
 import './ControlPanel.css';
 
@@ -46,6 +46,26 @@ function ControlPanel({
   const filteredGarments = garmentLibrary
     ? garmentLibrary.filter(g => g.type === selectedType)
     : [];
+
+  // Auto-select garment when type or size changes (find matching garment for current size+type+side)
+  useEffect(() => {
+    if (!garmentLibrary || garmentLibrary.length === 0) return;
+    if (selectedType === 'T-Shirt') {
+      // T-Shirt uses default template unless manually selected
+      return;
+    }
+    // Find a garment matching the selected type, size, and side
+    const viewSideStr = 'front'; // default
+    const match = garmentLibrary.find(g =>
+      g.type === selectedType && g.size === selectedSize
+    );
+    if (match) {
+      onGarmentChange(match.id);
+    } else {
+      // No matching garment for this type+size — fall back to default
+      onGarmentChange(null);
+    }
+  }, [selectedType, selectedSize, garmentLibrary]);
 
   const handleWidthChange = (newWidth) => {
     const w = parseFloat(newWidth) || 0;
