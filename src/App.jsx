@@ -85,10 +85,6 @@ function App() {
     return access.includes(page);
   };
 
-  // Show login if not authenticated
-  if (authLoading) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh'}}>Loading...</div>;
-  if (!authUser) return <Login onLogin={handleLogin} />;
-
   // Load garment library from server API (shared for all users), fallback to localStorage
   const loadGarmentLibrary = async () => {
     const apiBase = await detectApiBase();
@@ -433,6 +429,10 @@ function App() {
       </>
     );
   };
+
+  // ─── AUTH GATING (after all hooks) ──────────────────────────────────────────
+  if (authLoading) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh'}}>Loading...</div>;
+  if (!authUser) return <Login onLogin={handleLogin} />;
 
   return (
     <div className="app-layout">
