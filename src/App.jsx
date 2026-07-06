@@ -11,6 +11,7 @@ import BGRemover from './components/BGRemover';
 import GarmentManager from './components/GarmentManager';
 import GangSheet from './components/GangSheet';
 import AIArtworkLab from './components/AIArtworkLab';
+import UserManagement from './components/UserManagement';
 import { TSHIRT_SIZES, TSHIRT_COLORS, SIZE_ORDER } from './constants/tshirtSizes';
 import { GARMENTS_API, SERVE_IMAGE_URL, detectApiBase, getGarmentsUrl, getServeImageUrl } from './utils/apiConfig';
 import './App.css';
@@ -311,6 +312,10 @@ function App() {
           onSendToMockup={sendToMockup}
         />
       );
+    }
+
+    if (currentPage === 'users') {
+      return <UserManagement authUser={authUser} />;
     }
 
     // Default: Design Preview page (orders)

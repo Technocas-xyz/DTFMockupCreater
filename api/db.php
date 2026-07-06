@@ -64,7 +64,7 @@ function initDatabase() {
     $row = $stmt->fetch();
     if ($row['cnt'] == 0) {
         $hash = password_hash('admin123', PASSWORD_BCRYPT);
-        $allPages = json_encode(['bgremover','qa','orders','garments','gangsheet','contrast','ailab']);
+        $allPages = json_encode(['bgremover','qa','orders','garments','gangsheet','contrast','ailab','users']);
         $db->prepare("INSERT INTO users (username, email, password_hash, full_name, role, page_access) VALUES (?, ?, ?, ?, 'superadmin', ?)")
            ->execute(['admin', 'admin@printshop.local', $hash, 'Super Admin', $allPages]);
     }

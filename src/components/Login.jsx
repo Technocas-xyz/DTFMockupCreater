@@ -60,7 +60,7 @@ function Login({ onLogin }) {
             {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
-        <p className="login-footer">Default: admin / admin123</p>
+        <p className="login-footer">Print Production System</p>
       </div>
     </div>
   );
