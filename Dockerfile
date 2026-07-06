@@ -11,6 +11,9 @@ FROM php:8.2-apache
 # Enable Apache modules
 RUN a2enmod rewrite headers
 
+# Install PDO MySQL extension for authentication
+RUN docker-php-ext-install pdo pdo_mysql
+
 # Set PHP settings for large uploads
 RUN echo "post_max_size = 50M" >> /usr/local/etc/php/conf.d/uploads.ini && \
     echo "upload_max_filesize = 50M" >> /usr/local/etc/php/conf.d/uploads.ini && \

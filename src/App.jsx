@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
+import Login from './components/Login';
 import DesignCanvas from './components/DesignCanvas';
 import ControlPanel from './components/ControlPanel';
 import MockupPreview from './components/MockupPreview';
@@ -15,6 +16,58 @@ import { GARMENTS_API, SERVE_IMAGE_URL, detectApiBase, getGarmentsUrl, getServeI
 import './App.css';
 
 function App() {
+  // ─── AUTH STATE ─────────────────────────────────────────────────────────────
+  const [authUser, setAuthUser] = useState(null);
+  const [authToken, setAuthToken] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  // Restore session on mount
+  useEffect(() => {
+    const token = localStorage.getItem('auth_token');
+    const user = localStorage.getItem('auth_user');
+    if (token && user) {
+      try {
+        setAuthUser(JSON.parse(user));
+        setAuthToken(token);
+      } catch (e) { localStorage.removeItem('auth_token'); localStorage.removeItem('auth_user'); }
+    }
+    setAuthLoading(false);
+  }, []);
+
+  const handleLogin = (user, token) => {
+    setAuthUser(user);
+    setAuthToken(token);
+  };
+
+  const handleLogout = () => {
+    // Call logout API
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      detectApiBase().then(base => {
+        fetch(`${base}/auth.php?action=logout`, {
+          method: 'POST', headers: { 'Authorization': `Bearer ${token}` }
+        }).catch(() => {});
+      });
+    }
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('auth_user');
+    setAuthUser(null);
+    setAuthToken(null);
+  };
+
+  // Check page access
+  const hasPageAccess = (page) => {
+    if (!authUser) return false;
+    if (authUser.role === 'superadmin') return true;
+    const access = authUser.page_access || [];
+    return access.includes(page);
+  };
+
+  // Show login if not authenticated
+  if (authLoading) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh'}}>Loading...</div>;
+  if (!authUser) return <Login onLogin={handleLogin} />;
+
+  // ─── APP STATE ──────────────────────────────────────────────────────────────
   const [currentPage, setCurrentPage] = useState('bgremover');
   const [sharedArtwork, setSharedArtwork] = useState(null);
   const [artwork, setArtwork] = useState(null);
@@ -389,9 +442,13 @@ function App() {
 
   return (
     <div className="app-layout">
-      <Sidebar currentPage={currentPage} onPageChange={setCurrentPage} />
+      <Sidebar currentPage={currentPage} onPageChange={(page) => { if (hasPageAccess(page)) setCurrentPage(page); }} authUser={authUser} onLogout={handleLogout} hasPageAccess={hasPageAccess} />
       <main className="main-content">
-        {renderPage()}
+        {hasPageAccess(currentPage) ? renderPage() : (
+          <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100%',color:'#64748b'}}>
+            <p>You don't have access to this page. Contact your administrator.</p>
+          </div>
+        )}
       </main>
     </div>
   );

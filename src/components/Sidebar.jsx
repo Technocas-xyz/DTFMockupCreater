@@ -11,7 +11,7 @@ const menuItems = [
   { icon: 'ailab', label: 'AI Artwork Lab (Beta)', page: 'ailab' },
 ];
 
-function Sidebar({ currentPage, onPageChange }) {
+function Sidebar({ currentPage, onPageChange, authUser, onLogout, hasPageAccess }) {
   return (
     <aside className="sidebar">
       <div className="sidebar-logo">
@@ -23,7 +23,7 @@ function Sidebar({ currentPage, onPageChange }) {
       </div>
 
       <nav className="sidebar-nav">
-        {menuItems.map((item) => (
+        {menuItems.filter(item => !hasPageAccess || hasPageAccess(item.page)).map((item) => (
           <a
             key={item.label}
             href="#"
@@ -38,6 +38,16 @@ function Sidebar({ currentPage, onPageChange }) {
           </a>
         ))}
       </nav>
+
+      {authUser && (
+        <div className="sidebar-user">
+          <div className="sidebar-user-info">
+            <span className="sidebar-user-name">{authUser.full_name || authUser.username}</span>
+            <span className="sidebar-user-role">{authUser.role}</span>
+          </div>
+          <button className="sidebar-logout" onClick={onLogout} title="Sign Out">⏻</button>
+        </div>
+      )}
     </aside>
   );
 }

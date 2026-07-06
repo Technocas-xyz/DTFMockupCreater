@@ -4,9 +4,36 @@ services:
     ports:
       - "8095:80"
     volumes:
-      # Persist garment data across container rebuilds
       - garment-data:/var/www/html/api/garment-data
+    environment:
+      - DB_HOST=db
+      - DB_NAME=printshop
+      - DB_USER=printshop
+      - DB_PASS=printshop123
+      - DB_PORT=3306
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: mariadb:10.11
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootpass123
+      - MYSQL_DATABASE=printshop
+      - MYSQL_USER=printshop
+      - MYSQL_PASSWORD=printshop123
+    volumes:
+      - db-data:/var/lib/mysql
+    ports:
+      - "3307:3306"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     restart: unless-stopped
 
 volumes:
   garment-data:
+  db-data:
