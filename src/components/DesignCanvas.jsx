@@ -28,18 +28,22 @@ function applyColorTint(ctx, img, dx, dy, dw, dh, canvasW, canvasH, colorHex) {
     return;
   }
 
-  // Accurate color tinting: use 'color' blend mode (changes hue+saturation, keeps luminosity)
-  // This produces colors that closely match the selected hex value
-  offCtx.globalCompositeOperation = 'color';
+  // Accurate color tinting — constrained to t-shirt pixels only
+  // Step 1: Fill color only where the shirt exists (source-atop)
+  offCtx.globalCompositeOperation = 'source-atop';
   offCtx.fillStyle = colorHex;
   offCtx.fillRect(0, 0, canvasW, canvasH);
 
-  // For dark colors, strengthen with a subtle multiply pass
+  // Step 2: Bring back luminosity/texture from original using 'luminosity' blend
+  offCtx.globalCompositeOperation = 'luminosity';
+  offCtx.drawImage(img, dx, dy, dw, dh);
+
+  // Step 3: For dark colors, deepen slightly with multiply
   const luminance = (r * 0.299 + g * 0.587 + b * 0.114) / 255;
-  if (luminance < 0.5) {
-    offCtx.globalCompositeOperation = 'multiply';
-    offCtx.fillStyle = colorHex;
-    offCtx.globalAlpha = 0.3;
+  if (luminance < 0.4) {
+    offCtx.globalCompositeOperation = 'source-atop';
+    offCtx.globalAlpha = 0.2;
+    offCtx.fillStyle = '#000000';
     offCtx.fillRect(0, 0, canvasW, canvasH);
     offCtx.globalAlpha = 1;
   }
