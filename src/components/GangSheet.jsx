@@ -42,8 +42,8 @@ function packItems(items, sheetWidth, hGap, vGap, margins, maxHeight) {
           bestRotated = false;
         }
       }
-      // Rotated orientation
-      if (item.h <= rect.w + 0.01 && item.w <= rect.h + 0.01) {
+      // Rotated orientation — only try if rotation makes the item NARROWER (saves width)
+      if (item.h < item.w && item.h <= rect.w + 0.01 && item.w <= rect.h + 0.01) {
         const leftover_h = Math.abs(rect.w - item.h);
         const leftover_v = Math.abs(rect.h - item.w);
         const score1 = Math.min(leftover_h, leftover_v);
