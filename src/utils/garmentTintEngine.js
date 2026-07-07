@@ -169,27 +169,30 @@ export function recolorGarment(garmentData, targetHex) {
       result[i + 2] = linearToSrgb(srgbToLinear(tB) * (0.3 + darkLum * 3));
     } else {
       // General case: map target color to this pixel's luminance position
-      // Use HSL: keep target hue+saturation, adjust lightness based on pixel luminance
-      const pixelLightness = tL * 0.4 + normalizedLum * 0.6; // blend target lightness with pixel luminance
+      // Target lightness is the BASE — pixel luminance adds relative variation for texture
       
-      // Highlights: pixels brighter than average get boosted toward white
-      let finalL = pixelLightness;
-      if (normalizedLum > 0.8) {
-        // Highlight — blend toward white
-        const highlightStrength = (normalizedLum - 0.8) / 0.2;
-        finalL = pixelLightness + highlightStrength * (1 - pixelLightness) * 0.6;
+      // Calculate how much this pixel deviates from the garment's average
+      const deviation = normalizedLum - 0.5; // -0.5 to +0.5 range
+      
+      // Apply target color with luminance variation for texture
+      let finalL = tL + deviation * 0.25; // subtle texture from original garment
+      
+      // Highlights: pixels significantly brighter than average
+      if (normalizedLum > 0.85) {
+        const highlightStrength = (normalizedLum - 0.85) / 0.15;
+        finalL = tL + highlightStrength * (1 - tL) * 0.4;
       }
-      // Shadows: pixels darker than average get pushed darker
-      if (normalizedLum < 0.2) {
-        const shadowStrength = (0.2 - normalizedLum) / 0.2;
-        finalL = pixelLightness * (1 - shadowStrength * 0.5);
+      // Shadows: pixels significantly darker than average
+      if (normalizedLum < 0.15) {
+        const shadowStrength = (0.15 - normalizedLum) / 0.15;
+        finalL = tL * (1 - shadowStrength * 0.4);
       }
 
       finalL = Math.max(0, Math.min(1, finalL));
 
-      // Reduce saturation slightly in shadows and highlights for realism
+      // Keep full saturation in mid-tones, reduce slightly in extremes
       let finalS = tS;
-      if (normalizedLum < 0.15 || normalizedLum > 0.9) {
+      if (normalizedLum < 0.1 || normalizedLum > 0.95) {
         finalS *= 0.7;
       }
 
