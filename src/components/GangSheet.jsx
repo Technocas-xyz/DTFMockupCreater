@@ -228,6 +228,7 @@ function GangSheet({ sharedArtwork }) {
   const [orderNumber, setOrderNumber] = useState('');
   const [orderLink, setOrderLink] = useState('');
   const [headerTopMargin, setHeaderTopMargin] = useState(0);
+  const [includeHeader, setIncludeHeader] = useState(true);
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
   const imageCache = useRef({});
@@ -251,8 +252,8 @@ function GangSheet({ sharedArtwork }) {
 
     const containerWidth = canvas.parentElement?.clientWidth - 40 || 600;
     const scale = (containerWidth * Math.min(zoom, 100) / 100) / SHEET_WIDTH_INCHES;
-    const headerH = Math.max(1 * scale, 40);
-    const headerMarginTop = headerTopMargin * scale;
+    const headerH = includeHeader ? Math.max(1 * scale, 40) : 0;
+    const headerMarginTop = includeHeader ? headerTopMargin * scale : 0;
     const canvasWidth = SHEET_WIDTH_INCHES * scale;
     const sheetHeight = currentSheet.totalHeight || 1;
     const canvasHeight = Math.max(sheetHeight * scale + headerH + headerMarginTop, 200);
@@ -265,7 +266,8 @@ function GangSheet({ sharedArtwork }) {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
-    // === HEADER STRIP ===
+    // === HEADER STRIP (only if enabled) ===
+    if (includeHeader) {
     const headerY = headerMarginTop;
     ctx.strokeStyle = '#333333';
     ctx.lineWidth = 1.5;
@@ -338,6 +340,8 @@ function GangSheet({ sharedArtwork }) {
       ctx.fillText(`Sheet ${activeSheet + 1} of ${layoutData.totalSheets}`, canvasWidth - 10, headerY + headerH * 0.35);
     }
 
+    } // end includeHeader preview
+
     // === BACKGROUND ===
     if (bgTransparent) {
       const sz = 10;
@@ -401,7 +405,7 @@ function GangSheet({ sharedArtwork }) {
     ctx.lineWidth = 1.5;
     ctx.setLineDash([]);
     ctx.strokeRect(0, 0, canvasWidth, canvasHeight);
-  }, [currentSheet, zoom, showGrid, showCutLines, bgTransparent, artworks, poNumber, orderNumber, orderLink, headerTopMargin, layoutData, activeSheet]);
+  }, [currentSheet, zoom, showGrid, showCutLines, bgTransparent, artworks, poNumber, orderNumber, orderLink, headerTopMargin, layoutData, activeSheet, includeHeader]);
 
   // Load images into cache
   useEffect(() => {
@@ -514,21 +518,32 @@ function GangSheet({ sharedArtwork }) {
     })));
 
     const exportWidth = SHEET_WIDTH_INCHES * DPI;
-    const HEADER_HEIGHT = Math.round(1.2 * DPI);
-    const HEADER_MARGIN_TOP = Math.round(headerTopMargin * DPI);
+    const HEADER_HEIGHT = includeHeader ? Math.round(1.2 * DPI) : 0;
+    const HEADER_MARGIN_TOP = includeHeader ? Math.round(headerTopMargin * DPI) : 0;
     const sheetContentHeight = Math.round(sheetData.totalHeight * DPI);
     const totalHeightPx = sheetContentHeight + HEADER_HEIGHT + HEADER_MARGIN_TOP;
 
+    // ═══ VALIDATION: Ensure dimensions match expected print size ═══
+    const expectedW = exportWidth;
+    const expectedH = totalHeightPx;
+    console.log(`[GangSheet Export] Sheet ${sheetIndex+1}: ${expectedW}×${expectedH}px (${SHEET_WIDTH_INCHES}"×${(totalHeightPx/DPI).toFixed(1)}" at ${DPI}DPI)`);
+
     const exportCanvas = document.createElement('canvas');
-    exportCanvas.width = exportWidth;
-    exportCanvas.height = totalHeightPx;
+    exportCanvas.width = expectedW;
+    exportCanvas.height = expectedH;
     const ctx = exportCanvas.getContext('2d');
-    if (!ctx) return null;
+
+    // Validate canvas was actually created at correct size
+    if (!ctx || exportCanvas.width !== expectedW || exportCanvas.height !== expectedH) {
+      alert(`Export resolution mismatch detected.\nExpected: ${expectedW}×${expectedH}\nGot: ${exportCanvas.width}×${exportCanvas.height}\n\nThe image may be too large for your browser. Try reducing sheet height.`);
+      return null;
+    }
 
     // Fully transparent background for DTF printing (no white BG)
     ctx.clearRect(0, 0, exportWidth, totalHeightPx);
 
-    // === DRAW HEADER STRIP ===
+    // === DRAW HEADER STRIP (only if includeHeader is enabled) ===
+    if (includeHeader) {
     const headerStartY = HEADER_MARGIN_TOP;
     ctx.strokeStyle = '#333333';
     ctx.lineWidth = 4;
@@ -617,6 +632,8 @@ function GangSheet({ sharedArtwork }) {
       ctx.fillText('Scan for order details', qrX + qrSize / 2, headerStartY + HEADER_HEIGHT - 20);
     }
 
+    } // end includeHeader
+
     // === DRAW GANG SHEET ITEMS ===
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
@@ -642,6 +659,51 @@ function GangSheet({ sharedArtwork }) {
   };
 
   // ─── DOWNLOAD HANDLER ─────────────────────────────────────────────────────
+  // Embeds DPI metadata (pHYs chunk) into PNG for RIP software compatibility
+  const embedDpiInPng = (blob, dpi) => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const buffer = new Uint8Array(reader.result);
+        // PNG pHYs chunk: pixels per meter = dpi * 39.3701
+        const ppm = Math.round(dpi * 39.3701);
+        // Create pHYs chunk: 4 bytes X ppm + 4 bytes Y ppm + 1 byte unit(1=meter)
+        const phys = new Uint8Array(25);
+        const dv = new DataView(phys.buffer);
+        dv.setUint32(0, 9); // chunk data length
+        phys[4] = 0x70; phys[5] = 0x48; phys[6] = 0x59; phys[7] = 0x73; // "pHYs"
+        dv.setUint32(8, ppm); // X pixels per unit
+        dv.setUint32(12, ppm); // Y pixels per unit
+        phys[16] = 1; // unit = meter
+        // CRC32 of type+data
+        const crcData = phys.slice(4, 17);
+        const crc = crc32(crcData);
+        dv.setUint32(17, crc);
+        // Find IHDR end (always at byte 8 + 4+4+13+4 = 33)
+        // Insert pHYs after IHDR chunk (position 33)
+        const ihdrEnd = 8 + 25; // PNG sig(8) + IHDR chunk(25)
+        const result = new Uint8Array(buffer.length + 21);
+        result.set(buffer.slice(0, ihdrEnd), 0);
+        result.set(phys, ihdrEnd);
+        result.set(buffer.slice(ihdrEnd), ihdrEnd + 21);
+        resolve(new Blob([result], { type: 'image/png' }));
+      };
+      reader.readAsArrayBuffer(blob);
+    });
+  };
+
+  // CRC32 for PNG chunks
+  const crc32 = (data) => {
+    let crc = 0xFFFFFFFF;
+    for (let i = 0; i < data.length; i++) {
+      crc ^= data[i];
+      for (let j = 0; j < 8; j++) {
+        crc = (crc >>> 1) ^ (crc & 1 ? 0xEDB88320 : 0);
+      }
+    }
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  };
+
   const handleDownload = async () => {
     if (layoutData.sheets.every(s => s.items.length === 0)) {
       alert('No artworks to download. Please add artwork first.');
@@ -654,13 +716,17 @@ function GangSheet({ sharedArtwork }) {
         if (sheet.items.length === 0) continue;
         const canvas = await renderSheetCanvas(sheet, i);
         if (!canvas) continue;
-        const sheetH = Math.ceil(sheet.totalHeight + 1.2 + headerTopMargin);
+        const sheetH = Math.ceil(sheet.totalHeight + (includeHeader ? 1.2 + headerTopMargin : 0));
         const suffix = layoutData.totalSheets > 1 ? `-${i + 1}` : '';
         const filename = `GangSheet${suffix}-${SHEET_WIDTH_INCHES}x${sheetH}-${DPI}dpi.png`;
         try {
-          const blob = await new Promise((resolve, reject) => {
+          let blob = await new Promise((resolve, reject) => {
             canvas.toBlob((b) => { if (b) resolve(b); else reject(new Error('toBlob null')); }, 'image/png');
           });
+          // Embed 300 DPI metadata for RIP software
+          blob = await embedDpiInPng(blob, DPI);
+          // Validate size
+          console.log(`[GangSheet Export] File: ${filename}, Size: ${(blob.size/1024/1024).toFixed(1)}MB, Canvas: ${canvas.width}×${canvas.height}`);
           const url = URL.createObjectURL(blob);
           const link = document.createElement('a');
           link.download = filename;
@@ -670,6 +736,7 @@ function GangSheet({ sharedArtwork }) {
           document.body.removeChild(link);
           setTimeout(() => URL.revokeObjectURL(url), 2000);
         } catch (err) {
+          console.error('Blob export failed:', err);
           const dataUrl = canvas.toDataURL('image/png');
           const link = document.createElement('a');
           link.download = filename;
@@ -855,6 +922,11 @@ function GangSheet({ sharedArtwork }) {
         <div className="gs-right-panel">
           <div className="gs-settings-section">
             <h3>Order Info (Header Strip)</h3>
+            <div className="gs-setting-row">
+              <label>Include Header in Export</label>
+              <button className={`gs-toggle ${includeHeader ? 'active' : ''}`}
+                onClick={() => setIncludeHeader(!includeHeader)} />
+            </div>
             <div className="gs-setting-row">
               <label>PO #</label>
               <input type="text" placeholder="PO-0425" value={poNumber}
