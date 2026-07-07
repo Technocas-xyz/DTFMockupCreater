@@ -608,13 +608,6 @@ function ControlPanel({
           })}
         </div>
         )}
-        <button
-          className="btn-generate"
-          onClick={onGenerateMockups}
-          disabled={!artwork}
-        >
-          Generate All Mockups
-        </button>
       </section>
     </div>
   );
