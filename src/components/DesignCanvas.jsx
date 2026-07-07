@@ -98,6 +98,10 @@ function DesignCanvas({
       // Use custom garment from Garment Manager
       const img = new Image();
       img.onload = () => setTshirtImage(img);
+      img.onerror = () => {
+        console.warn('Custom garment failed to load:', customGarment.dataUrl);
+        setTshirtImage(null);
+      };
       img.src = customGarment.dataUrl;
       return;
     }
