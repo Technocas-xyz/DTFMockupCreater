@@ -92,15 +92,17 @@ function MockupPreview({
           offCtx.drawImage(shirtImg, dx, dy, dw, dh);
 
           if (!(cr > 240 && cg > 240 && cb > 240)) {
-            offCtx.globalCompositeOperation = 'source-atop';
+            offCtx.globalCompositeOperation = 'color';
             offCtx.fillStyle = selectedColor.hex;
-            offCtx.globalAlpha = 0.75;
             offCtx.fillRect(0, 0, W, H);
-            offCtx.globalAlpha = 1;
-            offCtx.globalCompositeOperation = 'multiply';
-            offCtx.globalAlpha = 0.5;
-            offCtx.drawImage(shirtImg, dx, dy, dw, dh);
-            offCtx.globalAlpha = 1;
+            const lum = (cr * 0.299 + cg * 0.587 + cb * 0.114) / 255;
+            if (lum < 0.5) {
+              offCtx.globalCompositeOperation = 'multiply';
+              offCtx.fillStyle = selectedColor.hex;
+              offCtx.globalAlpha = 0.3;
+              offCtx.fillRect(0, 0, W, H);
+              offCtx.globalAlpha = 1;
+            }
             offCtx.globalCompositeOperation = 'source-over';
           }
           ctx.drawImage(offscreen, 0, 0);
@@ -127,9 +129,19 @@ function MockupPreview({
           offCtx.imageSmoothingEnabled = true;
           offCtx.imageSmoothingQuality = 'high';
           offCtx.drawImage(shirtImg, shirtImgX, shirtImgY, shirtImgW, shirtImgH);
-          offCtx.globalCompositeOperation = 'multiply';
+          // Accurate color tinting using 'color' blend mode
+          offCtx.globalCompositeOperation = 'color';
           offCtx.fillStyle = selectedColor.hex;
           offCtx.fillRect(0, 0, W, H);
+          const hexD = selectedColor.hex.replace('#','');
+          const lumD = (parseInt(hexD.substring(0,2),16)*0.299 + parseInt(hexD.substring(2,4),16)*0.587 + parseInt(hexD.substring(4,6),16)*0.114)/255;
+          if (lumD < 0.5) {
+            offCtx.globalCompositeOperation = 'multiply';
+            offCtx.fillStyle = selectedColor.hex;
+            offCtx.globalAlpha = 0.3;
+            offCtx.fillRect(0, 0, W, H);
+            offCtx.globalAlpha = 1;
+          }
           offCtx.globalCompositeOperation = 'destination-in';
           offCtx.drawImage(shirtImg, shirtImgX, shirtImgY, shirtImgW, shirtImgH);
           ctx.drawImage(offscreen, 0, 0);
@@ -908,15 +920,17 @@ function MockupCard({ size, artwork, color, artworkDimensions, artworkPosition, 
       offCtx.drawImage(tshirtImg, dx, dy, dw, dh);
 
       if (!(cr2 > 240 && cg2 > 240 && cb2 > 240)) {
-        offCtx.globalCompositeOperation = 'source-atop';
+        offCtx.globalCompositeOperation = 'color';
         offCtx.fillStyle = color.hex;
-        offCtx.globalAlpha = 0.75;
         offCtx.fillRect(0, 0, W, H);
-        offCtx.globalAlpha = 1;
-        offCtx.globalCompositeOperation = 'multiply';
-        offCtx.globalAlpha = 0.5;
-        offCtx.drawImage(tshirtImg, dx, dy, dw, dh);
-        offCtx.globalAlpha = 1;
+        const lum2 = (cr2 * 0.299 + cg2 * 0.587 + cb2 * 0.114) / 255;
+        if (lum2 < 0.5) {
+          offCtx.globalCompositeOperation = 'multiply';
+          offCtx.fillStyle = color.hex;
+          offCtx.globalAlpha = 0.3;
+          offCtx.fillRect(0, 0, W, H);
+          offCtx.globalAlpha = 1;
+        }
         offCtx.globalCompositeOperation = 'source-over';
       }
       ctx.drawImage(offscreen, 0, 0);

@@ -357,15 +357,17 @@ const MSPCard = React.forwardRef(function MSPCard({
       offCtx.drawImage(tshirtImg, dx, dy, dw, dh);
 
       if (!(cr2 > 240 && cg2 > 240 && cb2 > 240)) {
-        offCtx.globalCompositeOperation = 'source-atop';
+        offCtx.globalCompositeOperation = 'color';
         offCtx.fillStyle = selectedColor.hex;
-        offCtx.globalAlpha = 0.75;
         offCtx.fillRect(0, 0, W, H);
-        offCtx.globalAlpha = 1;
-        offCtx.globalCompositeOperation = 'multiply';
-        offCtx.globalAlpha = 0.5;
-        offCtx.drawImage(tshirtImg, dx, dy, dw, dh);
-        offCtx.globalAlpha = 1;
+        const lum = (cr2 * 0.299 + cg2 * 0.587 + cb2 * 0.114) / 255;
+        if (lum < 0.5) {
+          offCtx.globalCompositeOperation = 'multiply';
+          offCtx.fillStyle = selectedColor.hex;
+          offCtx.globalAlpha = 0.3;
+          offCtx.fillRect(0, 0, W, H);
+          offCtx.globalAlpha = 1;
+        }
         offCtx.globalCompositeOperation = 'source-over';
       }
       ctx.drawImage(offscreen, 0, 0);

@@ -28,36 +28,23 @@ function applyColorTint(ctx, img, dx, dy, dw, dh, canvasW, canvasH, colorHex) {
     return;
   }
 
-  // For colored tinting: use 'hue' blend which changes hue/sat but keeps luminosity
-  // Step 1: draw original (to get the alpha mask)
-  // Step 2: overlay the color using 'multiply' for dark colors or 'screen' for light
-  // Best approach for garments: draw original, then overlay color at ~60% opacity with 'multiply'
-  // + draw original at low opacity on top to preserve texture
-
-  // Approach: screen blend for light colors, multiply for mid, for dark overlay
-  // Simplest that works well: draw original, then overlay color with 'color' blend mode
-  offCtx.globalCompositeOperation = 'source-atop';
+  // Accurate color tinting: use 'color' blend mode (changes hue+saturation, keeps luminosity)
+  // This produces colors that closely match the selected hex value
+  offCtx.globalCompositeOperation = 'color';
   offCtx.fillStyle = colorHex;
-  offCtx.globalAlpha = 0.75;
   offCtx.fillRect(0, 0, canvasW, canvasH);
-  offCtx.globalAlpha = 1;
 
-  // Draw texture back on top using multiply to get shading
-  const texture = document.createElement('canvas');
-  texture.width = canvasW;
-  texture.height = canvasH;
-  const texCtx = texture.getContext('2d');
-  texCtx.drawImage(img, dx, dy, dw, dh);
-  texCtx.globalCompositeOperation = 'multiply';
-  texCtx.globalAlpha = 0.6;
-  texCtx.drawImage(img, dx, dy, dw, dh);
+  // For dark colors, strengthen with a subtle multiply pass
+  const luminance = (r * 0.299 + g * 0.587 + b * 0.114) / 255;
+  if (luminance < 0.5) {
+    offCtx.globalCompositeOperation = 'multiply';
+    offCtx.fillStyle = colorHex;
+    offCtx.globalAlpha = 0.3;
+    offCtx.fillRect(0, 0, canvasW, canvasH);
+    offCtx.globalAlpha = 1;
+  }
 
-  offCtx.globalCompositeOperation = 'multiply';
-  offCtx.globalAlpha = 0.5;
-  offCtx.drawImage(texture, 0, 0);
-  offCtx.globalAlpha = 1;
   offCtx.globalCompositeOperation = 'source-over';
-
   ctx.drawImage(offscreen, 0, 0);
 }
 
