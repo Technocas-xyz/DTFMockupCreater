@@ -12,6 +12,7 @@ import GarmentManager from './components/GarmentManager';
 import GangSheet from './components/GangSheet';
 import AIArtworkLab from './components/AIArtworkLab';
 import UserManagement from './components/UserManagement';
+import MockupEngineV2 from './components/MockupEngineV2';
 import { TSHIRT_SIZES, TSHIRT_COLORS, SIZE_ORDER } from './constants/tshirtSizes';
 import { GARMENTS_API, SERVE_IMAGE_URL, detectApiBase, getGarmentsUrl, getServeImageUrl } from './utils/apiConfig';
 import './App.css';
@@ -306,6 +307,10 @@ function App() {
 
     if (currentPage === 'users') {
       return <UserManagement authUser={authUser} />;
+    }
+
+    if (currentPage === 'mockupv2') {
+      return <MockupEngineV2 garmentLibrary={garmentLibrary} />;
     }
 
     // Default: Design Preview page (orders)

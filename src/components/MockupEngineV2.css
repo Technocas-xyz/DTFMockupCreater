@@ -1,0 +1,62 @@
+.mv2-page { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+.mv2-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 20px; background: white; border-bottom: 1px solid var(--border); }
+.mv2-header-left { display: flex; align-items: baseline; gap: 10px; }
+.mv2-title { font-size: 17px; font-weight: 600; margin: 0; }
+.mv2-beta { font-size: 10px; background: #f59e0b; color: white; padding: 2px 6px; border-radius: 4px; }
+.mv2-subtitle { font-size: 12px; color: var(--text-secondary); }
+.mv2-header-right { display: flex; gap: 8px; }
+
+.mv2-layout { display: flex; flex: 1; overflow: hidden; }
+.mv2-left, .mv2-right { width: 280px; flex-shrink: 0; overflow-y: auto; padding: 12px; background: #f8fafc; }
+.mv2-left { border-right: 1px solid var(--border); }
+.mv2-right { border-left: 1px solid var(--border); }
+.mv2-center { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+.mv2-card { background: white; border-radius: 8px; padding: 12px; margin-bottom: 10px; border: 1px solid #e2e8f0; }
+.mv2-card-title { font-size: 11px; font-weight: 600; margin: 0 0 8px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-primary); }
+
+.mv2-info-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 11px; border-bottom: 1px solid #f1f5f9; }
+.mv2-info-row span:first-child { color: var(--text-secondary); }
+.mv2-info-row span:last-child { font-weight: 500; }
+.mv2-source-info { font-size: 11px; }
+
+.mv2-setting { margin-bottom: 8px; }
+.mv2-setting label { display: block; font-size: 11px; color: var(--text-secondary); margin-bottom: 3px; }
+.mv2-setting select, .mv2-setting input[type="range"] { width: 100%; }
+.mv2-setting select { padding: 5px 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 12px; }
+
+.mv2-toggle-row { display: flex; gap: 4px; }
+.mv2-toggle { padding: 4px 12px; border: 1px solid var(--border); border-radius: 4px; font-size: 11px; cursor: pointer; background: white; }
+.mv2-toggle.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+.mv2-toolbar { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: white; border-bottom: 1px solid var(--border); }
+.mv2-zoom-bar { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.mv2-zoom-btn { width: 28px; height: 28px; border-radius: 4px; border: 1px solid var(--border); background: white; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 13px; }
+.mv2-zoom-btn.active { background: var(--primary); color: white; }
+.mv2-render-time { font-size: 11px; color: var(--text-secondary); }
+
+.mv2-canvas-area { flex: 1; overflow: hidden; position: relative; background: repeating-conic-gradient(#f0f0f0 0% 25%, #fff 0% 50%) 50%/20px 20px; display: flex; align-items: center; justify-content: center; }
+.mv2-viewport { transform-origin: center; }
+.mv2-render-img { max-width: 100%; max-height: 100%; display: block; }
+.mv2-empty { text-align: center; padding: 48px; }
+.mv2-empty p { font-size: 14px; color: var(--text-secondary); margin: 0 0 4px; }
+.mv2-empty span { font-size: 11px; color: #94a3b8; }
+.mv2-processing { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(255,255,255,0.85); z-index: 10; }
+.mv2-spinner { width: 32px; height: 32px; border: 3px solid #e2e8f0; border-top-color: var(--primary); border-radius: 50%; animation: mv2spin 0.7s linear infinite; }
+@keyframes mv2spin { to { transform: rotate(360deg); } }
+
+.mv2-stages { display: flex; flex-direction: column; gap: 4px; }
+.mv2-stage-row { display: flex; align-items: center; gap: 6px; font-size: 11px; cursor: pointer; }
+.mv2-stage-row input { width: 14px; height: 14px; }
+.mv2-log { max-height: 200px; overflow-y: auto; font-size: 10px; }
+.mv2-log-entry { padding: 3px 0; border-bottom: 1px solid #f8fafc; }
+.mv2-muted { color: #94a3b8; font-size: 11px; }
+.mv2-export-btns { display: flex; flex-direction: column; gap: 6px; }
+
+.mv2-btn { padding: 7px 14px; border-radius: 6px; font-size: 12px; font-weight: 500; border: none; cursor: pointer; }
+.mv2-btn-primary { background: var(--primary); color: white; }
+.mv2-btn-primary:hover { opacity: 0.9; }
+.mv2-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.mv2-btn-outline { background: white; border: 1px solid var(--border); color: var(--text-primary); }
+.mv2-btn-sm { padding: 4px 10px; font-size: 11px; }
+.mv2-btn-full { width: 100%; }
