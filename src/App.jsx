@@ -392,6 +392,7 @@ function App() {
                 onComparisonSizeToggle={(size) => setComparisonSizes((prev) => prev.includes(size) ? prev.filter((s) => s !== size) : [...prev, size])}
                 scalingMode={scalingMode}
                 onScalingModeChange={setScalingMode}
+                viewSide={viewSide}
               />
             </div>
           </div>
@@ -509,6 +510,7 @@ function App() {
               }
               scalingMode={scalingMode}
               onScalingModeChange={setScalingMode}
+              viewSide={viewSide}
             />
           </div>
         </div>

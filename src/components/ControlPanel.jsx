@@ -32,6 +32,7 @@ function ControlPanel({
   onComparisonSizeToggle,
   scalingMode,
   onScalingModeChange,
+  viewSide,
 }) {
   const fileInputRef = useRef(null);
   const [selectedType, setSelectedType] = useState('T-Shirt');
@@ -47,34 +48,35 @@ function ControlPanel({
     ? garmentLibrary.filter(g => g.type === selectedType)
     : [];
 
-  // Auto-select garment when type or size changes (find matching garment for current size+type)
+  // Auto-select garment when type, size, or view side changes
   useEffect(() => {
     if (!garmentLibrary || garmentLibrary.length === 0) return;
+    const side = viewSide || 'front';
     if (selectedType === 'T-Shirt') {
-      // T-Shirt type: check if there's a tagged t-shirt garment for this size
-      const match = garmentLibrary.find(g => g.type === 'T-Shirt' && g.size === selectedSize);
+      // T-Shirt type: check if there's a tagged t-shirt garment for this size + side
+      const match = garmentLibrary.find(g => g.type === 'T-Shirt' && g.size === selectedSize && (g.side || 'front') === side);
       if (match) {
         onGarmentChange(match.id);
       } else {
-        // No custom t-shirt — use default template
-        onGarmentChange(null);
+        // Try same type+size without side constraint
+        const fallback = garmentLibrary.find(g => g.type === 'T-Shirt' && g.size === selectedSize);
+        onGarmentChange(fallback ? fallback.id : null);
       }
       return;
     }
-    // Non-T-Shirt types: find a garment matching the selected type + size
-    const match = garmentLibrary.find(g => g.type === selectedType && g.size === selectedSize);
+    // Non-T-Shirt types: find a garment matching type + size + side
+    const match = garmentLibrary.find(g => g.type === selectedType && g.size === selectedSize && (g.side || 'front') === side);
     if (match) {
       onGarmentChange(match.id);
     } else {
-      // No matching garment for this type+size — try same type any size as fallback
-      const fallback = garmentLibrary.find(g => g.type === selectedType);
-      if (fallback) {
-        onGarmentChange(fallback.id);
-      } else {
-        onGarmentChange(null);
-      }
+      // Fallback: same type + size (any side)
+      const fallback1 = garmentLibrary.find(g => g.type === selectedType && g.size === selectedSize);
+      if (fallback1) { onGarmentChange(fallback1.id); return; }
+      // Fallback: same type (any size/side)
+      const fallback2 = garmentLibrary.find(g => g.type === selectedType);
+      onGarmentChange(fallback2 ? fallback2.id : null);
     }
-  }, [selectedType, selectedSize, garmentLibrary]);
+  }, [selectedType, selectedSize, garmentLibrary, viewSide]);
 
   const handleWidthChange = (newWidth) => {
     const w = parseFloat(newWidth) || 0;
