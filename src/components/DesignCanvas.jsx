@@ -1,55 +1,15 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { TSHIRT_SIZES } from '../constants/tshirtSizes';
+import { drawRecoloredGarment } from '../utils/garmentTintEngine';
 import './DesignCanvas.css';
 
 // Canvas dimensions (pixels)
 const CANVAS_WIDTH = 700;
 const CANVAS_HEIGHT = 850;
 
-// Color tinting utility — replaces hue/saturation but preserves lightness
-// This works correctly on any shirt color (black, white, colored, etc.)
+// Color tinting utility — uses the new V2 garment tint engine
 function applyColorTint(ctx, img, dx, dy, dw, dh, canvasW, canvasH, colorHex) {
-  // If color is white (#ffffff or close), just draw as-is
-  const hex = colorHex.replace('#', '');
-  const r = parseInt(hex.substring(0, 2), 16);
-  const g = parseInt(hex.substring(2, 4), 16);
-  const b = parseInt(hex.substring(4, 6), 16);
-
-  // Draw original image first
-  const offscreen = document.createElement('canvas');
-  offscreen.width = canvasW;
-  offscreen.height = canvasH;
-  const offCtx = offscreen.getContext('2d');
-  offCtx.drawImage(img, dx, dy, dw, dh);
-
-  // If white is selected, just draw original
-  if (r > 240 && g > 240 && b > 240) {
-    ctx.drawImage(offscreen, 0, 0);
-    return;
-  }
-
-  // Accurate color tinting — constrained to t-shirt pixels only
-  // Step 1: Fill color only where the shirt exists (source-atop)
-  offCtx.globalCompositeOperation = 'source-atop';
-  offCtx.fillStyle = colorHex;
-  offCtx.fillRect(0, 0, canvasW, canvasH);
-
-  // Step 2: Bring back luminosity/texture from original using 'luminosity' blend
-  offCtx.globalCompositeOperation = 'luminosity';
-  offCtx.drawImage(img, dx, dy, dw, dh);
-
-  // Step 3: For dark colors, deepen slightly with multiply
-  const luminance = (r * 0.299 + g * 0.587 + b * 0.114) / 255;
-  if (luminance < 0.4) {
-    offCtx.globalCompositeOperation = 'source-atop';
-    offCtx.globalAlpha = 0.2;
-    offCtx.fillStyle = '#000000';
-    offCtx.fillRect(0, 0, canvasW, canvasH);
-    offCtx.globalAlpha = 1;
-  }
-
-  offCtx.globalCompositeOperation = 'source-over';
-  ctx.drawImage(offscreen, 0, 0);
+  drawRecoloredGarment(ctx, img, dx, dy, dw, dh, colorHex, canvasW, canvasH);
 }
 
 function DesignCanvas({

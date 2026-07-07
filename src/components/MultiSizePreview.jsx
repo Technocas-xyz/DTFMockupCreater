@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { TSHIRT_SIZES, SIZE_ORDER } from '../constants/tshirtSizes';
+import { drawRecoloredGarment } from '../utils/garmentTintEngine';
 import './MultiSizePreview.css';
 
 function MultiSizePreview({
@@ -344,34 +345,12 @@ const MSPCard = React.forwardRef(function MSPCard({
         dy = tshirtY - (dh - tshirtH) * 0.15;
       }
 
-      // Draw with color tint
+      // Draw with color tint using V2 engine
       const offscreen = document.createElement('canvas');
       offscreen.width = W;
       offscreen.height = H;
       const offCtx = offscreen.getContext('2d');
-      const hex2 = selectedColor.hex.replace('#', '');
-      const cr2 = parseInt(hex2.substring(0, 2), 16);
-      const cg2 = parseInt(hex2.substring(2, 4), 16);
-      const cb2 = parseInt(hex2.substring(4, 6), 16);
-
-      offCtx.drawImage(tshirtImg, dx, dy, dw, dh);
-
-      if (!(cr2 > 240 && cg2 > 240 && cb2 > 240)) {
-        offCtx.globalCompositeOperation = 'source-atop';
-        offCtx.fillStyle = selectedColor.hex;
-        offCtx.fillRect(0, 0, W, H);
-        offCtx.globalCompositeOperation = 'luminosity';
-        offCtx.drawImage(tshirtImg, dx, dy, dw, dh);
-        const lum = (cr2 * 0.299 + cg2 * 0.587 + cb2 * 0.114) / 255;
-        if (lum < 0.4) {
-          offCtx.globalCompositeOperation = 'source-atop';
-          offCtx.globalAlpha = 0.2;
-          offCtx.fillStyle = '#000000';
-          offCtx.fillRect(0, 0, W, H);
-          offCtx.globalAlpha = 1;
-        }
-        offCtx.globalCompositeOperation = 'source-over';
-      }
+      drawRecoloredGarment(offCtx, tshirtImg, dx, dy, dw, dh, selectedColor.hex, W, H);
       ctx.drawImage(offscreen, 0, 0);
     } else {
       // No garment image — use vector fallback
