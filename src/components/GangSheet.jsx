@@ -28,7 +28,7 @@ function packItems(items, sheetWidth, hGap, vGap, margins, maxHeight) {
 
     for (const rect of freeRects) {
       // Normal orientation — BSSF scoring
-      if (item.w <= rect.w + 0.001 && item.h <= rect.h + 0.001) {
+      if (item.w <= rect.w + 0.01 && item.h <= rect.h + 0.01) {
         const leftover_h = Math.abs(rect.w - item.w);
         const leftover_v = Math.abs(rect.h - item.h);
         const score1 = Math.min(leftover_h, leftover_v);
@@ -43,7 +43,7 @@ function packItems(items, sheetWidth, hGap, vGap, margins, maxHeight) {
         }
       }
       // Rotated orientation
-      if (item.h <= rect.w + 0.001 && item.w <= rect.h + 0.001) {
+      if (item.h <= rect.w + 0.01 && item.w <= rect.h + 0.01) {
         const leftover_h = Math.abs(rect.w - item.h);
         const leftover_v = Math.abs(rect.h - item.w);
         const score1 = Math.min(leftover_h, leftover_v);
@@ -243,6 +243,12 @@ function GangSheet({ sharedArtwork }) {
     const newLayout = calculateLayout(artworks, SHEET_WIDTH_INCHES, hGap, vGap, margins, tightPack);
     setLayoutData(newLayout);
     if (activeSheet >= newLayout.totalSheets) setActiveSheet(0);
+    // Debug: log packing results
+    if (newLayout.sheets[0] && newLayout.sheets[0].items.length > 0) {
+      const items = newLayout.sheets[0].items;
+      const firstRowItems = items.filter(i => i.y === items[0].y);
+      console.log(`[GangSheet Pack] Sheet width: ${SHEET_WIDTH_INCHES}", Items in first row: ${firstRowItems.length}, Item widths: ${firstRowItems.map(i => i.w.toFixed(2)).join(', ')}, Total: ${firstRowItems.reduce((s,i,idx) => s + i.w + (idx > 0 ? hGap : 0), 0).toFixed(2)}"`);
+    }
   }, [artworks, hGap, vGap, margins, tightPack]);
 
   // Draw canvas
