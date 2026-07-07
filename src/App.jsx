@@ -310,7 +310,106 @@ function App() {
     }
 
     if (currentPage === 'mockupv2') {
-      return <MockupEngineV2 garmentLibrary={garmentLibrary} />;
+      return (
+        <>
+          <header className="top-bar">
+            <div className="breadcrumb">
+              <span>Mockup Engine V2</span>
+              <span className="separator">›</span>
+              <span className="active">Design Preview (Beta)</span>
+            </div>
+            <div className="top-actions">
+              <span style={{fontSize:'11px',background:'#f59e0b',color:'white',padding:'3px 8px',borderRadius:'4px'}}>V2 Engine</span>
+              <button className="btn-primary">Share / Send</button>
+            </div>
+          </header>
+          <div className="designer-layout">
+            <div className="canvas-section">
+              <div className="view-controls">
+                {['front', 'back'].map((side) => (
+                  <button key={side} className={`view-btn ${viewSide === side ? 'active' : ''}`} onClick={() => setViewSide(side)}>
+                    <ViewIcon side={side} />
+                    <span>{side.charAt(0).toUpperCase() + side.slice(1)}</span>
+                  </button>
+                ))}
+              </div>
+              <div className={`canvas-with-comparison ${comparisonSizes.length > 0 ? 'has-comparison' : ''}`}>
+                <DesignCanvas
+                  artwork={artwork}
+                  selectedSize={selectedSize}
+                  selectedColor={selectedColor}
+                  artworkDimensions={artworkDimensions}
+                  viewSide={viewSide}
+                  artworkPosition={artworkPosition}
+                  artworkScale={artworkScale}
+                  artworkAreaSettings={artworkAreaSettings}
+                  onPositionChange={handlePositionChange}
+                  customGarment={customGarment}
+                />
+                {comparisonSizes.length > 0 && (
+                  <MultiSizePreview
+                    artwork={artwork}
+                    selectedColor={selectedColor}
+                    artworkDimensions={artworkDimensions}
+                    artworkPosition={artworkPosition}
+                    artworkScale={artworkScale}
+                    artworkAreaSettings={artworkAreaSettings}
+                    selectedSizes={comparisonSizes}
+                    viewSide={viewSide}
+                    garmentLibrary={garmentLibrary}
+                    scalingMode={scalingMode}
+                    baseSize={selectedSize}
+                    customGarment={customGarment}
+                  />
+                )}
+              </div>
+            </div>
+            <div className="controls-section">
+              <ControlPanel
+                selectedSize={selectedSize}
+                onSizeChange={setSelectedSize}
+                selectedColor={selectedColor}
+                onColorChange={setSelectedColor}
+                artworkDimensions={artworkDimensions}
+                onDimensionsChange={setArtworkDimensions}
+                lockProportion={lockProportion}
+                onLockProportionChange={setLockProportion}
+                artwork={artwork}
+                onArtworkUpload={handleArtworkUpload}
+                artworkScale={artworkScale}
+                artworkPosition={artworkPosition}
+                onPositionChange={handlePositionChange}
+                onReset={resetPosition}
+                artworkAreaSettings={artworkAreaSettings}
+                onArtworkAreaSettingsChange={setArtworkAreaSettings}
+                selectedMockupSizes={selectedMockupSizes}
+                onMockupSizeToggle={(size) => setSelectedMockupSizes((prev) => ({ ...prev, [size]: !prev[size] }))}
+                onGenerateMockups={() => setShowMockups(true)}
+                garmentLibrary={garmentLibrary}
+                selectedGarmentId={selectedGarmentId}
+                onGarmentChange={handleGarmentChange}
+                comparisonSizes={comparisonSizes}
+                onComparisonSizeToggle={(size) => setComparisonSizes((prev) => prev.includes(size) ? prev.filter((s) => s !== size) : [...prev, size])}
+                scalingMode={scalingMode}
+                onScalingModeChange={setScalingMode}
+              />
+            </div>
+          </div>
+          {showMockups && (
+            <MockupPreview
+              artwork={artwork}
+              selectedColor={selectedColor}
+              artworkDimensions={artworkDimensions}
+              artworkPosition={artworkPosition}
+              artworkScale={artworkScale}
+              artworkAreaSettings={artworkAreaSettings}
+              selectedMockupSizes={selectedMockupSizes}
+              viewSide={viewSide}
+              garmentLibrary={garmentLibrary}
+            />
+          )}
+        </>
+      );
     }
 
     // Default: Design Preview page (orders)
