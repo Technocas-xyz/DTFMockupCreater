@@ -6,7 +6,7 @@ import './GarmentManager.css';
 const GARMENT_TYPES = ['T-Shirt', 'Hoodie', 'Long Sleeve', 'Tank Top', 'Other'];
 const STORAGE_KEY = 'garment-library';
 const MAX_GARMENTS = 500;
-const SIZE_OPTIONS = ['2T','3T','4T','5T','YS','YM','YL','YXL','S','M','L','XL','2XL','3XL','4XL','5XL'];
+const SIZE_OPTIONS = ['2T','3T','4T','5T','YS','YM','YL','YXL','XS','S','M','L','XL','2XL','3XL','4XL','5XL'];
 const GENDER_OPTIONS = ['Unisex', 'Male', 'Female'];
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
