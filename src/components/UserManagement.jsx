@@ -3,11 +3,12 @@ import { detectApiBase } from '../utils/apiConfig';
 import './UserManagement.css';
 
 const ALL_PAGES = [
-  { id: 'bgremover', label: 'BG Remover' },
-  { id: 'qa', label: 'QA Analysis' },
-  { id: 'orders', label: 'Mockup Preview' },
+  { id: 'bgremover', label: 'Artwork Editor' },
+  { id: 'mockupv2', label: 'Mockup Preview' },
   { id: 'garments', label: 'Garment Manager' },
   { id: 'gangsheet', label: 'Gang Sheet' },
+  { id: 'orders', label: 'Mockup Preview (OLD)' },
+  { id: 'qa', label: 'QA Analysis' },
   { id: 'contrast', label: 'Contrast Checker' },
   { id: 'ailab', label: 'AI Artwork Lab' },
   { id: 'users', label: 'User Management' },
