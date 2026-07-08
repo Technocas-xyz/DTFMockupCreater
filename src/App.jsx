@@ -247,7 +247,7 @@ function App() {
     };
     img.src = imageDataUrl;
 
-    setCurrentPage('orders');
+    setCurrentPage('mockupv2');
   };
 
   const sendToBGRemover = (imageDataUrl) => {
@@ -285,7 +285,7 @@ function App() {
         <GarmentManager
           onUseAsMockup={(garment) => {
             setCustomGarment(garment);
-            setCurrentPage('orders');
+            setCurrentPage('mockupv2');
           }}
         />
       );
