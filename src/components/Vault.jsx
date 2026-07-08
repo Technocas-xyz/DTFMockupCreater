@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { detectApiBase } from '../utils/apiConfig';
 import './Vault.css';
 
 function Vault({ onSendToEditor, onSendToMockup }) {
@@ -7,72 +8,47 @@ function Vault({ onSendToEditor, onSendToMockup }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [selectedImages, setSelectedImages] = useState(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
+  const [serviceInfo, setServiceInfo] = useState(null);
 
   const fetchFromLink = async () => {
     if (!sharedLink.trim()) { setError('Please enter a shared link'); return; }
     setLoading(true);
     setError('');
     setImages([]);
+    setServiceInfo(null);
 
     try {
-      // Try to fetch the link and parse images from it
-      const res = await fetch(sharedLink, { mode: 'cors' });
-      if (!res.ok) throw new Error(`Failed to fetch (${res.status})`);
-      const contentType = res.headers.get('content-type') || '';
+      // Use PHP proxy to bypass CORS and parse cloud service links
+      const apiBase = await detectApiBase();
+      const res = await fetch(`${apiBase}/vault-proxy.php`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: sharedLink.trim() }),
+      });
+      const data = await res.json();
 
-      if (contentType.startsWith('image/')) {
-        // Direct image link
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        setImages([{ id: 1, url, name: sharedLink.split('/').pop() || 'image.png', blob }]);
-      } else {
-        // HTML page — try to extract image URLs
-        const html = await res.text();
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
-        const imgElements = doc.querySelectorAll('img[src]');
-        const found = [];
-        let id = 1;
-        imgElements.forEach(img => {
-          let src = img.getAttribute('src');
-          if (!src) return;
-          // Make absolute URL
-          if (src.startsWith('//')) src = 'https:' + src;
-          else if (src.startsWith('/')) {
-            try { const u = new URL(sharedLink); src = u.origin + src; } catch(e) {}
-          } else if (!src.startsWith('http')) {
-            try { src = new URL(src, sharedLink).href; } catch(e) {}
-          }
-          // Filter: only real images (not tiny icons)
-          const width = parseInt(img.getAttribute('width') || '0');
-          const height = parseInt(img.getAttribute('height') || '0');
-          if (width > 0 && width < 50 && height > 0 && height < 50) return;
-          if (src.includes('favicon') || src.includes('logo') || src.includes('icon')) return;
-          found.push({ id: id++, url: src, name: src.split('/').pop().split('?')[0] || `image-${id}.png` });
-        });
+      if (data.error) { setError(data.error); setLoading(false); return; }
 
-        // Also look for links to image files
-        const links = doc.querySelectorAll('a[href]');
-        links.forEach(a => {
-          const href = a.getAttribute('href');
-          if (!href) return;
-          if (/\.(png|jpg|jpeg|webp|tiff|bmp|gif)(\?|$)/i.test(href)) {
-            let src = href;
-            if (src.startsWith('//')) src = 'https:' + src;
-            else if (src.startsWith('/')) { try { src = new URL(sharedLink).origin + src; } catch(e) {} }
-            else if (!src.startsWith('http')) { try { src = new URL(src, sharedLink).href; } catch(e) {} }
-            found.push({ id: id++, url: src, name: src.split('/').pop().split('?')[0] || `image-${id}.png` });
-          }
-        });
-
-        if (found.length === 0) throw new Error('No images found at this link');
-        setImages(found);
-      }
+      setServiceInfo({ service: data.service, type: data.type });
+      const imgList = (data.images || []).map((img, idx) => ({
+        id: idx + 1,
+        name: img.name || `image-${idx+1}.png`,
+        url: img.url,
+        thumbnail: img.thumbnail || img.url,
+      }));
+      setImages(imgList);
+      if (imgList.length === 0) setError('No images found at this link');
     } catch (err) {
-      setError(err.message || 'Failed to fetch images. The link may not support CORS.');
+      setError('Failed to fetch. Check the link and try again.');
     }
     setLoading(false);
   };
+
+  // Filtered images by search
+  const filteredImages = searchQuery.trim()
+    ? images.filter(img => img.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    : images;
 
   const toggleSelect = (id) => {
     setSelectedImages(prev => {
@@ -88,21 +64,31 @@ function Vault({ onSendToEditor, onSendToMockup }) {
   const sendSelected = async (target) => {
     const selected = images.filter(i => selectedImages.has(i.id));
     if (selected.length === 0) { setError('Select at least one image'); return; }
-    // Send the first selected image as data URL
     const img = selected[0];
     try {
       let dataUrl;
       if (img.blob) {
         dataUrl = await blobToDataUrl(img.blob);
       } else {
-        const res = await fetch(img.url);
-        const blob = await res.blob();
-        dataUrl = await blobToDataUrl(blob);
+        // Use proxy to fetch (bypass CORS)
+        const apiBase = await detectApiBase();
+        const res = await fetch(`${apiBase}/vault-proxy.php?url=${encodeURIComponent(img.url)}`);
+        const data = await res.json();
+        if (data.images && data.images[0]) {
+          // It's a redirect/meta — try direct fetch
+          const imgRes = await fetch(img.url);
+          const blob = await imgRes.blob();
+          dataUrl = await blobToDataUrl(blob);
+        } else {
+          const imgRes = await fetch(img.url);
+          const blob = await imgRes.blob();
+          dataUrl = await blobToDataUrl(blob);
+        }
       }
       if (target === 'editor' && onSendToEditor) onSendToEditor(dataUrl);
       if (target === 'mockup' && onSendToMockup) onSendToMockup(dataUrl);
     } catch (err) {
-      setError('Failed to load image. Try downloading it manually.');
+      setError('Failed to load image. Try downloading it first.');
     }
   };
 
@@ -147,8 +133,24 @@ function Vault({ onSendToEditor, onSendToMockup }) {
         {/* Results */}
         {images.length > 0 && (
           <>
+            {serviceInfo && (
+              <div className="vault-service-badge">
+                {serviceInfo.service === 'google-drive' && '📁 Google Drive'}
+                {serviceInfo.service === 'dropbox' && '📦 Dropbox'}
+                {serviceInfo.service === 'onedrive' && '☁️ OneDrive'}
+                {serviceInfo.service === 'nextcloud' && '🌐 Nextcloud'}
+                {serviceInfo.service === 'generic' && '🔗 Web URL'}
+                {serviceInfo.service === 'direct' && '🖼️ Direct Image'}
+                {serviceInfo.type === 'folder' && ' (Folder)'}
+              </div>
+            )}
+
             <div className="vault-toolbar">
-              <span className="vault-count">{images.length} image{images.length !== 1 ? 's' : ''} found · {selectedImages.size} selected</span>
+              <div className="vault-search-row">
+                <input type="text" className="vault-search-input" placeholder="Search by filename..."
+                  value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                <span className="vault-count">{filteredImages.length} of {images.length} · {selectedImages.size} selected</span>
+              </div>
               <div className="vault-toolbar-actions">
                 <button className="vault-btn vault-btn-sm" onClick={selectAll}>Select All</button>
                 <button className="vault-btn vault-btn-sm" onClick={deselectAll}>Deselect</button>
@@ -162,7 +164,7 @@ function Vault({ onSendToEditor, onSendToMockup }) {
             </div>
 
             <div className="vault-grid">
-              {images.map(img => (
+              {filteredImages.map(img => (
                 <div key={img.id} className={`vault-card ${selectedImages.has(img.id) ? 'selected' : ''}`} onClick={() => toggleSelect(img.id)}>
                   <div className="vault-card-img">
                     <img src={img.url} alt={img.name} crossOrigin="anonymous" onError={(e) => { e.target.style.display='none'; }} />
