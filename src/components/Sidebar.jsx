@@ -3,6 +3,7 @@ import './Sidebar.css';
 
 const menuItems = [
   { group: 'Pre-Order Process', items: [
+    { icon: 'vault', label: 'Vault', page: 'vault' },
     { icon: 'bgremover', label: 'Artwork Editor', page: 'bgremover' },
     { icon: 'mockupv2', label: 'Mockup Preview', page: 'mockupv2' },
     { icon: 'garments', label: 'Garment Manager', page: 'garments' },
@@ -73,6 +74,13 @@ function MenuIcon({ name }) {
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <path d="M20 16V7a2 2 0 00-2-2H6a2 2 0 00-2 2v9m16 0H4m16 0l1.28 2.55a1 1 0 01-.9 1.45H3.62a1 1 0 01-.9-1.45L4 16" />
         <path d="M9 10l2 2 4-4" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ),
+    vault: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <rect x="3" y="3" width="18" height="18" rx="2" />
+        <path d="M3 9h18" />
+        <path d="M9 21V9" />
       </svg>
     ),
     dashboard: (

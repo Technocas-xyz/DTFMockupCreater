@@ -13,6 +13,7 @@ import GangSheet from './components/GangSheet';
 import AIArtworkLab from './components/AIArtworkLab';
 import UserManagement from './components/UserManagement';
 import MockupEngineV2 from './components/MockupEngineV2';
+import Vault from './components/Vault';
 import { TSHIRT_SIZES, TSHIRT_COLORS, SIZE_ORDER } from './constants/tshirtSizes';
 import { GARMENTS_API, SERVE_IMAGE_URL, detectApiBase, getGarmentsUrl, getServeImageUrl } from './utils/apiConfig';
 import './App.css';
@@ -262,6 +263,20 @@ function App() {
           sharedArtwork={sharedArtwork}
           onSendToQA={sendToQA}
           onSendToMockup={sendToMockup}
+        />
+      );
+    }
+
+    if (currentPage === 'vault') {
+      return (
+        <Vault
+          onSendToEditor={(dataUrl) => {
+            setSharedArtwork({ dataUrl, filename: 'vault-artwork.png' });
+            setCurrentPage('bgremover');
+          }}
+          onSendToMockup={(dataUrl) => {
+            sendToMockup(dataUrl);
+          }}
         />
       );
     }
