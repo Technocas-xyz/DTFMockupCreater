@@ -4,15 +4,17 @@ import './Sidebar.css';
 const menuItems = [
   { group: 'Pre-Order Process', items: [
     { icon: 'bgremover', label: 'BG Remover', page: 'bgremover' },
-    { icon: 'qa', label: 'QA Analysis', page: 'qa' },
     { icon: 'orders', label: 'Mockup Preview', page: 'orders' },
     { icon: 'garments', label: 'Garment Manager', page: 'garments' },
-    { icon: 'contrast', label: 'Contrast Checker', page: 'contrast' },
-    { icon: 'ailab', label: 'AI Artwork Lab (Beta)', page: 'ailab' },
     { icon: 'mockupv2', label: 'Mockup Engine V2', page: 'mockupv2' },
   ]},
   { group: 'Post-Order Process', items: [
     { icon: 'gangsheet', label: 'Gang Sheet', page: 'gangsheet' },
+  ]},
+  { group: 'On Testing', items: [
+    { icon: 'qa', label: 'QA Analysis', page: 'qa' },
+    { icon: 'contrast', label: 'Contrast Checker', page: 'contrast' },
+    { icon: 'ailab', label: 'AI Artwork Lab (Beta)', page: 'ailab' },
   ]},
   { group: 'Configuration', items: [
     { icon: 'users', label: 'User Management', page: 'users' },
