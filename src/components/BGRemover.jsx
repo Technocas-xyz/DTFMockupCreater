@@ -204,6 +204,10 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
   const [flipH, setFlipH] = useState(false);
   const [flipV, setFlipV] = useState(false);
 
+  // Crop state
+  const [isCropping, setIsCropping] = useState(false);
+  const [cropRect, setCropRect] = useState(null); // {x, y, w, h} in % of image
+
   // Upscaler state
   const [upscaleFactor, setUpscaleFactor] = useState(4);
   const [targetDpi, setTargetDpi] = useState(300);
@@ -684,6 +688,37 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
   };
 
   // ─── TRANSFORM ───────────────────────────────────────────────────────────────
+  const applyCrop = () => {
+    if (!cropRect || !imageDimensions) return;
+    const sourceUrl = displayUrl || originalImage;
+    if (!sourceUrl) return;
+    setIsProcessing(true);
+    setTimeout(() => {
+      const img = new Image();
+      img.onload = () => {
+        const sx = Math.round((cropRect.x / 100) * img.naturalWidth);
+        const sy = Math.round((cropRect.y / 100) * img.naturalHeight);
+        const sw = Math.round((cropRect.w / 100) * img.naturalWidth);
+        const sh = Math.round((cropRect.h / 100) * img.naturalHeight);
+        if (sw < 10 || sh < 10) { setIsProcessing(false); return; }
+        const canvas = document.createElement('canvas');
+        canvas.width = sw; canvas.height = sh;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+        const result = ctx.getImageData(0, 0, sw, sh);
+        setProcessedImageData(result);
+        setDisplayUrl(canvas.toDataURL('image/png'));
+        setImageDimensions({ width: sw, height: sh });
+        pushHistory(result, 'Crop');
+        if (!bgRemoved) setBgRemoved(true);
+        setIsCropping(false);
+        setCropRect(null);
+        setIsProcessing(false);
+      };
+      img.src = sourceUrl;
+    }, 50);
+  };
+
   const applyTransform = (type) => {
     const src = processedImageData || (displayUrl === originalImage ? null : null);
     if (!src && !originalImage) return;
@@ -1198,7 +1233,7 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
       {/* Header */}
       <header className="bgr-header">
         <div className="bgr-header-left">
-          <h1 className="bgr-title">Print Artwork Editor</h1>
+          <h1 className="bgr-title">Artwork Editor</h1>
         </div>
         <div className="bgr-header-right">
           <button className="bgr-btn bgr-btn-sm bgr-btn-outline" onClick={undo} disabled={historyIndex <= 0} title="Undo (Ctrl+Z)">↩</button>
@@ -1239,6 +1274,48 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
                 </div>
               )}
               <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => handleFileUpload(e.target.files[0])} />
+            </>)}
+          </div>
+
+          {/* Crop Tool */}
+          <div className="bgr-panel-card">
+            <h3 className="bgr-panel-title bgr-collapsible" onClick={() => toggleSection('crop')}>
+              Crop {expandedSections.crop ? '▾' : '▸'}
+            </h3>
+            {expandedSections.crop && (<>
+              {!isCropping ? (
+                <button className="bgr-btn bgr-btn-primary bgr-btn-full" onClick={() => { setIsCropping(true); setCropRect({ x: 10, y: 10, w: 80, h: 80 }); }} disabled={!originalImage}>
+                  Start Crop
+                </button>
+              ) : (
+                <div className="bgr-crop-controls">
+                  <div className="bgr-control-group">
+                    <label className="bgr-label">X Position ({cropRect?.x || 0}%)</label>
+                    <input type="range" min="0" max="80" value={cropRect?.x || 0} onChange={e => setCropRect(p => ({...p, x: +e.target.value}))} className="bgr-slider" />
+                  </div>
+                  <div className="bgr-control-group">
+                    <label className="bgr-label">Y Position ({cropRect?.y || 0}%)</label>
+                    <input type="range" min="0" max="80" value={cropRect?.y || 0} onChange={e => setCropRect(p => ({...p, y: +e.target.value}))} className="bgr-slider" />
+                  </div>
+                  <div className="bgr-control-group">
+                    <label className="bgr-label">Width ({cropRect?.w || 80}%)</label>
+                    <input type="range" min="10" max="100" value={cropRect?.w || 80} onChange={e => setCropRect(p => ({...p, w: +e.target.value}))} className="bgr-slider" />
+                  </div>
+                  <div className="bgr-control-group">
+                    <label className="bgr-label">Height ({cropRect?.h || 80}%)</label>
+                    <input type="range" min="10" max="100" value={cropRect?.h || 80} onChange={e => setCropRect(p => ({...p, h: +e.target.value}))} className="bgr-slider" />
+                  </div>
+                  {imageDimensions && cropRect && (
+                    <div className="bgr-crop-info">
+                      {Math.round(cropRect.w/100*imageDimensions.width)} × {Math.round(cropRect.h/100*imageDimensions.height)} px
+                    </div>
+                  )}
+                  <div className="bgr-button-group">
+                    <button className="bgr-btn bgr-btn-primary" onClick={applyCrop}>Apply Crop</button>
+                    <button className="bgr-btn bgr-btn-outline" onClick={() => { setIsCropping(false); setCropRect(null); }}>Cancel</button>
+                  </div>
+                </div>
+              )}
             </>)}
           </div>
 
@@ -1383,6 +1460,12 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
                   onMouseDown={handlePanStart} onMouseMove={handlePanMove} onMouseUp={handlePanEnd} onMouseLeave={handlePanEnd}
                   onAuxClick={handleMiddleDown} onWheel={handleWheel}>
                   <img src={displayUrl} alt="Preview" className="bgr-preview-image" ref={canvasRef} />
+                  {isCropping && cropRect && (
+                    <div className="bgr-crop-overlay" style={{
+                      left: `${cropRect.x}%`, top: `${cropRect.y}%`,
+                      width: `${cropRect.w}%`, height: `${cropRect.h}%`,
+                    }} />
+                  )}
                 </div>
               )}
             </div>

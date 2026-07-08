@@ -3,7 +3,7 @@ import './Sidebar.css';
 
 const menuItems = [
   { group: 'Pre-Order Process', items: [
-    { icon: 'bgremover', label: 'BG Remover', page: 'bgremover' },
+    { icon: 'bgremover', label: 'Artwork Editor', page: 'bgremover' },
     { icon: 'mockupv2', label: 'Mockup Preview', page: 'mockupv2' },
     { icon: 'garments', label: 'Garment Manager', page: 'garments' },
   ]},

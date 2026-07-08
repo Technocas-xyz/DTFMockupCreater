@@ -1045,3 +1045,32 @@
   border-bottom: none;
   padding: 2px 0;
 }
+
+/* ─── CROP TOOL ────────────────────────────────────────────────────────────── */
+.bgr-crop-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bgr-crop-info {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-align: center;
+  padding: 4px;
+  background: #f8fafc;
+  border-radius: 4px;
+}
+
+.bgr-btn-full {
+  width: 100%;
+}
+
+.bgr-crop-overlay {
+  position: absolute;
+  border: 2px dashed #2563eb;
+  background: rgba(37, 99, 235, 0.05);
+  pointer-events: none;
+  z-index: 5;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.4);
+}
