@@ -139,18 +139,119 @@ function fetchDropbox($url) {
 
 // ─── ONEDRIVE ───────────────────────────────────────────────────────────────
 function fetchOneDrive($url) {
-    // Convert to embed/download URL
-    $directUrl = str_replace('redir?', 'download?', $url);
-    if (strpos($url, '1drv.ms') !== false) {
-        // Short link — follow redirect
-        $headers = @get_headers($url, 1);
-        if (isset($headers['Location'])) $directUrl = is_array($headers['Location']) ? end($headers['Location']) : $headers['Location'];
+    // OneDrive shared links need to be converted to Graph API format
+    // The sharing URL is base64-encoded to create an API token
+    
+    // Step 1: Follow redirects to get the final URL
+    $finalUrl = $url;
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_MAXREDIRS => 5,
+        CURLOPT_TIMEOUT => 15,
+        CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        CURLOPT_NOBODY => false,
+    ]);
+    $html = curl_exec($ch);
+    $finalUrl = curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
+    curl_close($ch);
+
+    // Step 2: Try to use the sharing API
+    // Encode sharing URL for Graph API: u!<base64url>
+    $encodedUrl = rtrim(strtr(base64_encode($url), '+/', '-_'), '=');
+    $graphUrl = "https://api.onedrive.com/v1.0/shares/u!{$encodedUrl}/root/children";
+    
+    $ch = curl_init($graphUrl);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 15,
+        CURLOPT_HTTPHEADER => ['Accept: application/json'],
+    ]);
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpCode === 200 && $response) {
+        $data = json_decode($response, true);
+        if (isset($data['value']) && is_array($data['value'])) {
+            $images = [];
+            $folders = [];
+            foreach ($data['value'] as $item) {
+                $name = $item['name'] ?? '';
+                if (isset($item['folder'])) {
+                    $folders[] = ['name' => $name, 'type' => 'folder', 'childCount' => $item['folder']['childCount'] ?? 0];
+                } elseif (preg_match('/\.(png|jpg|jpeg|webp|gif|tiff|bmp|svg)$/i', $name)) {
+                    $downloadUrl = $item['@content.downloadUrl'] ?? '';
+                    $thumbnail = '';
+                    if (isset($item['thumbnails'][0]['large']['url'])) {
+                        $thumbnail = $item['thumbnails'][0]['large']['url'];
+                    }
+                    $images[] = [
+                        'name' => $name,
+                        'url' => $downloadUrl ?: $url,
+                        'thumbnail' => $thumbnail ?: $downloadUrl,
+                        'size' => $item['size'] ?? 0,
+                    ];
+                }
+            }
+            return ['service' => 'onedrive', 'type' => 'folder', 'images' => $images, 'folders' => $folders];
+        }
+    }
+
+    // Step 3: Try the driveItem endpoint
+    $graphUrl2 = "https://api.onedrive.com/v1.0/shares/u!{$encodedUrl}/driveItem?expand=children";
+    $ch = curl_init($graphUrl2);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 15,
+        CURLOPT_HTTPHEADER => ['Accept: application/json'],
+    ]);
+    $response2 = curl_exec($ch);
+    $httpCode2 = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpCode2 === 200 && $response2) {
+        $data = json_decode($response2, true);
+        $images = [];
+        $folders = [];
+        $children = $data['children'] ?? [];
+        foreach ($children as $item) {
+            $name = $item['name'] ?? '';
+            if (isset($item['folder'])) {
+                $folders[] = ['name' => $name, 'type' => 'folder', 'childCount' => $item['folder']['childCount'] ?? 0];
+            } elseif (preg_match('/\.(png|jpg|jpeg|webp|gif|tiff|bmp|svg)$/i', $name)) {
+                $downloadUrl = $item['@content.downloadUrl'] ?? '';
+                $images[] = [
+                    'name' => $name,
+                    'url' => $downloadUrl ?: $url,
+                    'thumbnail' => $downloadUrl,
+                    'size' => $item['size'] ?? 0,
+                ];
+            }
+        }
+        if (!empty($images) || !empty($folders)) {
+            return ['service' => 'onedrive', 'type' => 'folder', 'images' => $images, 'folders' => $folders];
+        }
+    }
+
+    // Step 4: Parse HTML as fallback
+    if ($html) {
+        $images = [];
+        // Look for file entries in OneDrive's embedded JSON data
+        if (preg_match_all('/"name":"([^"]+\.(png|jpg|jpeg|webp|gif))"/i', $html, $matches)) {
+            foreach ($matches[1] as $name) {
+                $images[] = ['name' => $name, 'url' => $url, 'thumbnail' => ''];
+            }
+        }
+        if (!empty($images)) return ['service' => 'onedrive', 'type' => 'folder', 'images' => $images];
     }
 
     return [
         'service' => 'onedrive',
         'type' => 'file',
-        'images' => [['name' => 'onedrive-file.png', 'url' => $directUrl, 'thumbnail' => '']],
+        'images' => [['name' => 'onedrive-file.png', 'url' => $finalUrl, 'thumbnail' => '']],
+        'note' => 'Could not list folder contents. Try sharing individual files.',
     ];
 }
 

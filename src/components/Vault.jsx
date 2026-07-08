@@ -36,9 +36,20 @@ function Vault({ onSendToEditor, onSendToMockup }) {
         name: img.name || `image-${idx+1}.png`,
         url: img.url,
         thumbnail: img.thumbnail || img.url,
+        size: img.size || 0,
       }));
+      
+      // Show folders info if any
+      if (data.folders && data.folders.length > 0) {
+        const folderNames = data.folders.map(f => `📁 ${f.name} (${f.childCount || '?'} items)`).join('\n');
+        if (imgList.length === 0) {
+          setError(`Found ${data.folders.length} folder(s) but no images in root:\n${folderNames}\n\nTry sharing the specific folder containing images.`);
+        }
+      }
+      
+      if (data.note) setError(data.note);
       setImages(imgList);
-      if (imgList.length === 0) setError('No images found at this link');
+      if (imgList.length === 0 && !(data.folders && data.folders.length > 0)) setError('No images found at this link');
     } catch (err) {
       setError('Failed to fetch. Check the link and try again.');
     }
