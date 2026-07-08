@@ -1284,34 +1284,19 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
             </h3>
             {expandedSections.crop && (<>
               {!isCropping ? (
-                <button className="bgr-btn bgr-btn-primary bgr-btn-full" onClick={() => { setIsCropping(true); setCropRect({ x: 10, y: 10, w: 80, h: 80 }); }} disabled={!originalImage}>
-                  Start Crop
+                <button className="bgr-btn bgr-btn-primary bgr-btn-full" onClick={() => { setIsCropping(true); setCropRect(null); }} disabled={!originalImage}>
+                  Start Crop (Click & Drag)
                 </button>
               ) : (
                 <div className="bgr-crop-controls">
-                  <div className="bgr-control-group">
-                    <label className="bgr-label">X Position ({cropRect?.x || 0}%)</label>
-                    <input type="range" min="0" max="80" value={cropRect?.x || 0} onChange={e => setCropRect(p => ({...p, x: +e.target.value}))} className="bgr-slider" />
-                  </div>
-                  <div className="bgr-control-group">
-                    <label className="bgr-label">Y Position ({cropRect?.y || 0}%)</label>
-                    <input type="range" min="0" max="80" value={cropRect?.y || 0} onChange={e => setCropRect(p => ({...p, y: +e.target.value}))} className="bgr-slider" />
-                  </div>
-                  <div className="bgr-control-group">
-                    <label className="bgr-label">Width ({cropRect?.w || 80}%)</label>
-                    <input type="range" min="10" max="100" value={cropRect?.w || 80} onChange={e => setCropRect(p => ({...p, w: +e.target.value}))} className="bgr-slider" />
-                  </div>
-                  <div className="bgr-control-group">
-                    <label className="bgr-label">Height ({cropRect?.h || 80}%)</label>
-                    <input type="range" min="10" max="100" value={cropRect?.h || 80} onChange={e => setCropRect(p => ({...p, h: +e.target.value}))} className="bgr-slider" />
-                  </div>
+                  <p className="bgr-hint">Click and drag on the image to select crop area</p>
                   {imageDimensions && cropRect && (
                     <div className="bgr-crop-info">
                       {Math.round(cropRect.w/100*imageDimensions.width)} × {Math.round(cropRect.h/100*imageDimensions.height)} px
                     </div>
                   )}
                   <div className="bgr-button-group">
-                    <button className="bgr-btn bgr-btn-primary" onClick={applyCrop}>Apply Crop</button>
+                    <button className="bgr-btn bgr-btn-primary" onClick={applyCrop} disabled={!cropRect}>Apply Crop</button>
                     <button className="bgr-btn bgr-btn-outline" onClick={() => { setIsCropping(false); setCropRect(null); }}>Cancel</button>
                   </div>
                 </div>
@@ -1456,11 +1441,48 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
                 </div>
               ) : (
                 <div className="bgr-image-display"
-                  style={{ transform: `scale(${zoom / 100}) translate(${panOffset.x / (zoom / 100)}px, ${panOffset.y / (zoom / 100)}px)`, cursor: getCursor() }}
-                  onMouseDown={handlePanStart} onMouseMove={handlePanMove} onMouseUp={handlePanEnd} onMouseLeave={handlePanEnd}
+                  style={{ transform: `scale(${zoom / 100}) translate(${panOffset.x / (zoom / 100)}px, ${panOffset.y / (zoom / 100)}px)`, cursor: isCropping ? 'crosshair' : getCursor(), position: 'relative' }}
+                  onMouseDown={(e) => {
+                    if (isCropping) {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const x = ((e.clientX - rect.left) / rect.width) * 100;
+                      const y = ((e.clientY - rect.top) / rect.height) * 100;
+                      setCropRect({ x, y, w: 0, h: 0, dragging: true, startX: x, startY: y });
+                    } else {
+                      handlePanStart(e);
+                    }
+                  }}
+                  onMouseMove={(e) => {
+                    if (isCropping && cropRect?.dragging) {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const curX = ((e.clientX - rect.left) / rect.width) * 100;
+                      const curY = ((e.clientY - rect.top) / rect.height) * 100;
+                      const x = Math.min(cropRect.startX, curX);
+                      const y = Math.min(cropRect.startY, curY);
+                      const w = Math.abs(curX - cropRect.startX);
+                      const h = Math.abs(curY - cropRect.startY);
+                      setCropRect(prev => ({ ...prev, x, y, w, h }));
+                    } else {
+                      handlePanMove(e);
+                    }
+                  }}
+                  onMouseUp={(e) => {
+                    if (isCropping && cropRect?.dragging) {
+                      setCropRect(prev => ({ ...prev, dragging: false }));
+                    } else {
+                      handlePanEnd();
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (isCropping && cropRect?.dragging) {
+                      setCropRect(prev => ({ ...prev, dragging: false }));
+                    } else {
+                      handlePanEnd();
+                    }
+                  }}
                   onAuxClick={handleMiddleDown} onWheel={handleWheel}>
-                  <img src={displayUrl} alt="Preview" className="bgr-preview-image" ref={canvasRef} />
-                  {isCropping && cropRect && (
+                  <img src={displayUrl} alt="Preview" className="bgr-preview-image" ref={canvasRef} draggable={false} />
+                  {isCropping && cropRect && cropRect.w > 0 && (
                     <div className="bgr-crop-overlay" style={{
                       left: `${cropRect.x}%`, top: `${cropRect.y}%`,
                       width: `${cropRect.w}%`, height: `${cropRect.h}%`,
