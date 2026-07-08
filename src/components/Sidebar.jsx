@@ -2,15 +2,21 @@ import React from 'react';
 import './Sidebar.css';
 
 const menuItems = [
-  { icon: 'bgremover', label: 'BG Remover', page: 'bgremover' },
-  { icon: 'qa', label: 'QA Analysis', page: 'qa' },
-  { icon: 'orders', label: 'Mockup Preview', page: 'orders' },
-  { icon: 'garments', label: 'Garment Manager', page: 'garments' },
-  { icon: 'gangsheet', label: 'Gang Sheet', page: 'gangsheet' },
-  { icon: 'contrast', label: 'Contrast Checker', page: 'contrast' },
-  { icon: 'ailab', label: 'AI Artwork Lab (Beta)', page: 'ailab' },
-  { icon: 'mockupv2', label: 'Mockup Engine V2', page: 'mockupv2' },
-  { icon: 'users', label: 'User Management', page: 'users' },
+  { group: 'Pre-Order Process', items: [
+    { icon: 'bgremover', label: 'BG Remover', page: 'bgremover' },
+    { icon: 'qa', label: 'QA Analysis', page: 'qa' },
+    { icon: 'orders', label: 'Mockup Preview', page: 'orders' },
+    { icon: 'garments', label: 'Garment Manager', page: 'garments' },
+    { icon: 'contrast', label: 'Contrast Checker', page: 'contrast' },
+    { icon: 'ailab', label: 'AI Artwork Lab (Beta)', page: 'ailab' },
+    { icon: 'mockupv2', label: 'Mockup Engine V2', page: 'mockupv2' },
+  ]},
+  { group: 'Post-Order Process', items: [
+    { icon: 'gangsheet', label: 'Gang Sheet', page: 'gangsheet' },
+  ]},
+  { group: 'Configuration', items: [
+    { icon: 'users', label: 'User Management', page: 'users' },
+  ]},
 ];
 
 function Sidebar({ currentPage, onPageChange, authUser, onLogout, hasPageAccess }) {
@@ -25,19 +31,24 @@ function Sidebar({ currentPage, onPageChange, authUser, onLogout, hasPageAccess 
       </div>
 
       <nav className="sidebar-nav">
-        {menuItems.filter(item => !hasPageAccess || hasPageAccess(item.page)).map((item) => (
-          <a
-            key={item.label}
-            href="#"
-            className={`nav-item ${currentPage === item.page ? 'active' : ''}`}
-            onClick={(e) => {
-              e.preventDefault();
-              onPageChange(item.page);
-            }}
-          >
-            <MenuIcon name={item.icon} />
-            <span>{item.label}</span>
-          </a>
+        {menuItems.map((group) => (
+          <div key={group.group} className="sidebar-group">
+            <span className="sidebar-group-title">{group.group}</span>
+            {group.items.filter(item => !hasPageAccess || hasPageAccess(item.page)).map((item) => (
+              <a
+                key={item.label}
+                href="#"
+                className={`nav-item ${currentPage === item.page ? 'active' : ''}`}
+                onClick={(e) => {
+                  e.preventDefault();
+                  onPageChange(item.page);
+                }}
+              >
+                <MenuIcon name={item.icon} />
+                <span>{item.label}</span>
+              </a>
+            ))}
+          </div>
         ))}
       </nav>
 
