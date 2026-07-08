@@ -576,7 +576,20 @@ function MockupPreview({
     const cropW = bounds.w;
     const cropH = bounds.h;
     
-    const finalW = cropW + sideMargin * 2;
+    // Measure text width to ensure canvas is wide enough
+    const sizeData = TSHIRT_SIZES[size];
+    const artWidthInches = (artworkDimensions.width * artworkScale).toFixed(1);
+    const artHeightInches = (artworkDimensions.height * artworkScale).toFixed(1);
+    const text = `Shirt Size: ${size} | Artwork Size: W ${artWidthInches}" x H ${artHeightInches}"`;
+    
+    // Create temp canvas to measure text
+    const measureCanvas = document.createElement('canvas');
+    const measureCtx = measureCanvas.getContext('2d');
+    measureCtx.font = 'bold 18px Inter, sans-serif';
+    const textWidth = measureCtx.measureText(text).width + 40; // 20px padding each side
+    
+    // Final width = max of (shirt crop + margins) and (text width)
+    const finalW = Math.max(cropW + sideMargin * 2, textWidth);
     const finalH = topMargin + cropH + gap + textHeight + bottomMargin;
     
     const dlCanvas = document.createElement('canvas');
@@ -587,14 +600,11 @@ function MockupPreview({
     dlCtx.fillStyle = '#ffffff';
     dlCtx.fillRect(0, 0, finalW, finalH);
     
-    // Draw cropped shirt
-    dlCtx.drawImage(sourceCanvas, bounds.left, bounds.top, cropW, cropH, sideMargin, topMargin, cropW, cropH);
+    // Draw cropped shirt (centered horizontally)
+    const shirtX = (finalW - cropW) / 2;
+    dlCtx.drawImage(sourceCanvas, bounds.left, bounds.top, cropW, cropH, shirtX, topMargin, cropW, cropH);
     
-    // Draw text: Shirt Size: XL | Artwork Size: W 15.3" × H 18.3"
-    const sizeData = TSHIRT_SIZES[size];
-    const artWidthInches = (artworkDimensions.width * artworkScale).toFixed(1);
-    const artHeightInches = (artworkDimensions.height * artworkScale).toFixed(1);
-    const text = `Shirt Size: ${size} | Artwork Size: W ${artWidthInches}" x H ${artHeightInches}"`;
+    // Draw text centered
     dlCtx.font = 'bold 18px Inter, sans-serif';
     dlCtx.fillStyle = '#000000';
     dlCtx.textAlign = 'center';
