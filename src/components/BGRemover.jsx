@@ -386,7 +386,9 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
     setIsProcessing(true);
     setTimeout(async () => {
       try {
-        const imgData = await getImageDataFromUrl(originalImage);
+        // Use current working image (may be cropped/transformed), not original
+        const sourceUrl = processedImageData ? imageDataToUrl(processedImageData) : (displayUrl || originalImage);
+        const imgData = await getImageDataFromUrl(sourceUrl);
         let processed;
 
         switch (bgRemovalMode) {
@@ -428,7 +430,9 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
     setIsProcessing(true);
     setTimeout(async () => {
       try {
-        const imgData = await getImageDataFromUrl(originalImage);
+        // Use current working image (may be cropped), not original
+        const sourceUrl = processedImageData ? imageDataToUrl(processedImageData) : (displayUrl || originalImage);
+        const imgData = await getImageDataFromUrl(sourceUrl);
         // Step 1: Detect type and use best mode
         const detection = detectArtworkType(imgData);
         let processed;
@@ -495,7 +499,9 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
     setIsProcessing(true);
     setTimeout(async () => {
       try {
-        const imgData = await getImageDataFromUrl(originalImage);
+        // Use current working image (may be cropped), not original
+        const sourceUrl = processedImageData ? imageDataToUrl(processedImageData) : (displayUrl || originalImage);
+        const imgData = await getImageDataFromUrl(sourceUrl);
         const processed = removeBackground(imgData, sensitivity, feather, removeInteriorWhite);
         setProcessedImageData(processed);
         setDisplayUrl(imageDataToUrl(processed));
