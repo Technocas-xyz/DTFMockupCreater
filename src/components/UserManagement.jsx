@@ -8,6 +8,7 @@ const ALL_PAGES = [
   { id: 'mockupv2', label: 'Mockup Preview' },
   { id: 'garments', label: 'Garment Manager' },
   { id: 'gangsheet', label: 'Gang Sheet' },
+  { id: 'gscalc', label: 'GS Price Calculator' },
   { id: 'orders', label: 'Mockup Preview (OLD)' },
   { id: 'qa', label: 'QA Analysis' },
   { id: 'contrast', label: 'Contrast Checker' },

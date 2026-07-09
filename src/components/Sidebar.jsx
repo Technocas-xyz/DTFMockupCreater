@@ -10,6 +10,7 @@ const menuItems = [
   ]},
   { group: 'Post-Order Process', items: [
     { icon: 'gangsheet', label: 'Gang Sheet', page: 'gangsheet' },
+    { icon: 'calculator', label: 'GS Price Calculator', page: 'gscalc' },
   ]},
   { group: 'On Testing', items: [
     { icon: 'orders', label: 'Mockup Preview (OLD)', page: 'orders' },
@@ -158,6 +159,21 @@ function MenuIcon({ name }) {
         <rect x="4" y="11" width="5" height="5" rx="1" />
         <rect x="11" y="11" width="9" height="5" rx="1" />
         <rect x="4" y="18" width="16" height="2" rx="1" />
+      </svg>
+    ),
+    calculator: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <rect x="4" y="2" width="16" height="20" rx="2" />
+        <rect x="6" y="4" width="12" height="5" rx="1" />
+        <circle cx="8" cy="12" r="1" fill="currentColor" />
+        <circle cx="12" cy="12" r="1" fill="currentColor" />
+        <circle cx="16" cy="12" r="1" fill="currentColor" />
+        <circle cx="8" cy="16" r="1" fill="currentColor" />
+        <circle cx="12" cy="16" r="1" fill="currentColor" />
+        <circle cx="16" cy="16" r="1" fill="currentColor" />
+        <circle cx="8" cy="20" r="1" fill="currentColor" />
+        <circle cx="12" cy="20" r="1" fill="currentColor" />
+        <circle cx="16" cy="20" r="1" fill="currentColor" />
       </svg>
     ),
     qa: (
