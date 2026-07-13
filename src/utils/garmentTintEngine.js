@@ -168,33 +168,26 @@ export function recolorGarment(garmentData, targetHex) {
       result[i + 1] = linearToSrgb(srgbToLinear(tG) * (0.3 + darkLum * 3));
       result[i + 2] = linearToSrgb(srgbToLinear(tB) * (0.3 + darkLum * 3));
     } else {
-      // General case: map target color to this pixel's luminance position
-      // Target lightness is the BASE — pixel luminance adds relative variation for texture
+      // General case: Apply target color, use garment luminance ONLY for texture detail
+      // The base color IS the target — luminance from garment provides wrinkle/fold detail
       
-      // Calculate how much this pixel deviates from the garment's average
-      const deviation = normalizedLum - 0.5; // -0.5 to +0.5 range
+      // How much darker/lighter is this pixel vs the garment average?
+      // Range: -0.5 (darkest shadow) to +0.5 (brightest highlight)
+      const deviation = normalizedLum - 0.5;
       
-      // Apply target color with luminance variation for texture
-      let finalL = tL + deviation * 0.25; // subtle texture from original garment
+      // Target lightness is absolute — deviation only adds subtle depth
+      let finalL = tL + deviation * 0.15; // Very subtle texture (15%)
       
-      // Highlights: pixels significantly brighter than average
-      if (normalizedLum > 0.85) {
-        const highlightStrength = (normalizedLum - 0.85) / 0.15;
-        finalL = tL + highlightStrength * (1 - tL) * 0.4;
-      }
-      // Shadows: pixels significantly darker than average
-      if (normalizedLum < 0.15) {
-        const shadowStrength = (0.15 - normalizedLum) / 0.15;
-        finalL = tL * (1 - shadowStrength * 0.4);
-      }
+      // Clamp highlights — don't let white spots wash out the color
+      if (finalL > tL + 0.2) finalL = tL + 0.2;
+      // Clamp shadows — maintain minimum visibility
+      if (finalL < tL * 0.5) finalL = tL * 0.5;
+      
+      finalL = Math.max(0.02, Math.min(0.98, finalL));
 
-      finalL = Math.max(0, Math.min(1, finalL));
-
-      // Keep full saturation in mid-tones, reduce slightly in extremes
+      // Full saturation everywhere except extreme shadows
       let finalS = tS;
-      if (normalizedLum < 0.1 || normalizedLum > 0.95) {
-        finalS *= 0.7;
-      }
+      if (normalizedLum < 0.05) finalS *= 0.5;
 
       const [fR, fG, fB] = hslToRgb(tH, finalS, finalL);
       result[i] = fR;
