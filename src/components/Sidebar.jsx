@@ -11,6 +11,7 @@ const menuItems = [
   { group: 'Post-Order Process', items: [
     { icon: 'gangsheet', label: 'Gang Sheet', page: 'gangsheet' },
     { icon: 'calculator', label: 'GS Price Calculator', page: 'gscalc' },
+    { icon: 'calculator', label: 'GS Optimizer', page: 'gsoptimize' },
   ]},
   { group: 'On Testing', items: [
     { icon: 'orders', label: 'Mockup Preview (OLD)', page: 'orders' },

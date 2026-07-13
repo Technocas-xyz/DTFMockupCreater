@@ -15,6 +15,7 @@ import UserManagement from './components/UserManagement';
 import MockupEngineV2 from './components/MockupEngineV2';
 import Vault from './components/Vault';
 import GangSheetCalculator from './components/GangSheetCalculator';
+import GangSheetOptimizer from './components/GangSheetOptimizer';
 import { TSHIRT_SIZES, TSHIRT_COLORS, SIZE_ORDER } from './constants/tshirtSizes';
 import { GARMENTS_API, SERVE_IMAGE_URL, detectApiBase, getGarmentsUrl, getServeImageUrl } from './utils/apiConfig';
 import './App.css';
@@ -313,6 +314,10 @@ function App() {
 
     if (currentPage === 'gscalc') {
       return <GangSheetCalculator />;
+    }
+
+    if (currentPage === 'gsoptimize') {
+      return <GangSheetOptimizer />;
     }
 
     if (currentPage === 'ailab') {

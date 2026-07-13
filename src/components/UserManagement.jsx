@@ -9,6 +9,7 @@ const ALL_PAGES = [
   { id: 'garments', label: 'Garment Manager' },
   { id: 'gangsheet', label: 'Gang Sheet' },
   { id: 'gscalc', label: 'GS Price Calculator' },
+  { id: 'gsoptimize', label: 'GS Optimizer' },
   { id: 'orders', label: 'Mockup Preview (OLD)' },
   { id: 'qa', label: 'QA Analysis' },
   { id: 'contrast', label: 'Contrast Checker' },
