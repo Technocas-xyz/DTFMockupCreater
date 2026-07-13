@@ -337,7 +337,9 @@ function GangSheetOptimizer() {
                   <div className="gso-sug-comparison">
                     <div className="gso-sug-col">
                       <span className="gso-sug-label">Current</span>
-                      <div className="gso-sug-val">{artworks[0]?.width}" × {artworks[0]?.height}"</div>
+                      {artworks.map((art, i) => (
+                        <div key={i} className="gso-sug-val">{art.width}" × {art.height}" ×{art.qty}</div>
+                      ))}
                       <div className="gso-sug-val">Gap: {hGap}" / {vGap}"</div>
                       <div className="gso-sug-val">Height: {optimizationResult.baseline.height.toFixed(1)}"</div>
                       <div className="gso-sug-val">Cost: ${optimizationResult.baseline.cost.toFixed(2)}</div>
@@ -345,7 +347,10 @@ function GangSheetOptimizer() {
                     <div className="gso-sug-arrow">→</div>
                     <div className="gso-sug-col gso-sug-recommended">
                       <span className="gso-sug-label">Recommended</span>
-                      <div className="gso-sug-val">{sug.width.toFixed(2)}" × {sug.height.toFixed(2)}" {sug.sizePct !== 0 && <small>({sug.sizePct > 0 ? '+' : ''}{sug.sizePct}%)</small>}</div>
+                      {artworks.map((art, i) => {
+                        const scale = 1 + sug.sizePct / 100;
+                        return <div key={i} className="gso-sug-val">{(art.width * scale).toFixed(2)}" × {(art.height * scale).toFixed(2)}" ×{art.qty} {sug.sizePct !== 0 && <small>({sug.sizePct > 0 ? '+' : ''}{sug.sizePct}%)</small>}</div>;
+                      })}
                       <div className="gso-sug-val">Gap: {sug.hGap}" / {sug.vGap}"</div>
                       <div className="gso-sug-val">Height: {sug.packedHeight}"</div>
                       <div className="gso-sug-val gso-highlight">Cost: ${sug.cost} {sug.saving > 0 && <strong className="gso-saving">(-${sug.saving})</strong>}</div>
