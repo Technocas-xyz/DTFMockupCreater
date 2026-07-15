@@ -23,6 +23,8 @@
     RewriteCond %{HTTP_REFERER} !^https?://(www\.)?localhost [NC]
     RewriteCond %{HTTP_REFERER} !^https?://(www\.)?31\.97\.110\.197 [NC]
     RewriteCond %{HTTP_REFERER} !^https?://(www\.)?technocas [NC]
+    RewriteCond %{HTTP_REFERER} !^https?://(www\.)?designstudio\.decoinkssuite\.com [NC]
+    RewriteCond %{HTTP_REFERER} !^https?://(www\.)?decoinkssuite\.com [NC]
     RewriteRule \.(png|jpg|jpeg|gif|svg|webp|js|css)$ - [F,L]
 </IfModule>
 
