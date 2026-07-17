@@ -25,7 +25,7 @@ function requireAuth() {
     $token = getAuthToken();
     if (!$token) { http_response_code(401); echo json_encode(['error' => 'Authentication required']); exit; }
     $db = getDB();
-    $stmt = $db->prepare("SELECT u.* FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.token = ? AND s.expires_at > NOW() AND u.is_active = 1");
+    $stmt = $db->prepare("SELECT u.* FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.token = ? AND s.expires_at > NOW() AND u.is_active = TRUE");
     $stmt->execute([$token]);
     $user = $stmt->fetch();
     if (!$user) { http_response_code(401); echo json_encode(['error' => 'Invalid session']); exit; }

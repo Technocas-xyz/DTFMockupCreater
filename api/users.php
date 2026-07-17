@@ -100,7 +100,7 @@ if ($method === 'PUT') {
         if ($currentUser['role'] !== 'superadmin') { http_response_code(403); echo json_encode(['error' => 'Only superadmin can change roles']); exit; }
         $fields[] = 'role = ?'; $params[] = $input['role'];
     }
-    if (isset($input['is_active'])) { $fields[] = 'is_active = ?'; $params[] = $input['is_active'] ? 1 : 0; }
+    if (isset($input['is_active'])) { $fields[] = 'is_active = ?'; $params[] = (bool)$input['is_active']; }
     if (isset($input['page_access'])) { $fields[] = 'page_access = ?'; $params[] = json_encode($input['page_access']); }
     if (isset($input['password']) && !empty($input['password'])) {
         $fields[] = 'password_hash = ?'; $params[] = password_hash($input['password'], PASSWORD_BCRYPT);

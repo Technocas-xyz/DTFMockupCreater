@@ -11,9 +11,9 @@ FROM php:8.2-apache
 # Enable Apache modules
 RUN a2enmod rewrite headers
 
-# Install PDO MySQL extension for authentication + curl for vault proxy
-RUN apt-get update && apt-get install -y libcurl4-openssl-dev && \
-    docker-php-ext-install pdo pdo_mysql curl && \
+# PostgreSQL is shared by the suite; keep MySQL support only for emergency rollback.
+RUN apt-get update && apt-get install -y libcurl4-openssl-dev libpq-dev && \
+    docker-php-ext-install pdo pdo_mysql pdo_pgsql curl && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Set PHP settings for large uploads
