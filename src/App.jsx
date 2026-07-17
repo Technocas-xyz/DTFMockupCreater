@@ -51,15 +51,40 @@ function App() {
 
   // Restore session on mount
   useEffect(() => {
-    const token = localStorage.getItem('auth_token');
-    const user = localStorage.getItem('auth_user');
-    if (token && user) {
+    let active = true;
+    async function initializeAuth() {
+      const token = localStorage.getItem('auth_token');
+      const user = localStorage.getItem('auth_user');
+      if (token && user) {
+        try {
+          if (active) { setAuthUser(JSON.parse(user)); setAuthToken(token); setAuthLoading(false); }
+          return;
+        } catch (e) { localStorage.removeItem('auth_token'); localStorage.removeItem('auth_user'); }
+      }
       try {
-        setAuthUser(JSON.parse(user));
-        setAuthToken(token);
-      } catch (e) { localStorage.removeItem('auth_token'); localStorage.removeItem('auth_user'); }
+        const apiBase = await detectApiBase();
+        const res = await fetch(`${apiBase}/auth.php?action=sso`, { method: 'POST' });
+        if (!res.ok) {
+          if (window.location.hostname.endsWith('.decoinkssuite.com')) {
+            const rd = `${window.location.origin}${window.location.pathname}${window.location.search}`;
+            window.location.replace(`${window.location.origin}/outpost.goauthentik.io/start?rd=${encodeURIComponent(rd)}`);
+          }
+          return;
+        }
+        const data = await res.json();
+        localStorage.setItem('auth_token', data.token);
+        localStorage.setItem('auth_user', JSON.stringify(data.user));
+        if (active) { setAuthUser(data.user); setAuthToken(data.token); }
+      } catch {
+        if (window.location.hostname.endsWith('.decoinkssuite.com')) {
+          const rd = `${window.location.origin}${window.location.pathname}${window.location.search}`;
+          window.location.replace(`${window.location.origin}/outpost.goauthentik.io/start?rd=${encodeURIComponent(rd)}`);
+        }
+      }
+      finally { if (active) setAuthLoading(false); }
     }
-    setAuthLoading(false);
+    initializeAuth();
+    return () => { active = false; };
   }, []);
 
   const handleLogin = (user, token) => {

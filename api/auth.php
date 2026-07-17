@@ -16,6 +16,42 @@ require_once __DIR__ . '/auth-helpers.php';
 $method = $_SERVER['REQUEST_METHOD'];
 $action = isset($_GET['action']) ? $_GET['action'] : '';
 
+// ═══ AUTHENTIK SSO ═══
+if ($method === 'POST' && $action === 'sso') {
+    $expected = getenv('SSO_SHARED_SECRET') ?: '';
+    $provided = $_SERVER['HTTP_X_DECOINKS_SSO_SECRET'] ?? '';
+    if (!$expected || !hash_equals($expected, $provided)) {
+        http_response_code(403); echo json_encode(['error' => 'SSO unavailable']); exit;
+    }
+    $username = strtolower(trim($_SERVER['HTTP_X_AUTHENTIK_USERNAME'] ?? ''));
+    if (!$username) { http_response_code(401); echo json_encode(['error' => 'Missing SSO identity']); exit; }
+    $rawEmail = strtolower(trim($_SERVER['HTTP_X_AUTHENTIK_EMAIL'] ?? ''));
+    $email = filter_var($rawEmail, FILTER_VALIDATE_EMAIL) ? $rawEmail : $username . '@decoinkssuite.com';
+    $name = trim($_SERVER['HTTP_X_AUTHENTIK_NAME'] ?? '') ?: $username;
+    $groups = strtolower($_SERVER['HTTP_X_AUTHENTIK_GROUPS'] ?? '');
+    $isAdmin = strpos($groups, 'admin') !== false;
+    $db = getDB();
+    $stmt = $db->prepare("SELECT * FROM users WHERE (username = ? OR email = ?) AND is_active = TRUE LIMIT 1");
+    $stmt->execute([$username, $email]);
+    $user = $stmt->fetch();
+    if (!$user) {
+        $allPages = json_encode(['vault','bgremover','qa','orders','garments','gangsheet','gscalc','gsoptimize','contrast','ailab','users','mockupv2']);
+        $db->prepare("INSERT INTO users (username, email, password_hash, full_name, role, page_access) VALUES (?, ?, ?, ?, ?, ?)")
+           ->execute([$username, $email, password_hash(bin2hex(random_bytes(48)), PASSWORD_BCRYPT), $name, $isAdmin ? 'superadmin' : 'viewer', $isAdmin ? $allPages : json_encode(['bgremover','orders'])]);
+        $stmt->execute([$username, $email]);
+        $user = $stmt->fetch();
+    }
+    $token = bin2hex(random_bytes(48));
+    $expiresAt = date('Y-m-d H:i:s', time() + 86400 * 7);
+    $db->prepare("INSERT INTO sessions (user_id, token, expires_at, ip_address, user_agent) VALUES (?, ?, ?, ?, ?)")
+       ->execute([$user['id'], $token, $expiresAt, $_SERVER['REMOTE_ADDR'] ?? '', $_SERVER['HTTP_USER_AGENT'] ?? '']);
+    $db->prepare("UPDATE users SET last_login = NOW() WHERE id = ?")->execute([$user['id']]);
+    unset($user['password_hash']);
+    $user['page_access'] = json_decode($user['page_access'] ?? '[]', true);
+    echo json_encode(['success' => true, 'token' => $token, 'user' => $user]);
+    exit;
+}
+
 // ═══ LOGIN ═══
 if ($method === 'POST' && $action === 'login') {
     $input = json_decode(file_get_contents('php://input'), true);
@@ -29,7 +65,7 @@ if ($method === 'POST' && $action === 'login') {
     }
 
     $db = getDB();
-    $stmt = $db->prepare("SELECT * FROM users WHERE (username = ? OR email = ?) AND is_active = 1");
+    $stmt = $db->prepare("SELECT * FROM users WHERE (username = ? OR email = ?) AND is_active = TRUE");
     $stmt->execute([$username, $username]);
     $user = $stmt->fetch();
 
@@ -69,7 +105,7 @@ if ($method === 'GET' && $action === 'validate') {
     if (!$token) { http_response_code(401); echo json_encode(['error' => 'No token']); exit; }
 
     $db = getDB();
-    $stmt = $db->prepare("SELECT s.*, u.* FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.token = ? AND s.expires_at > NOW() AND u.is_active = 1");
+    $stmt = $db->prepare("SELECT s.*, u.* FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.token = ? AND s.expires_at > NOW() AND u.is_active = TRUE");
     $stmt->execute([$token]);
     $row = $stmt->fetch();
 
