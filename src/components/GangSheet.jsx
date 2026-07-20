@@ -291,13 +291,13 @@ function GangSheet({ sharedArtwork }) {
         imported.push({ id: nextId.current++, filename: item.stored_name || item.artwork_name || item.artwork_no || `Artwork ${idx + 1}`, artworkNo: item.artwork_no || item.stored_artwork_no || `AW-${idx + 1}`, orderItemId: item.order_item_id, artworkId: item.artwork_id, dataUrl, originalWidth: img.naturalWidth, originalHeight: img.naturalHeight, widthInches: Number(widthInches.toFixed(2)), heightInches: Number(heightInches.toFixed(2)), aspect, repetitions: Math.max(1, Number(item.artwork_qty) || Number(item.qty) || 1) });
       }
       setSelectedOrder(data.order); setArtworks(imported); setOrderNumber(data.order.order_number || ''); setPoNumber(data.order.po_number || ''); setOrderLink(`https://printshop.decoinkssuite.com/orders/${data.order.id}`);
-      setIntegrationMessage(imported.length ? `${imported.length} artwork(s) imported from ${data.order.order_number}.` : `Order loaded, lekin is order ke sath artwork image/size available nahi hai.`);
+      setIntegrationMessage(imported.length ? `${imported.length} artwork(s) imported from ${data.order.order_number}.` : 'Order loaded, but no artwork image or print size is available for this order.');
     } catch (error) { setIntegrationMessage(error.message); }
     finally { setIntegrationLoading(false); }
   };
 
   const saveGangSheet = async () => {
-    if (!selectedOrder?.id || artworks.length === 0) { setIntegrationMessage('Pehle DTF sales order aur us ke artworks select karein.'); return; }
+    if (!selectedOrder?.id || artworks.length === 0) { setIntegrationMessage('Select a DTF sales order with artwork before saving a gang sheet.'); return; }
     setSavingSheet(true);
     try {
       const base = await detectApiBase();
@@ -313,7 +313,7 @@ function GangSheet({ sharedArtwork }) {
       };
       const response = await fetch(`${base}/production-orders.php`, { method:'POST', headers:{...apiHeaders(),'Content-Type':'application/json'}, body:JSON.stringify(payload) });
       const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Save failed');
-      setIntegrationMessage(`Gang sheet database mein save ho gayi (${data.saved_at}).`);
+      setIntegrationMessage(`Gang sheet saved successfully (${data.saved_at}).`);
     } catch (error) { setIntegrationMessage(error.message); }
     finally { setSavingSheet(false); }
   };
