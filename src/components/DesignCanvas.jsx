@@ -194,8 +194,8 @@ function DesignCanvas({
 
     // Draw print area guide (dashed border)
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([6, 4]);
+    ctx.lineWidth = 1 * CANVAS_SCALE;
+    ctx.setLineDash([6 * CANVAS_SCALE, 4 * CANVAS_SCALE]);
     ctx.strokeRect(printArea.x, printArea.y, printArea.width, printArea.height);
     ctx.setLineDash([]);
 
@@ -235,14 +235,14 @@ function DesignCanvas({
 
       // Selection handles
       if (!isDragging) {
-        const handleSize = 8;
+        const handleSize = 8 * CANVAS_SCALE;
         ctx.strokeStyle = '#2563eb';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 2 * CANVAS_SCALE;
         ctx.strokeRect(drawX, drawY, artW, artH);
 
         ctx.fillStyle = 'white';
         ctx.strokeStyle = '#2563eb';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 2 * CANVAS_SCALE;
         const corners = [
           [drawX, drawY],
           [drawX + artW, drawY],
@@ -258,7 +258,7 @@ function DesignCanvas({
       // Dimension labels — show the set artwork dimensions
       ctx.strokeStyle = '#ef4444';
       ctx.fillStyle = '#ef4444';
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = 1.5 * CANVAS_SCALE;
       ctx.setLineDash([]);
 
       // Show exact dimensions from user input (not from pixel calculation)
@@ -279,9 +279,9 @@ function DesignCanvas({
       ctx.moveTo(drawX + artW, dimY - 4);
       ctx.lineTo(drawX + artW, dimY + 4);
       ctx.stroke();
-      ctx.font = 'bold 12px Inter, sans-serif';
+      ctx.font = `bold ${12 * CANVAS_SCALE}px Inter, sans-serif`;
       ctx.textAlign = 'center';
-      ctx.fillText(`${actualW}"`, drawX + artW / 2, dimY - 4);
+      ctx.fillText(`${actualW}"`, drawX + artW / 2, dimY - 4 * CANVAS_SCALE);
 
       // Height line on right
       const dimX = drawX + artW + 14;
@@ -302,24 +302,24 @@ function DesignCanvas({
       ctx.rotate(-Math.PI / 2);
       ctx.textAlign = 'center';
       ctx.fillStyle = '#ef4444';
-      ctx.font = 'bold 12px Inter, sans-serif';
+      ctx.font = `bold ${12 * CANVAS_SCALE}px Inter, sans-serif`;
       ctx.fillText(`${actualH}"`, 0, 0);
       ctx.restore();
 
     } else {
       // Placeholder text
       ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-      ctx.font = '14px Inter, sans-serif';
+      ctx.font = `${14 * CANVAS_SCALE}px Inter, sans-serif`;
       ctx.textAlign = 'center';
       ctx.fillText('Upload artwork to preview', printArea.x + printArea.width / 2, printArea.y + printArea.height / 2);
-      ctx.fillText(`Print area: ${artworkAreaSettings.width}" × ${artworkAreaSettings.height}"`, printArea.x + printArea.width / 2, printArea.y + printArea.height / 2 + 24);
+      ctx.fillText(`Print area: ${artworkAreaSettings.width}" × ${artworkAreaSettings.height}"`, printArea.x + printArea.width / 2, printArea.y + printArea.height / 2 + 24 * CANVAS_SCALE);
     }
 
     // Size label
     ctx.fillStyle = 'rgba(255,255,255,0.7)';
-    ctx.font = 'bold 13px Inter, sans-serif';
+    ctx.font = `bold ${13 * CANVAS_SCALE}px Inter, sans-serif`;
     ctx.textAlign = 'center';
-    ctx.fillText(`Size: ${selectedSize} | ${viewSide.toUpperCase()}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT - 20);
+    ctx.fillText(`Size: ${selectedSize} | ${viewSide.toUpperCase()}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT - 20 * CANVAS_SCALE);
 
     // Draw rulers (inch marks along top and left)
     if (printArea.pxPerInch > 0) {
@@ -330,7 +330,7 @@ function DesignCanvas({
       ctx.strokeStyle = rulerColor;
       ctx.fillStyle = rulerTextColor;
       ctx.lineWidth = 1;
-      ctx.font = '10px Inter, sans-serif';
+      ctx.font = `${10 * CANVAS_SCALE}px Inter, sans-serif`;
 
       // Top ruler (horizontal) — starts from shirt left edge
       const rulerTopY = printArea.tshirtY - 14;
