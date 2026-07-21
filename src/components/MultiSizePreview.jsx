@@ -411,81 +411,32 @@ const MSPCard = React.forwardRef(function MSPCard({
 
   // Download single card — magenta background crop detection (works for white shirts)
   const handleDownloadSingle = () => {
-    if (!artwork || !tshirtImg) return;
+    const sourceCanvas = canvasRef.current;
+    if (!sourceCanvas) return;
 
-    // Render from ORIGINAL source at high resolution
-    const W = 3000, H = 3600;
-    const canvas = document.createElement('canvas');
-    canvas.width = W; canvas.height = H;
-    const ctx = canvas.getContext('2d');
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, W, H);
+    // Export the canvas at its native resolution (700x850) — same quality as what's displayed
+    const W = sourceCanvas.width, H = sourceCanvas.height;
+    const text = `Shirt Size: ${realSize} | Artwork Size: W ${sizeArtW.toFixed(1)}" x H ${sizeArtH.toFixed(1)}"`;
 
-    // Draw garment at high res
-    const garImgAspect = (tshirtImg.naturalWidth || tshirtImg.width) / (tshirtImg.naturalHeight || tshirtImg.height);
-    const maxW = W * 0.85, maxH = H * 0.80;
-    let dw, dh;
-    if (garImgAspect > maxW / maxH) { dw = maxW; dh = maxW / garImgAspect; }
-    else { dh = maxH; dw = maxH * garImgAspect; }
-    const dx = (W - dw) / 2, dy = (H - dh) / 2;
+    // Create download canvas with text below
+    const dlCanvas = document.createElement('canvas');
+    dlCanvas.width = W;
+    dlCanvas.height = H + 50;
+    const dlCtx = dlCanvas.getContext('2d');
+    dlCtx.fillStyle = '#ffffff';
+    dlCtx.fillRect(0, 0, dlCanvas.width, dlCanvas.height);
+    dlCtx.drawImage(sourceCanvas, 0, 0);
+    dlCtx.font = 'bold 18px sans-serif';
+    dlCtx.fillStyle = '#000000';
+    dlCtx.textAlign = 'center';
+    dlCtx.fillText(text, W / 2, H + 32);
 
-    // Color tint
-    const offscreen = document.createElement('canvas');
-    offscreen.width = W; offscreen.height = H;
-    const offCtx = offscreen.getContext('2d');
-    offCtx.drawImage(tshirtImg, dx, dy, dw, dh);
-    const hex = selectedColor.hex.replace('#', '');
-    const cr = parseInt(hex.substring(0,2),16), cg = parseInt(hex.substring(2,4),16), cb = parseInt(hex.substring(4,6),16);
-    if (!(cr > 240 && cg > 240 && cb > 240)) {
-      offCtx.globalCompositeOperation = 'source-atop';
-      offCtx.fillStyle = selectedColor.hex;
-      offCtx.fillRect(0, 0, W, H);
-      offCtx.globalCompositeOperation = 'luminosity';
-      offCtx.drawImage(tshirtImg, dx, dy, dw, dh);
-      offCtx.globalCompositeOperation = 'source-over';
-    }
-    ctx.drawImage(offscreen, 0, 0);
-
-    // Draw artwork from ORIGINAL
-    const artImg = new Image();
-    artImg.onload = () => {
-      const bodyW = isCustomGarment ? dw : dw / 1.3;
-      const artPxPerInch = bodyW / sizeData.bodyWidth;
-      const printW = artworkAreaSettings.width * artPxPerInch;
-      const printX = dx + (dw - printW) / 2;
-      const printY = dy + (artworkAreaSettings.topOffset * artPxPerInch);
-
-      const artworkPxW = sizeArtW * artPxPerInch;
-      const artworkPxH = sizeArtH * artPxPerInch;
-      const imgAR = artImg.naturalWidth / artImg.naturalHeight;
-      const boxAR = artworkPxW / artworkPxH;
-      let artW2, artH2;
-      if (imgAR > boxAR) { artW2 = artworkPxW; artH2 = artworkPxW / imgAR; }
-      else { artH2 = artworkPxH; artW2 = artworkPxH * imgAR; }
-
-      const scaleFactor = W / 700;
-      const drawX2 = printX + (printW - artW2) / 2 + artworkPosition.x * scaleFactor;
-      const drawY2 = printY + artworkPosition.y * scaleFactor;
-
-      ctx.drawImage(artImg, 0, 0, artImg.naturalWidth, artImg.naturalHeight, drawX2, drawY2, artW2, artH2);
-
-      // Text at bottom
-      const text = `Shirt Size: ${realSize} | Artwork Size: W ${sizeArtW.toFixed(1)}" x H ${sizeArtH.toFixed(1)}"`;
-      ctx.font = 'bold 36px sans-serif';
-      ctx.fillStyle = '#000000';
-      ctx.textAlign = 'center';
-      ctx.fillText(text, W / 2, H - 30);
-
-      const link = document.createElement('a');
-      link.download = `mockup-${realSize}.png`;
-      link.href = canvas.toDataURL('image/png');
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    };
-    artImg.src = artwork;
+    const link = document.createElement('a');
+    link.download = `mockup-${realSize}.png`;
+    link.href = dlCanvas.toDataURL('image/png');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   return (
