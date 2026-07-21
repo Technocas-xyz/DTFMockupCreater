@@ -3,6 +3,30 @@ import { TSHIRT_SIZES, SIZE_ORDER } from '../constants/tshirtSizes';
 import { drawRecoloredGarment } from '../utils/garmentTintEngine';
 import './MultiSizePreview.css';
 
+// ─── CROP UTILITY: Find non-white/non-transparent content bounds ──────────────
+function getContentBounds(canvas) {
+  const W = canvas.width, H = canvas.height;
+  const ctx = canvas.getContext('2d');
+  const imgData = ctx.getImageData(0, 0, W, H);
+  const d = imgData.data;
+  let top = H, bottom = 0, left = W, right = 0;
+  for (let y = 0; y < H; y++) {
+    const rowOff = y * W * 4;
+    for (let x = 0; x < W; x++) {
+      const i = rowOff + x * 4;
+      const a = d[i + 3];
+      if (a < 10) continue;
+      if (d[i] > 240 && d[i+1] > 240 && d[i+2] > 240) continue;
+      if (y < top) top = y;
+      if (y > bottom) bottom = y;
+      if (x < left) left = x;
+      if (x > right) right = x;
+    }
+  }
+  if (top >= bottom || left >= right) return { top: 0, left: 0, w: W, h: H };
+  return { top, left, w: right - left + 1, h: bottom - top + 1 };
+}
+
 function MultiSizePreview({
   artwork,
   selectedColor,
@@ -30,33 +54,6 @@ function MultiSizePreview({
   const baseSizeData = TSHIRT_SIZES[baseSize];
   const baseBodyWidth = baseSizeData ? baseSizeData.bodyWidth : 22;
   const basePercentage = (artworkDimensions.width / baseBodyWidth) * 100;
-
-  // ─── CROP UTILITY: Find non-white/non-transparent content bounds ──────────────
-  const getContentBounds = (canvas) => {
-    const W = canvas.width, H = canvas.height;
-    const ctx = canvas.getContext('2d');
-    const imgData = ctx.getImageData(0, 0, W, H);
-    const d = imgData.data;
-    let top = H, bottom = 0, left = W, right = 0;
-    for (let y = 0; y < H; y++) {
-      const rowOff = y * W * 4;
-      for (let x = 0; x < W; x++) {
-        const i = rowOff + x * 4;
-        const a = d[i + 3];
-        // Skip fully transparent pixels
-        if (a < 10) continue;
-        // Skip white pixels (RGB all > 240)
-        if (d[i] > 240 && d[i+1] > 240 && d[i+2] > 240) continue;
-        // This pixel is visible content
-        if (y < top) top = y;
-        if (y > bottom) bottom = y;
-        if (x < left) left = x;
-        if (x > right) right = x;
-      }
-    }
-    if (top >= bottom || left >= right) return { top: 0, left: 0, w: W, h: H };
-    return { top, left, w: right - left + 1, h: bottom - top + 1 };
-  };
 
   // ─── DOWNLOAD ALL: Combined image with all sizes side by side ───────────────
   const handleDownloadAll = () => {
