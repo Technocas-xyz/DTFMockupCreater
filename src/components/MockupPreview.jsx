@@ -18,8 +18,8 @@ function MockupPreview({
 
   // Render a high-resolution mockup for download
   const renderHighRes = (size, showAnnotations = true) => {
-    const W = 4000;
-    const H = 4800;
+    const W = 6000;
+    const H = 7200;
     const canvas = document.createElement('canvas');
     canvas.width = W;
     canvas.height = H;
