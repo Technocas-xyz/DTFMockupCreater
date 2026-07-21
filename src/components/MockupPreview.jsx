@@ -502,30 +502,22 @@ function MockupPreview({
     });
   };
 
-  // Magenta background crop detection for high-res canvas
+  // Crop detection for high-res canvas (white background)
   const cropHighResCanvas = (sourceCanvas, size) => {
     const W = sourceCanvas.width;
     const H = sourceCanvas.height;
-    // Create detection canvas with magenta background
-    const detectCanvas = document.createElement('canvas');
-    detectCanvas.width = W;
-    detectCanvas.height = H;
-    const dCtx = detectCanvas.getContext('2d');
-    dCtx.fillStyle = '#FF00FF';
-    dCtx.fillRect(0, 0, W, H);
-    dCtx.drawImage(sourceCanvas, 0, 0);
-
-    const imgData = dCtx.getImageData(0, 0, W, H);
+    const ctx = sourceCanvas.getContext('2d');
+    const imgData = ctx.getImageData(0, 0, W, H);
     const { data } = imgData;
     let top = H, bottom = 0, left = W, right = 0;
 
-    // Sample rows for speed on large canvas (every 2nd pixel)
-    for (let y = 0; y < H; y += 2) {
-      for (let x = 0; x < W; x += 2) {
+    // Find non-white pixels (the shirt + artwork)
+    for (let y = 0; y < H; y += 3) {
+      for (let x = 0; x < W; x += 3) {
         const idx = (y * W + x) * 4;
-        const r = data[idx], g = data[idx + 1], b = data[idx + 2], a = data[idx + 3];
-        // Not magenta
-        if (a > 10 && !(r > 240 && g < 15 && b > 240)) {
+        const r = data[idx], g = data[idx + 1], b = data[idx + 2];
+        // Not white (allow small tolerance for anti-aliasing)
+        if (r < 250 || g < 250 || b < 250) {
           if (y < top) top = y;
           if (y > bottom) bottom = y;
           if (x < left) left = x;
@@ -534,31 +526,14 @@ function MockupPreview({
       }
     }
 
-    // Refine edges by scanning individual pixels near the detected bounds
-    // Top edge refinement
-    for (let y = Math.max(0, top - 2); y <= Math.min(top + 2, H - 1); y++) {
-      for (let x = left; x <= right; x++) {
-        const idx = (y * W + x) * 4;
-        const r = data[idx], g = data[idx + 1], b = data[idx + 2], a = data[idx + 3];
-        if (a > 10 && !(r > 240 && g < 15 && b > 240)) {
-          if (y < top) top = y;
-        }
-      }
-    }
-    // Left edge refinement
-    for (let x = Math.max(0, left - 2); x <= Math.min(left + 2, W - 1); x++) {
-      for (let y = top; y <= bottom; y += 2) {
-        const idx = (y * W + x) * 4;
-        const r = data[idx], g = data[idx + 1], b = data[idx + 2], a = data[idx + 3];
-        if (a > 10 && !(r > 240 && g < 15 && b > 240)) {
-          if (x < left) left = x;
-        }
-      }
-    }
-
     if (top >= bottom || left >= right) {
       return { top: 0, left: 0, w: W, h: H };
     }
+    // Add tiny padding
+    top = Math.max(0, top - 5);
+    left = Math.max(0, left - 5);
+    bottom = Math.min(H - 1, bottom + 5);
+    right = Math.min(W - 1, right + 5);
     return { top, left, w: right - left + 1, h: bottom - top + 1 };
   };
 
