@@ -369,47 +369,98 @@ const MSPCard = React.forwardRef(function MSPCard({
   }, [artwork, size, selectedColor, artworkDimensions, artworkPosition, artworkScale, artworkAreaSettings, viewSide, tshirtImg, isCustomGarment, sizeArtW, sizeArtH]);
 
   // Download single card — magenta background crop detection (works for white shirts)
-  // ─── DOWNLOAD SINGLE CARD: Tight crop with text below ────────────────────────
+  // ─── DOWNLOAD SINGLE CARD: Render fresh at high-res from original source ──────
   const handleDownloadSingle = () => {
-    const sourceCanvas = canvasRef.current;
-    if (!sourceCanvas) return;
+    if (!artwork) return;
 
-    const bounds = getContentBounds(sourceCanvas);
-    const cropW = bounds.w, cropH = bounds.h;
-    const text = `Shirt Size: ${realSize} | Artwork Size: W ${sizeArtW.toFixed(1)}" x H ${sizeArtH.toFixed(1)}"`;
+    // Render at 2800x3400 (same as DesignCanvas 4x) for sharp output
+    const RW = 2800, RH = 3400;
+    const renderCanvas = document.createElement('canvas');
+    renderCanvas.width = RW; renderCanvas.height = RH;
+    const rCtx = renderCanvas.getContext('2d');
+    rCtx.imageSmoothingEnabled = true;
+    rCtx.imageSmoothingQuality = 'high';
+    rCtx.clearRect(0, 0, RW, RH);
 
-    // Measure text
-    const mCtx = document.createElement('canvas').getContext('2d');
-    mCtx.font = 'bold 16px sans-serif';
-    const textW = mCtx.measureText(text).width + 10;
+    // Draw garment at high-res (same logic as MSPCard draw but at 4x)
+    const garmentImg = tshirtImg;
+    if (!garmentImg) return;
 
-    // Output: shirt + text, zero wasted space
-    const finalW = Math.max(cropW, Math.ceil(textW));
-    const finalH = cropH + 25;
+    const garImgAspect = (garmentImg.naturalWidth || garmentImg.width) / (garmentImg.naturalHeight || garmentImg.height);
+    let tshirtW, tshirtH, tshirtX, tshirtY, pxPerInch;
+    const maxBodyWidth = 32, maxBodyLength = 35;
+    const maxTshirtW = RW * 0.52, maxTshirtH = RH * 0.68;
+    const pxPerInchW = maxTshirtW / maxBodyWidth;
+    const pxPerInchH = maxTshirtH / maxBodyLength;
+    pxPerInch = Math.min(pxPerInchW, pxPerInchH);
 
-    const dlCanvas = document.createElement('canvas');
-    dlCanvas.width = finalW;
-    dlCanvas.height = finalH;
-    const dlCtx = dlCanvas.getContext('2d');
-    dlCtx.fillStyle = '#ffffff';
-    dlCtx.fillRect(0, 0, finalW, finalH);
+    if (isCustomGarment) {
+      const taggedG = garmentLibrary && garmentLibrary.find(g => g.size === realSize && (g.side || 'front') === viewSide);
+      const garmentBodyWidth = taggedG?.bodyMapping?.shirtWidthInches || sizeData.bodyWidth;
+      const garmentBodyHeight = taggedG?.bodyMapping?.shirtHeightInches || sizeData.bodyLength;
+      tshirtW = garmentBodyWidth * pxPerInch;
+      tshirtH = garmentBodyHeight * pxPerInch;
+      tshirtX = (RW - tshirtW) / 2;
+      tshirtY = (RH - tshirtH) / 2;
+    } else {
+      tshirtW = sizeData.bodyWidth * pxPerInchW;
+      tshirtH = sizeData.bodyLength * pxPerInchH;
+      tshirtX = (RW - tshirtW) / 2;
+      tshirtY = RH * 0.20 + (maxTshirtH - tshirtH) / 2;
+    }
 
-    // Shirt at top, centered
-    const shirtX = Math.floor((finalW - cropW) / 2);
-    dlCtx.drawImage(sourceCanvas, bounds.left, bounds.top, cropW, cropH, shirtX, 0, cropW, cropH);
+    // Draw garment with tint
+    let dw, dh, dx, dy;
+    if (isCustomGarment) { dw = tshirtW; dh = tshirtH; dx = tshirtX; dy = tshirtY; }
+    else { const sp = 1.3; dw = tshirtW * sp; dh = dw / garImgAspect; dx = (RW - dw) / 2; dy = tshirtY - (dh - tshirtH) * 0.15; }
+    drawRecoloredGarment(rCtx, garmentImg, dx, dy, dw, dh, selectedColor.hex, RW, RH);
 
-    // Text immediately below
-    dlCtx.font = 'bold 16px sans-serif';
-    dlCtx.fillStyle = '#000000';
-    dlCtx.textAlign = 'center';
-    dlCtx.fillText(text, finalW / 2, cropH + 18);
+    // Draw artwork from original source
+    const artImg = new Image();
+    artImg.onload = () => {
+      const artPxPerInch = pxPerInch;
+      const printAreaPxW = artworkAreaSettings.width * artPxPerInch;
+      const printAreaPxH = artworkAreaSettings.height * artPxPerInch;
+      const printX = tshirtX + (tshirtW - printAreaPxW) / 2;
+      const printY = tshirtY + (artworkAreaSettings.topOffset * artPxPerInch);
+      const artworkPxW = sizeArtW * artPxPerInch;
+      const artworkPxH = sizeArtH * artPxPerInch;
+      const imgAR = artImg.naturalWidth / artImg.naturalHeight;
+      const boxAR = artworkPxW / artworkPxH;
+      let artW, artH;
+      if (imgAR > boxAR) { artW = artworkPxW; artH = artworkPxW / imgAR; }
+      else { artH = artworkPxH; artW = artworkPxH * imgAR; }
+      const scaleFactor = RW / 700;
+      const drawX = printX + (printAreaPxW - artW) / 2 + artworkPosition.x * scaleFactor;
+      const drawY = printY + artworkPosition.y * scaleFactor;
+      rCtx.drawImage(artImg, 0, 0, artImg.naturalWidth, artImg.naturalHeight, drawX, drawY, artW, artH);
 
-    const link = document.createElement('a');
-    link.download = `mockup-${realSize}.png`;
-    link.href = dlCanvas.toDataURL('image/png');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+      // Crop and export
+      const bounds = getContentBounds(renderCanvas);
+      const cropW = bounds.w, cropH = bounds.h;
+      const text = `Shirt Size: ${realSize} | Artwork Size: W ${sizeArtW.toFixed(1)}" x H ${sizeArtH.toFixed(1)}"`;
+      const mCtx = document.createElement('canvas').getContext('2d');
+      mCtx.font = 'bold 28px sans-serif';
+      const textW = mCtx.measureText(text).width + 20;
+      const finalW = Math.max(cropW, Math.ceil(textW));
+      const finalH = cropH + 40;
+      const dlCanvas = document.createElement('canvas');
+      dlCanvas.width = finalW; dlCanvas.height = finalH;
+      const dlCtx = dlCanvas.getContext('2d');
+      dlCtx.fillStyle = '#ffffff';
+      dlCtx.fillRect(0, 0, finalW, finalH);
+      const shirtX2 = Math.floor((finalW - cropW) / 2);
+      dlCtx.drawImage(renderCanvas, bounds.left, bounds.top, cropW, cropH, shirtX2, 0, cropW, cropH);
+      dlCtx.font = 'bold 28px sans-serif';
+      dlCtx.fillStyle = '#000000';
+      dlCtx.textAlign = 'center';
+      dlCtx.fillText(text, finalW / 2, cropH + 28);
+      const link = document.createElement('a');
+      link.download = `mockup-${realSize}.png`;
+      link.href = dlCanvas.toDataURL('image/png');
+      document.body.appendChild(link); link.click(); document.body.removeChild(link);
+    };
+    artImg.src = artwork;
   };
 
   return (
