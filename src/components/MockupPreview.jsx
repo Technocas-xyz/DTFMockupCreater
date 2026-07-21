@@ -502,105 +502,98 @@ function MockupPreview({
     });
   };
 
-  // Crop detection — render garment to a FITTED canvas instead of cropping a huge one
-  const cropHighResCanvas = (sourceCanvas, size) => {
-    // Render produced a 6000x7200 canvas. The garment is somewhere in the middle.
-    // We need to find it. Use a simple approach: scan the MIDDLE of the canvas.
+  // ═══ COMPACT EXPORT ENGINE ═══════════════════════════════════════════════════
+  // Completely rewrites export: renders at high-res, detects garment bounds,
+  // creates a NEW canvas sized exactly to the garment + 20px padding + text.
+  
+  const createCompactExport = (sourceCanvas, size) => {
     const W = sourceCanvas.width, H = sourceCanvas.height;
     const ctx = sourceCanvas.getContext('2d');
     
-    // The shirt is roughly in the center 60% of the canvas
-    // Quick scan: check rows from top until we hit non-white
+    // ─── STEP 1: Detect garment pixel bounds ─────────────────────────────────
+    // Scan rows from top and bottom, columns from left and right
     let top = 0, bottom = H - 1, left = 0, right = W - 1;
     
-    // Scan from top
-    for (let y = 0; y < H; y += 8) {
-      const row = ctx.getImageData(Math.floor(W * 0.2), y, Math.floor(W * 0.6), 1).data;
+    // Top: scan full-width rows downward
+    for (let y = 0; y < H; y += 4) {
+      const row = ctx.getImageData(0, y, W, 1).data;
       let found = false;
-      for (let i = 0; i < row.length; i += 4) {
+      for (let i = 0; i < row.length; i += 16) { // sample every 4th pixel
         if (row[i] < 245 || row[i+1] < 245 || row[i+2] < 245) { found = true; break; }
       }
-      if (found) { top = Math.max(0, y - 8); break; }
+      if (found) { top = y; break; }
     }
     
-    // Scan from bottom
-    for (let y = H - 1; y > top; y -= 8) {
-      const row = ctx.getImageData(Math.floor(W * 0.2), y, Math.floor(W * 0.6), 1).data;
+    // Bottom: scan full-width rows upward
+    for (let y = H - 1; y > top; y -= 4) {
+      const row = ctx.getImageData(0, y, W, 1).data;
       let found = false;
-      for (let i = 0; i < row.length; i += 4) {
+      for (let i = 0; i < row.length; i += 16) {
         if (row[i] < 245 || row[i+1] < 245 || row[i+2] < 245) { found = true; break; }
       }
-      if (found) { bottom = Math.min(H - 1, y + 8); break; }
+      if (found) { bottom = y; break; }
     }
     
-    // Scan from left
-    for (let x = 0; x < W; x += 8) {
-      const col = ctx.getImageData(x, top, 1, Math.min(200, bottom - top)).data;
+    // Left: scan full-height columns rightward
+    const scanH = bottom - top + 1;
+    for (let x = 0; x < W; x += 4) {
+      const col = ctx.getImageData(x, top, 1, scanH).data;
       let found = false;
-      for (let i = 0; i < col.length; i += 4) {
+      for (let i = 0; i < col.length; i += 16) {
         if (col[i] < 245 || col[i+1] < 245 || col[i+2] < 245) { found = true; break; }
       }
-      if (found) { left = Math.max(0, x - 8); break; }
+      if (found) { left = x; break; }
     }
     
-    // Scan from right
-    for (let x = W - 1; x > left; x -= 8) {
-      const col = ctx.getImageData(x, top, 1, Math.min(200, bottom - top)).data;
+    // Right: scan full-height columns leftward
+    for (let x = W - 1; x > left; x -= 4) {
+      const col = ctx.getImageData(x, top, 1, scanH).data;
       let found = false;
-      for (let i = 0; i < col.length; i += 4) {
+      for (let i = 0; i < col.length; i += 16) {
         if (col[i] < 245 || col[i+1] < 245 || col[i+2] < 245) { found = true; break; }
       }
-      if (found) { right = Math.min(W - 1, x + 8); break; }
+      if (found) { right = x; break; }
     }
     
-    if (top >= bottom || left >= right) return { top: 0, left: 0, w: W, h: H };
-    return { top, left, w: right - left + 1, h: bottom - top + 1 };
-  };
-
-  // Create tightly cropped download canvas
-  // Layout: 20px top → shirt → 20px gap → text → 20px bottom
-  const createCroppedDownload = (sourceCanvas, size) => {
-    const bounds = cropHighResCanvas(sourceCanvas, size);
+    // Fallback
+    if (top >= bottom || left >= right) { top = 0; bottom = H-1; left = 0; right = W-1; }
     
-    const margin = 20;
+    // ─── STEP 2: Calculate compact export dimensions ─────────────────────────
+    const garmentW = right - left + 1;
+    const garmentH = bottom - top + 1;
+    const pad = 20;
     const textGap = 20;
-    const textHeight = 40;
-    
-    const cropW = bounds.w;
-    const cropH = bounds.h;
+    const textLineH = 40;
     
     // Text
-    const sizeData = TSHIRT_SIZES[size];
     const artWidthInches = (artworkDimensions.width * artworkScale).toFixed(1);
     const artHeightInches = (artworkDimensions.height * artworkScale).toFixed(1);
     const text = `Shirt Size: ${size} | Artwork Size: W ${artWidthInches}" x H ${artHeightInches}"`;
-    
-    // Measure text
     const measureCtx = document.createElement('canvas').getContext('2d');
-    measureCtx.font = 'bold 28px Inter, sans-serif';
+    measureCtx.font = 'bold 32px Inter, sans-serif';
     const textWidth = measureCtx.measureText(text).width + 40;
     
-    // Final canvas: tight around garment + text below
-    const finalW = Math.max(cropW + margin * 2, textWidth);
-    const finalH = margin + cropH + textGap + textHeight + margin;
+    // Export canvas: just big enough for garment + padding + text
+    const exportW = Math.max(garmentW + pad * 2, Math.ceil(textWidth));
+    const exportH = pad + garmentH + textGap + textLineH + pad;
     
+    // ─── STEP 3: Create NEW compact canvas ───────────────────────────────────
     const dlCanvas = document.createElement('canvas');
-    dlCanvas.width = finalW;
-    dlCanvas.height = finalH;
+    dlCanvas.width = exportW;
+    dlCanvas.height = exportH;
     const dlCtx = dlCanvas.getContext('2d');
-    
     dlCtx.fillStyle = '#ffffff';
-    dlCtx.fillRect(0, 0, finalW, finalH);
+    dlCtx.fillRect(0, 0, exportW, exportH);
     
-    // Draw cropped garment centered
-    const shirtX = (finalW - cropW) / 2;
-    dlCtx.drawImage(sourceCanvas, bounds.left, bounds.top, cropW, cropH, shirtX, margin, cropW, cropH);
+    // ─── STEP 4: Draw ONLY the cropped garment region ────────────────────────
+    const shirtX = Math.floor((exportW - garmentW) / 2);
+    dlCtx.drawImage(sourceCanvas, left, top, garmentW, garmentH, shirtX, pad, garmentW, garmentH);
     
-    // Draw text 20px below garment
-    dlCtx.font = 'bold 28px Inter, sans-serif';
+    // ─── STEP 5: Text below garment ──────────────────────────────────────────
+    dlCtx.font = 'bold 32px Inter, sans-serif';
     dlCtx.fillStyle = '#000000';
     dlCtx.textAlign = 'center';
-    dlCtx.fillText(text, finalW / 2, margin + cropH + textGap + 28);
+    dlCtx.fillText(text, exportW / 2, pad + garmentH + textGap + 30);
     
     return dlCanvas;
   };
@@ -608,7 +601,7 @@ function MockupPreview({
   // Download a single mockup with dimensions
   const downloadSingle = async (size) => {
     const canvas = await renderHighRes(size, true);
-    const croppedCanvas = createCroppedDownload(canvas, size);
+    const croppedCanvas = createCompactExport(canvas, size);
     try {
       const blob = await new Promise((resolve) => croppedCanvas.toBlob(resolve, 'image/png'));
       if (blob && blob.size > 0) {
@@ -641,7 +634,7 @@ function MockupPreview({
   // Download a single clean mockup (no annotations)
   const downloadClean = async (size) => {
     const canvas = await renderHighRes(size, false);
-    const croppedCanvas = createCroppedDownload(canvas, size);
+    const croppedCanvas = createCompactExport(canvas, size);
     try {
       const blob = await new Promise((resolve) => croppedCanvas.toBlob(resolve, 'image/png'));
       if (blob && blob.size > 0) {
@@ -680,7 +673,7 @@ function MockupPreview({
     let maxW = 0, maxH = 0;
     for (let i = 0; i < activeSizes.length; i++) {
       const canvas = await renderHighRes(activeSizes[i], true);
-      const cropped = createCroppedDownload(canvas, activeSizes[i]);
+      const cropped = createCompactExport(canvas, activeSizes[i]);
       croppedCanvases.push(cropped);
       if (cropped.width > maxW) maxW = cropped.width;
       if (cropped.height > maxH) maxH = cropped.height;
@@ -735,7 +728,7 @@ function MockupPreview({
     let maxW = 0, maxH = 0;
     for (let i = 0; i < activeSizes.length; i++) {
       const canvas = await renderHighRes(activeSizes[i], false);
-      const cropped = createCroppedDownload(canvas, activeSizes[i]);
+      const cropped = createCompactExport(canvas, activeSizes[i]);
       croppedCanvases.push(cropped);
       if (cropped.width > maxW) maxW = cropped.width;
       if (cropped.height > maxH) maxH = cropped.height;
