@@ -3,9 +3,12 @@ import { TSHIRT_SIZES } from '../constants/tshirtSizes';
 import { drawRecoloredGarment } from '../utils/garmentTintEngine';
 import './DesignCanvas.css';
 
-// Canvas dimensions (pixels)
-const CANVAS_WIDTH = 700;
-const CANVAS_HEIGHT = 850;
+// Canvas dimensions (pixels) — 2x for retina-sharp preview
+const CANVAS_SCALE = 2;
+const CANVAS_WIDTH = 700 * CANVAS_SCALE;
+const CANVAS_HEIGHT = 850 * CANVAS_SCALE;
+const LOGICAL_WIDTH = 700;
+const LOGICAL_HEIGHT = 850;
 
 // Color tinting utility — uses the new V2 garment tint engine
 function applyColorTint(ctx, img, dx, dy, dw, dh, canvasW, canvasH, colorHex) {
@@ -219,8 +222,8 @@ function DesignCanvas({
       }
 
       // Center horizontally, align to TOP of print area vertically
-      const drawX = printArea.x + (printArea.width - artW) / 2 + artworkPosition.x;
-      const drawY = printArea.y + artworkPosition.y;
+      const drawX = printArea.x + (printArea.width - artW) / 2 + artworkPosition.x * CANVAS_SCALE;
+      const drawY = printArea.y + artworkPosition.y * CANVAS_SCALE;
 
       // Clip to print area
       ctx.beginPath();
@@ -396,12 +399,12 @@ function DesignCanvas({
     if (imgAspect > boxAspect) { artW = boxW; artH = boxW / imgAspect; }
     else { artH = boxH; artW = boxH * imgAspect; }
 
-    const drawX = printArea.x + (printArea.width - artW) / 2 + artworkPosition.x;
-    const drawY = printArea.y + artworkPosition.y;
+    const drawX = printArea.x + (printArea.width - artW) / 2 + artworkPosition.x * CANVAS_SCALE;
+    const drawY = printArea.y + artworkPosition.y * CANVAS_SCALE;
 
     if (x >= drawX && x <= drawX + artW && y >= drawY && y <= drawY + artH) {
       setIsDragging(true);
-      setDragStart({ x: x - artworkPosition.x, y: y - artworkPosition.y });
+      setDragStart({ x: x - artworkPosition.x * CANVAS_SCALE, y: y - artworkPosition.y * CANVAS_SCALE });
     }
   };
 
@@ -412,8 +415,8 @@ function DesignCanvas({
     const y = (e.clientY - rect.top) * (CANVAS_HEIGHT / rect.height);
 
     onPositionChange({
-      x: x - dragStart.x,
-      y: y - dragStart.y,
+      x: (x - dragStart.x) / CANVAS_SCALE,
+      y: (y - dragStart.y) / CANVAS_SCALE,
     });
   };
 
@@ -428,7 +431,7 @@ function DesignCanvas({
         width={CANVAS_WIDTH}
         height={CANVAS_HEIGHT}
         className="design-canvas"
-        style={{ transform: `scale(${canvasZoom})` }}
+        style={{ transform: `scale(${canvasZoom})`, width: `${LOGICAL_WIDTH}px`, height: `${LOGICAL_HEIGHT}px` }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
