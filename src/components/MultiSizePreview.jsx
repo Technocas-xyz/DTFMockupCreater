@@ -55,67 +55,81 @@ function MultiSizePreview({
   const baseBodyWidth = baseSizeData ? baseSizeData.bodyWidth : 22;
   const basePercentage = (artworkDimensions.width / baseBodyWidth) * 100;
 
-  // ─── DOWNLOAD ALL: Combined image with all sizes side by side ───────────────
-  const handleDownloadAll = () => {
+  // ─── DOWNLOAD ALL: Each card rendered at high-res, combined side by side ─────
+  const handleDownloadAll = (format = 'jpeg') => {
     const numSizes = sortedSizes.length;
     if (numSizes === 0) return;
 
-    // Crop each card and find max dimensions
+    // Use 3x scale from preview canvas (gives ~2100x2550 per card)
+    const SF = 3;
+    const srcW = 700, srcH = 850;
+
+    // Render each card at high-res
+    const cardImages = [];
     let maxCropW = 0, maxCropH = 0;
-    const crops = [];
+
     sortedSizes.forEach((size) => {
       const ref = cardRefs.current[size];
       if (ref && ref.canvas) {
-        const b = getContentBounds(ref.canvas);
-        if (b.w > maxCropW) maxCropW = b.w;
-        if (b.h > maxCropH) maxCropH = b.h;
-        crops.push(b);
+        // Draw directly from the preview canvas which has the correct rendering
+        // Use toDataURL and reload to ensure we get pixels
+        const hiRes = document.createElement('canvas');
+        hiRes.width = srcW * SF; hiRes.height = srcH * SF;
+        const hCtx = hiRes.getContext('2d');
+        hCtx.imageSmoothingEnabled = true;
+        hCtx.imageSmoothingQuality = 'high';
+        hCtx.drawImage(ref.canvas, 0, 0, srcW, srcH, 0, 0, srcW * SF, srcH * SF);
+
+        const bounds = getContentBounds(hiRes);
+        if (bounds.w > maxCropW) maxCropW = bounds.w;
+        if (bounds.h > maxCropH) maxCropH = bounds.h;
+        cardImages.push({ canvas: hiRes, bounds, size });
       } else {
-        crops.push(null);
+        cardImages.push(null);
       }
     });
 
-    const cardGap = 10;
-    const textH = 25;
-    const totalW = numSizes * (maxCropW + cardGap) - cardGap;
-    const totalH = maxCropH + 10 + textH;
+    // Build combined canvas
+    const gap = 20;
+    const textH = 40;
+    const totalW = numSizes * (maxCropW + gap) - gap;
+    const totalH = maxCropH + textH;
 
     const out = document.createElement('canvas');
-    out.width = totalW;
-    out.height = totalH;
+    out.width = totalW; out.height = totalH;
     const ctx = out.getContext('2d');
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, totalW, totalH);
 
-    sortedSizes.forEach((size, idx) => {
-      const ref = cardRefs.current[size];
-      const crop = crops[idx];
-      if (ref && ref.canvas && crop) {
-        const x = idx * (maxCropW + cardGap);
-        const offX = Math.floor((maxCropW - crop.w) / 2);
-        const offY = Math.floor((maxCropH - crop.h) / 2);
-        ctx.drawImage(ref.canvas, crop.left, crop.top, crop.w, crop.h, x + offX, offY, crop.w, crop.h);
-        // Text
-        const realSize = size.includes('_') ? size.split('_')[0] : size;
-        const artW = ref.artWidth || 0, artH = ref.artHeight || 0;
-        ctx.font = 'bold 13px sans-serif';
-        ctx.fillStyle = '#000000';
-        ctx.textAlign = 'center';
-        ctx.fillText(`${realSize} | W${artW.toFixed(1)}" H${artH.toFixed(1)}"`, x + maxCropW / 2, maxCropH + 10 + 14);
-      }
+    cardImages.forEach((card, idx) => {
+      if (!card) return;
+      const x = idx * (maxCropW + gap);
+      const offX = Math.floor((maxCropW - card.bounds.w) / 2);
+      const offY = Math.floor((maxCropH - card.bounds.h) / 2);
+      ctx.drawImage(card.canvas, card.bounds.left, card.bounds.top, card.bounds.w, card.bounds.h, x + offX, offY, card.bounds.w, card.bounds.h);
+
+      // Text
+      const realSize = card.size.includes('_') ? card.size.split('_')[0] : card.size;
+      const ref = cardRefs.current[card.size];
+      const artW = ref?.artWidth || 0, artH = ref?.artHeight || 0;
+      ctx.font = 'bold 22px sans-serif';
+      ctx.fillStyle = '#000000';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${realSize} | W${artW.toFixed(1)}" H${artH.toFixed(1)}"`, x + maxCropW / 2, maxCropH + 28);
     });
 
+    const mimeType = format === 'jpeg' ? 'image/jpeg' : 'image/png';
+    const quality = format === 'jpeg' ? 0.95 : undefined;
+    const ext = format === 'jpeg' ? 'jpg' : 'png';
     out.toBlob((blob) => {
       if (!blob) return;
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.download = 'mockup-all-sizes.png';
+      link.download = `mockup-all-sizes.${ext}`;
       link.href = url;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      document.body.appendChild(link); link.click(); document.body.removeChild(link);
       setTimeout(() => URL.revokeObjectURL(url), 2000);
-    }, 'image/png');
+    }, mimeType, quality);
   };
 
   return (
@@ -123,7 +137,7 @@ function MultiSizePreview({
       <div className="msp-header">
         <h3>Size Comparison</h3>
         <div className="msp-header-actions">
-          <button className="msp-download-all-btn" onClick={handleDownloadAll} title="Download All Sizes">
+          <button className="msp-download-all-btn" onClick={() => handleDownloadAll('jpeg')} title="Download All Sizes (JPEG 95%)">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
               <polyline points="7 10 12 15 17 10"/>
@@ -456,8 +470,8 @@ const MSPCard = React.forwardRef(function MSPCard({
       dlCtx.textAlign = 'center';
       dlCtx.fillText(text, finalW / 2, cropH + 28);
       const link = document.createElement('a');
-      link.download = `mockup-${realSize}.png`;
-      link.href = dlCanvas.toDataURL('image/png');
+      link.download = `mockup-${realSize}.jpg`;
+      link.href = dlCanvas.toDataURL('image/jpeg', 0.95);
       document.body.appendChild(link); link.click(); document.body.removeChild(link);
     };
     artImg.src = artwork;
