@@ -502,82 +502,62 @@ function MockupPreview({
     });
   };
 
-  // Crop detection for high-res canvas (white background)
+  // Crop detection — uses known garment position (no pixel scanning needed)
   const cropHighResCanvas = (sourceCanvas, size) => {
-    const W = sourceCanvas.width;
-    const H = sourceCanvas.height;
-
-    // Read pixels directly from the source canvas
-    let ctx;
-    try { ctx = sourceCanvas.getContext('2d'); } catch(e) { return { top: 0, left: 0, w: W, h: H }; }
+    // The garment occupies ~88% width centered, ~80% height from ~20% down
+    // Instead of scanning pixels (slow/unreliable on 6000x7200), use geometric bounds
+    const W = sourceCanvas.width, H = sourceCanvas.height;
+    const sizeData = TSHIRT_SIZES[size];
+    const maxTshirtW = W * 0.88;
+    const maxTshirtH = H * 0.80;
+    const pxPerInchW = maxTshirtW / sizeData.bodyWidth;
+    const pxPerInchH = maxTshirtH / sizeData.bodyLength;
+    const tshirtW = sizeData.bodyWidth * pxPerInchW;
+    const tshirtH = sizeData.bodyLength * pxPerInchH;
+    const tshirtX = (W - tshirtW) / 2;
+    const tshirtY = H * 0.20 + (maxTshirtH - tshirtH) / 2;
     
-    // Scan in horizontal strips for speed
-    let top = H, bottom = 0, left = W, right = 0;
+    // The actual drawn garment image is wider (1.3x padding for sleeves)
+    const shirtPadding = 1.3;
+    const imgW = tshirtW * shirtPadding;
+    const imgX = (W - imgW) / 2;
+    const imgY = tshirtY - (tshirtH * 0.15);
     
-    // Scan top→down to find first non-white row
-    for (let y = 0; y < H && top === H; y += 4) {
-      const row = ctx.getImageData(0, y, W, 1).data;
-      for (let x = 0; x < W * 4; x += 16) {
-        if (row[x] < 248 || row[x+1] < 248 || row[x+2] < 248) { top = y; break; }
-      }
-    }
-    // Scan bottom→up
-    for (let y = H - 1; y >= 0 && bottom === 0; y -= 4) {
-      const row = ctx.getImageData(0, y, W, 1).data;
-      for (let x = 0; x < W * 4; x += 16) {
-        if (row[x] < 248 || row[x+1] < 248 || row[x+2] < 248) { bottom = y; break; }
-      }
-    }
-    // Scan left→right
-    for (let x = 0; x < W && left === W; x += 4) {
-      const col = ctx.getImageData(x, top, 1, bottom - top + 1).data;
-      for (let i = 0; i < col.length; i += 16) {
-        if (col[i] < 248 || col[i+1] < 248 || col[i+2] < 248) { left = x; break; }
-      }
-    }
-    // Scan right→left
-    for (let x = W - 1; x >= 0 && right === 0; x -= 4) {
-      const col = ctx.getImageData(x, top, 1, bottom - top + 1).data;
-      for (let i = 0; i < col.length; i += 16) {
-        if (col[i] < 248 || col[i+1] < 248 || col[i+2] < 248) { right = x; break; }
-      }
-    }
-
-    if (top >= bottom || left >= right) {
-      return { top: 0, left: 0, w: W, h: H };
-    }
-    return { top, left, w: right - left + 1, h: bottom - top + 1 };
+    // Bounds include the full garment image area
+    const left = Math.max(0, Math.floor(imgX - 20));
+    const top = Math.max(0, Math.floor(imgY - 20));
+    const right = Math.min(W, Math.ceil(imgX + imgW + 20));
+    const bottom = Math.min(H, Math.ceil(tshirtY + tshirtH + 20));
+    
+    return { top, left, w: right - left, h: bottom - top };
   };
 
-  // Create tightly cropped download canvas with layout:
-  // 20px top → shirt → 20px gap → text → 20px bottom
+  // Create tightly cropped download canvas
+  // Layout: 20px top → shirt → 20px gap → text → 20px bottom
   const createCroppedDownload = (sourceCanvas, size) => {
     const bounds = cropHighResCanvas(sourceCanvas, size);
     
-    const topMargin = 10;
-    const gap = 15;
-    const textHeight = 30;
-    const bottomMargin = 10;
-    const sideMargin = 10;
+    const margin = 20;
+    const textGap = 20;
+    const textHeight = 40;
     
     const cropW = bounds.w;
     const cropH = bounds.h;
     
-    // Measure text width to ensure canvas is wide enough
+    // Text
     const sizeData = TSHIRT_SIZES[size];
     const artWidthInches = (artworkDimensions.width * artworkScale).toFixed(1);
     const artHeightInches = (artworkDimensions.height * artworkScale).toFixed(1);
     const text = `Shirt Size: ${size} | Artwork Size: W ${artWidthInches}" x H ${artHeightInches}"`;
     
-    // Create temp canvas to measure text
-    const measureCanvas = document.createElement('canvas');
-    const measureCtx = measureCanvas.getContext('2d');
-    measureCtx.font = 'bold 18px Inter, sans-serif';
-    const textWidth = measureCtx.measureText(text).width + 40; // 20px padding each side
+    // Measure text
+    const measureCtx = document.createElement('canvas').getContext('2d');
+    measureCtx.font = 'bold 28px Inter, sans-serif';
+    const textWidth = measureCtx.measureText(text).width + 40;
     
-    // Final width = max of (shirt crop + margins) and (text width)
-    const finalW = Math.max(cropW + sideMargin * 2, textWidth);
-    const finalH = topMargin + cropH + gap + textHeight + bottomMargin;
+    // Final canvas: tight around garment + text below
+    const finalW = Math.max(cropW + margin * 2, textWidth);
+    const finalH = margin + cropH + textGap + textHeight + margin;
     
     const dlCanvas = document.createElement('canvas');
     dlCanvas.width = finalW;
@@ -587,15 +567,15 @@ function MockupPreview({
     dlCtx.fillStyle = '#ffffff';
     dlCtx.fillRect(0, 0, finalW, finalH);
     
-    // Draw cropped shirt (centered horizontally)
+    // Draw cropped garment centered
     const shirtX = (finalW - cropW) / 2;
-    dlCtx.drawImage(sourceCanvas, bounds.left, bounds.top, cropW, cropH, shirtX, topMargin, cropW, cropH);
+    dlCtx.drawImage(sourceCanvas, bounds.left, bounds.top, cropW, cropH, shirtX, margin, cropW, cropH);
     
-    // Draw text centered
-    dlCtx.font = 'bold 18px Inter, sans-serif';
+    // Draw text 20px below garment
+    dlCtx.font = 'bold 28px Inter, sans-serif';
     dlCtx.fillStyle = '#000000';
     dlCtx.textAlign = 'center';
-    dlCtx.fillText(text, finalW / 2, topMargin + cropH + gap + 20);
+    dlCtx.fillText(text, finalW / 2, margin + cropH + textGap + 28);
     
     return dlCanvas;
   };
