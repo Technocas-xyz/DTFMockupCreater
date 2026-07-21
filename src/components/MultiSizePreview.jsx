@@ -31,7 +31,7 @@ function MultiSizePreview({
   const baseBodyWidth = baseSizeData ? baseSizeData.bodyWidth : 22;
   const basePercentage = (artworkDimensions.width / baseBodyWidth) * 100;
 
-  // ─── CROP UTILITY: Find non-white content bounds ─────────────────────────────
+  // ─── CROP UTILITY: Find non-white/non-transparent content bounds ──────────────
   const getContentBounds = (canvas) => {
     const W = canvas.width, H = canvas.height;
     const ctx = canvas.getContext('2d');
@@ -42,12 +42,16 @@ function MultiSizePreview({
       const rowOff = y * W * 4;
       for (let x = 0; x < W; x++) {
         const i = rowOff + x * 4;
-        if (d[i] < 240 || d[i+1] < 240 || d[i+2] < 240) {
-          if (y < top) top = y;
-          if (y > bottom) bottom = y;
-          if (x < left) left = x;
-          if (x > right) right = x;
-        }
+        const a = d[i + 3];
+        // Skip fully transparent pixels
+        if (a < 10) continue;
+        // Skip white pixels (RGB all > 240)
+        if (d[i] > 240 && d[i+1] > 240 && d[i+2] > 240) continue;
+        // This pixel is visible content
+        if (y < top) top = y;
+        if (y > bottom) bottom = y;
+        if (x < left) left = x;
+        if (x > right) right = x;
       }
     }
     if (top >= bottom || left >= right) return { top: 0, left: 0, w: W, h: H };
