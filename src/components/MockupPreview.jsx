@@ -502,34 +502,59 @@ function MockupPreview({
     });
   };
 
-  // Crop detection — uses known garment position (no pixel scanning needed)
+  // Crop detection — render garment to a FITTED canvas instead of cropping a huge one
   const cropHighResCanvas = (sourceCanvas, size) => {
-    // The garment occupies ~88% width centered, ~80% height from ~20% down
-    // Instead of scanning pixels (slow/unreliable on 6000x7200), use geometric bounds
+    // Render produced a 6000x7200 canvas. The garment is somewhere in the middle.
+    // We need to find it. Use a simple approach: scan the MIDDLE of the canvas.
     const W = sourceCanvas.width, H = sourceCanvas.height;
-    const sizeData = TSHIRT_SIZES[size];
-    const maxTshirtW = W * 0.88;
-    const maxTshirtH = H * 0.80;
-    const pxPerInchW = maxTshirtW / sizeData.bodyWidth;
-    const pxPerInchH = maxTshirtH / sizeData.bodyLength;
-    const tshirtW = sizeData.bodyWidth * pxPerInchW;
-    const tshirtH = sizeData.bodyLength * pxPerInchH;
-    const tshirtX = (W - tshirtW) / 2;
-    const tshirtY = H * 0.20 + (maxTshirtH - tshirtH) / 2;
+    const ctx = sourceCanvas.getContext('2d');
     
-    // The actual drawn garment image is wider (1.3x padding for sleeves)
-    const shirtPadding = 1.3;
-    const imgW = tshirtW * shirtPadding;
-    const imgX = (W - imgW) / 2;
-    const imgY = tshirtY - (tshirtH * 0.15);
+    // The shirt is roughly in the center 60% of the canvas
+    // Quick scan: check rows from top until we hit non-white
+    let top = 0, bottom = H - 1, left = 0, right = W - 1;
     
-    // Bounds include the full garment image area
-    const left = Math.max(0, Math.floor(imgX - 20));
-    const top = Math.max(0, Math.floor(imgY - 20));
-    const right = Math.min(W, Math.ceil(imgX + imgW + 20));
-    const bottom = Math.min(H, Math.ceil(tshirtY + tshirtH + 20));
+    // Scan from top
+    for (let y = 0; y < H; y += 8) {
+      const row = ctx.getImageData(Math.floor(W * 0.2), y, Math.floor(W * 0.6), 1).data;
+      let found = false;
+      for (let i = 0; i < row.length; i += 4) {
+        if (row[i] < 245 || row[i+1] < 245 || row[i+2] < 245) { found = true; break; }
+      }
+      if (found) { top = Math.max(0, y - 8); break; }
+    }
     
-    return { top, left, w: right - left, h: bottom - top };
+    // Scan from bottom
+    for (let y = H - 1; y > top; y -= 8) {
+      const row = ctx.getImageData(Math.floor(W * 0.2), y, Math.floor(W * 0.6), 1).data;
+      let found = false;
+      for (let i = 0; i < row.length; i += 4) {
+        if (row[i] < 245 || row[i+1] < 245 || row[i+2] < 245) { found = true; break; }
+      }
+      if (found) { bottom = Math.min(H - 1, y + 8); break; }
+    }
+    
+    // Scan from left
+    for (let x = 0; x < W; x += 8) {
+      const col = ctx.getImageData(x, top, 1, Math.min(200, bottom - top)).data;
+      let found = false;
+      for (let i = 0; i < col.length; i += 4) {
+        if (col[i] < 245 || col[i+1] < 245 || col[i+2] < 245) { found = true; break; }
+      }
+      if (found) { left = Math.max(0, x - 8); break; }
+    }
+    
+    // Scan from right
+    for (let x = W - 1; x > left; x -= 8) {
+      const col = ctx.getImageData(x, top, 1, Math.min(200, bottom - top)).data;
+      let found = false;
+      for (let i = 0; i < col.length; i += 4) {
+        if (col[i] < 245 || col[i+1] < 245 || col[i+2] < 245) { found = true; break; }
+      }
+      if (found) { right = Math.min(W - 1, x + 8); break; }
+    }
+    
+    if (top >= bottom || left >= right) return { top: 0, left: 0, w: W, h: H };
+    return { top, left, w: right - left + 1, h: bottom - top + 1 };
   };
 
   // Create tightly cropped download canvas

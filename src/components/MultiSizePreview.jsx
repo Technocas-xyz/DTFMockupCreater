@@ -414,22 +414,57 @@ const MSPCard = React.forwardRef(function MSPCard({
     const sourceCanvas = canvasRef.current;
     if (!sourceCanvas) return;
 
-    // Export the canvas at its native resolution (700x850) — same quality as what's displayed
     const W = sourceCanvas.width, H = sourceCanvas.height;
-    const text = `Shirt Size: ${realSize} | Artwork Size: W ${sizeArtW.toFixed(1)}" x H ${sizeArtH.toFixed(1)}"`;
+    const ctx = sourceCanvas.getContext('2d');
+    const imgData = ctx.getImageData(0, 0, W, H);
+    const d = imgData.data;
 
-    // Create download canvas with text below
+    // Find tight bounds of non-white content
+    let top = H, bottom = 0, left = W, right = 0;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const idx = (y * W + x) * 4;
+        if (d[idx] < 245 || d[idx+1] < 245 || d[idx+2] < 245) {
+          if (y < top) top = y;
+          if (y > bottom) bottom = y;
+          if (x < left) left = x;
+          if (x > right) right = x;
+        }
+      }
+    }
+
+    if (top >= bottom || left >= right) { top = 0; bottom = H-1; left = 0; right = W-1; }
+
+    const cropW = right - left + 1;
+    const cropH = bottom - top + 1;
+    const text = `Shirt Size: ${realSize} | Artwork Size: W ${sizeArtW.toFixed(1)}" x H ${sizeArtH.toFixed(1)}"`;
+    const pad = 10;
+    const textH = 30;
+
+    // Measure text width
+    const mCtx = document.createElement('canvas').getContext('2d');
+    mCtx.font = 'bold 16px sans-serif';
+    const textW = mCtx.measureText(text).width + 20;
+
+    const finalW = Math.max(cropW + pad * 2, textW);
+    const finalH = pad + cropH + 15 + textH + pad;
+
     const dlCanvas = document.createElement('canvas');
-    dlCanvas.width = W;
-    dlCanvas.height = H + 50;
+    dlCanvas.width = finalW;
+    dlCanvas.height = finalH;
     const dlCtx = dlCanvas.getContext('2d');
     dlCtx.fillStyle = '#ffffff';
-    dlCtx.fillRect(0, 0, dlCanvas.width, dlCanvas.height);
-    dlCtx.drawImage(sourceCanvas, 0, 0);
-    dlCtx.font = 'bold 18px sans-serif';
+    dlCtx.fillRect(0, 0, finalW, finalH);
+
+    // Draw cropped shirt centered
+    const shirtX = (finalW - cropW) / 2;
+    dlCtx.drawImage(sourceCanvas, left, top, cropW, cropH, shirtX, pad, cropW, cropH);
+
+    // Text immediately below
+    dlCtx.font = 'bold 16px sans-serif';
     dlCtx.fillStyle = '#000000';
     dlCtx.textAlign = 'center';
-    dlCtx.fillText(text, W / 2, H + 32);
+    dlCtx.fillText(text, finalW / 2, pad + cropH + 15 + 16);
 
     const link = document.createElement('a');
     link.download = `mockup-${realSize}.png`;
