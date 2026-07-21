@@ -506,34 +506,46 @@ function MockupPreview({
   const cropHighResCanvas = (sourceCanvas, size) => {
     const W = sourceCanvas.width;
     const H = sourceCanvas.height;
-    const ctx = sourceCanvas.getContext('2d');
-    const imgData = ctx.getImageData(0, 0, W, H);
-    const { data } = imgData;
-    let top = H, bottom = 0, left = W, right = 0;
 
-    // Find non-white pixels (the shirt + artwork)
-    for (let y = 0; y < H; y += 3) {
-      for (let x = 0; x < W; x += 3) {
-        const idx = (y * W + x) * 4;
-        const r = data[idx], g = data[idx + 1], b = data[idx + 2];
-        // Not white (allow small tolerance for anti-aliasing)
-        if (r < 250 || g < 250 || b < 250) {
-          if (y < top) top = y;
-          if (y > bottom) bottom = y;
-          if (x < left) left = x;
-          if (x > right) right = x;
-        }
+    // Read pixels directly from the source canvas
+    let ctx;
+    try { ctx = sourceCanvas.getContext('2d'); } catch(e) { return { top: 0, left: 0, w: W, h: H }; }
+    
+    // Scan in horizontal strips for speed
+    let top = H, bottom = 0, left = W, right = 0;
+    
+    // Scan top→down to find first non-white row
+    for (let y = 0; y < H && top === H; y += 4) {
+      const row = ctx.getImageData(0, y, W, 1).data;
+      for (let x = 0; x < W * 4; x += 16) {
+        if (row[x] < 248 || row[x+1] < 248 || row[x+2] < 248) { top = y; break; }
+      }
+    }
+    // Scan bottom→up
+    for (let y = H - 1; y >= 0 && bottom === 0; y -= 4) {
+      const row = ctx.getImageData(0, y, W, 1).data;
+      for (let x = 0; x < W * 4; x += 16) {
+        if (row[x] < 248 || row[x+1] < 248 || row[x+2] < 248) { bottom = y; break; }
+      }
+    }
+    // Scan left→right
+    for (let x = 0; x < W && left === W; x += 4) {
+      const col = ctx.getImageData(x, top, 1, bottom - top + 1).data;
+      for (let i = 0; i < col.length; i += 16) {
+        if (col[i] < 248 || col[i+1] < 248 || col[i+2] < 248) { left = x; break; }
+      }
+    }
+    // Scan right→left
+    for (let x = W - 1; x >= 0 && right === 0; x -= 4) {
+      const col = ctx.getImageData(x, top, 1, bottom - top + 1).data;
+      for (let i = 0; i < col.length; i += 16) {
+        if (col[i] < 248 || col[i+1] < 248 || col[i+2] < 248) { right = x; break; }
       }
     }
 
     if (top >= bottom || left >= right) {
       return { top: 0, left: 0, w: W, h: H };
     }
-    // Add tiny padding
-    top = Math.max(0, top - 5);
-    left = Math.max(0, left - 5);
-    bottom = Math.min(H - 1, bottom + 5);
-    right = Math.min(W - 1, right + 5);
     return { top, left, w: right - left + 1, h: bottom - top + 1 };
   };
 
@@ -542,11 +554,11 @@ function MockupPreview({
   const createCroppedDownload = (sourceCanvas, size) => {
     const bounds = cropHighResCanvas(sourceCanvas, size);
     
-    const topMargin = 20;
-    const gap = 20;
+    const topMargin = 10;
+    const gap = 15;
     const textHeight = 30;
-    const bottomMargin = 20;
-    const sideMargin = 20;
+    const bottomMargin = 10;
+    const sideMargin = 10;
     
     const cropW = bounds.w;
     const cropH = bounds.h;
