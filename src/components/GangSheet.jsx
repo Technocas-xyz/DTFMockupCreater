@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import './GangSheet.css';
+import { detectApiBase } from '../utils/apiConfig';
 
 const SHEET_WIDTH_INCHES = 22;
 const MAX_SHEET_HEIGHT = 108;
@@ -222,6 +223,14 @@ function GangSheet({ sharedArtwork }) {
   const [activeSheet, setActiveSheet] = useState(0);
   const [detailsArtwork, setDetailsArtwork] = useState(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [customers, setCustomers] = useState([]);
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [selectedOrderId, setSelectedOrderId] = useState('');
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [integrationLoading, setIntegrationLoading] = useState(false);
+  const [integrationMessage, setIntegrationMessage] = useState('');
+  const [savingSheet, setSavingSheet] = useState(false);
 
   // Order info
   const [poNumber, setPoNumber] = useState('');
@@ -237,6 +246,77 @@ function GangSheet({ sharedArtwork }) {
   // Current sheet data
   const currentSheet = layoutData.sheets[activeSheet] || { items: [], totalHeight: 0 };
   const totalItemCount = artworks.reduce((sum, a) => sum + a.repetitions, 0);
+  const selectedCustomer = customers.find((customer) => String(customer.id) === selectedCustomerId);
+  const visibleCustomers = customers.filter((customer) => `${customer.name} ${customer.email || ''} ${customer.orders.map(o => o.order_number).join(' ')}`.toLowerCase().includes(customerSearch.toLowerCase()));
+
+  const apiHeaders = () => ({ 'Authorization': `Bearer ${localStorage.getItem('auth_token') || ''}` });
+
+  const refreshCustomers = useCallback(async () => {
+    try {
+      const base = await detectApiBase();
+      const response = await fetch(`${base}/production-orders.php`, { headers: apiHeaders() });
+      if (!response.ok) throw new Error('Could not load DTF customers');
+      const data = await response.json();
+      setCustomers(data.customers || []);
+    } catch (error) { setIntegrationMessage(error.message); }
+  }, []);
+
+  useEffect(() => {
+    refreshCustomers();
+    const timer = window.setInterval(refreshCustomers, 15000);
+    return () => window.clearInterval(timer);
+  }, [refreshCustomers]);
+
+  const loadProductionOrder = async (orderId) => {
+    if (!orderId) return;
+    setIntegrationLoading(true); setIntegrationMessage('Loading sales order and artworks...');
+    try {
+      const base = await detectApiBase();
+      const response = await fetch(`${base}/production-orders.php?order_id=${encodeURIComponent(orderId)}`, { headers: apiHeaders() });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not load sales order');
+      const imported = [];
+      for (const [idx, item] of (data.items || []).entries()) {
+        if (!item.has_image) continue;
+        const imageResponse = await fetch(`${base}/artwork-image.php?item_id=${encodeURIComponent(item.order_item_id)}`, { headers: apiHeaders() });
+        if (!imageResponse.ok) continue;
+        const blob = await imageResponse.blob();
+        const dataUrl = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(blob); });
+        const img = await new Promise((resolve, reject) => { const value = new Image(); value.onload = () => resolve(value); value.onerror = reject; value.src = dataUrl; });
+        const sizeMatch = String(item.size || '').match(/([\d.]+)\s*(?:"|in)?\s*[x×]\s*([\d.]+)/i);
+        const aspect = img.naturalWidth / img.naturalHeight;
+        let widthInches = Number(item.width_inches) || Number(sizeMatch?.[1]) || Math.min(SHEET_WIDTH_INCHES - 1, img.naturalWidth / DPI);
+        let heightInches = Number(item.height_inches) || Number(sizeMatch?.[2]) || (widthInches / aspect);
+        if (widthInches > SHEET_WIDTH_INCHES) { widthInches = SHEET_WIDTH_INCHES - 1; heightInches = widthInches / aspect; }
+        imported.push({ id: nextId.current++, filename: item.stored_name || item.artwork_name || item.artwork_no || `Artwork ${idx + 1}`, artworkNo: item.artwork_no || item.stored_artwork_no || `AW-${idx + 1}`, orderItemId: item.order_item_id, artworkId: item.artwork_id, dataUrl, originalWidth: img.naturalWidth, originalHeight: img.naturalHeight, widthInches: Number(widthInches.toFixed(2)), heightInches: Number(heightInches.toFixed(2)), aspect, repetitions: Math.max(1, Number(item.artwork_qty) || Number(item.qty) || 1) });
+      }
+      setSelectedOrder(data.order); setArtworks(imported); setOrderNumber(data.order.order_number || ''); setPoNumber(data.order.po_number || ''); setOrderLink(`https://printshop.decoinkssuite.com/orders/${data.order.id}`);
+      setIntegrationMessage(imported.length ? `${imported.length} artwork(s) imported from ${data.order.order_number}.` : 'Order loaded, but no artwork image or print size is available for this order.');
+    } catch (error) { setIntegrationMessage(error.message); }
+    finally { setIntegrationLoading(false); }
+  };
+
+  const saveGangSheet = async () => {
+    if (!selectedOrder?.id || artworks.length === 0) { setIntegrationMessage('Select a DTF sales order with artwork before saving a gang sheet.'); return; }
+    setSavingSheet(true);
+    try {
+      const base = await detectApiBase();
+      const payload = { order_id: selectedOrder.id, total_height: totalHeight, total_sheets: layoutData.totalSheets, total_quantity: totalItemCount, estimated_price: (Math.ceil(totalHeight) / 12) * COST_PER_FOOT,
+        settings: { hGap, vGap, margins, arrangement, tightPack, showCutLines, includeHeader, headerTopMargin },
+        artworks: artworks.map(a => ({ orderItemId:a.orderItemId,artworkId:a.artworkId,artworkNo:a.artworkNo,filename:a.filename,widthInches:a.widthInches,heightInches:a.heightInches,repetitions:a.repetitions })),
+        layout: {
+          sheets: layoutData.sheets.map(sheet => ({
+            totalHeight: sheet.totalHeight,
+            items: sheet.items.map(({ dataUrl, ...item }) => item),
+          })),
+        },
+      };
+      const response = await fetch(`${base}/production-orders.php`, { method:'POST', headers:{...apiHeaders(),'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+      const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Save failed');
+      setIntegrationMessage(`Gang sheet saved successfully (${data.saved_at}).`);
+    } catch (error) { setIntegrationMessage(error.message); }
+    finally { setSavingSheet(false); }
+  };
 
   // Recalculate layout when artworks or settings change
   useEffect(() => {
@@ -813,6 +893,7 @@ function GangSheet({ sharedArtwork }) {
           <p>Arrange artworks on a {SHEET_WIDTH_INCHES}" wide roll for DTF printing</p>
         </div>
         <div className="gang-sheet-header-actions">
+          <button className="gs-btn-save" onClick={saveGangSheet} disabled={!selectedOrder || artworks.length === 0 || savingSheet}>{savingSheet ? 'Saving...' : 'Save Gang Sheet'}</button>
           <button className="gs-btn-download" onClick={handleDownload}
             disabled={currentSheet.items.length === 0 || isExporting}>
             {isExporting ? 'Exporting...' : layoutData.totalSheets > 1
@@ -827,6 +908,16 @@ function GangSheet({ sharedArtwork }) {
       <div className="gang-sheet-body">
         {/* Left Panel */}
         <div className="gs-left-panel">
+          <div className="gs-order-import">
+            <div className="gs-order-import-title"><span>Decoinks DTF Customers</span><button onClick={refreshCustomers} title="Refresh now">↻</button></div>
+            <input className="gs-customer-search" value={customerSearch} onChange={e => setCustomerSearch(e.target.value)} placeholder="Search customer or order..." />
+            <select className="gs-customer-select" value={selectedCustomerId} onChange={e => { const id=e.target.value; setSelectedCustomerId(id); const customer=customers.find(c=>String(c.id)===id); const orderId=customer?.orders?.[0]?.id || ''; setSelectedOrderId(orderId); if(orderId) loadProductionOrder(orderId); }}>
+              <option value="">Select DTF customer</option>{visibleCustomers.map(customer => <option key={customer.id} value={customer.id}>{customer.name} ({customer.orders.length})</option>)}
+            </select>
+            {selectedCustomer && <select className="gs-customer-select" value={selectedOrderId} onChange={e => { setSelectedOrderId(e.target.value); loadProductionOrder(e.target.value); }}><option value="">Select sales order</option>{selectedCustomer.orders.map(order => <option key={order.id} value={order.id}>{order.order_number} · {order.status} · ${Number(order.total).toFixed(2)}</option>)}</select>}
+            {selectedOrder && <div className="gs-order-summary"><strong>{selectedOrder.order_number}</strong><span>{selectedOrder.customer_name}</span><span>{selectedOrder.customer_email || 'No email'} · {selectedOrder.customer_phone || 'No phone'}</span><span>Order total: ${Number(selectedOrder.total || 0).toFixed(2)} · Status: {selectedOrder.status}</span></div>}
+            {integrationMessage && <div className={`gs-integration-message ${integrationLoading ? 'loading' : ''}`}>{integrationMessage}</div>}
+          </div>
           <div className="gs-add-buttons">
             <button className="gs-btn-add primary" onClick={() => fileInputRef.current?.click()}>
               + Add Artwork
