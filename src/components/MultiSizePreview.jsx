@@ -419,12 +419,12 @@ const MSPCard = React.forwardRef(function MSPCard({
     const imgData = ctx.getImageData(0, 0, W, H);
     const d = imgData.data;
 
-    // Find tight bounds of non-white content
+    // Find tight bounds — use strict threshold (< 240) to avoid catching anti-alias fuzz
     let top = H, bottom = 0, left = W, right = 0;
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
         const idx = (y * W + x) * 4;
-        if (d[idx] < 245 || d[idx+1] < 245 || d[idx+2] < 245) {
+        if (d[idx] < 240 || d[idx+1] < 240 || d[idx+2] < 240) {
           if (y < top) top = y;
           if (y > bottom) bottom = y;
           if (x < left) left = x;
@@ -435,19 +435,17 @@ const MSPCard = React.forwardRef(function MSPCard({
 
     if (top >= bottom || left >= right) { top = 0; bottom = H-1; left = 0; right = W-1; }
 
+    // Zero extra padding — just the content
     const cropW = right - left + 1;
     const cropH = bottom - top + 1;
     const text = `Shirt Size: ${realSize} | Artwork Size: W ${sizeArtW.toFixed(1)}" x H ${sizeArtH.toFixed(1)}"`;
-    const pad = 10;
-    const textH = 30;
 
-    // Measure text width
+    // Final canvas: shirt + text immediately below (no margins)
     const mCtx = document.createElement('canvas').getContext('2d');
     mCtx.font = 'bold 16px sans-serif';
-    const textW = mCtx.measureText(text).width + 20;
-
-    const finalW = Math.max(cropW + pad * 2, textW);
-    const finalH = pad + cropH + 15 + textH + pad;
+    const textW = mCtx.measureText(text).width + 10;
+    const finalW = Math.max(cropW, Math.ceil(textW));
+    const finalH = cropH + 25; // just 10px gap + 15px text height
 
     const dlCanvas = document.createElement('canvas');
     dlCanvas.width = finalW;
@@ -456,15 +454,15 @@ const MSPCard = React.forwardRef(function MSPCard({
     dlCtx.fillStyle = '#ffffff';
     dlCtx.fillRect(0, 0, finalW, finalH);
 
-    // Draw cropped shirt centered
-    const shirtX = (finalW - cropW) / 2;
-    dlCtx.drawImage(sourceCanvas, left, top, cropW, cropH, shirtX, pad, cropW, cropH);
+    // Shirt flush to top, centered horizontally
+    const shirtX = Math.floor((finalW - cropW) / 2);
+    dlCtx.drawImage(sourceCanvas, left, top, cropW, cropH, shirtX, 0, cropW, cropH);
 
-    // Text immediately below
+    // Text right below shirt
     dlCtx.font = 'bold 16px sans-serif';
     dlCtx.fillStyle = '#000000';
     dlCtx.textAlign = 'center';
-    dlCtx.fillText(text, finalW / 2, pad + cropH + 15 + 16);
+    dlCtx.fillText(text, finalW / 2, cropH + 18);
 
     const link = document.createElement('a');
     link.download = `mockup-${realSize}.png`;
