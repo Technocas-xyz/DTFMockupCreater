@@ -3,8 +3,8 @@ import { TSHIRT_SIZES } from '../constants/tshirtSizes';
 import { drawRecoloredGarment } from '../utils/garmentTintEngine';
 import './DesignCanvas.css';
 
-// Canvas dimensions (pixels) — 2x for retina-sharp preview
-const CANVAS_SCALE = 2;
+// Canvas dimensions (pixels) — 4x for sharp artwork preview
+const CANVAS_SCALE = 4;
 const CANVAS_WIDTH = 700 * CANVAS_SCALE;
 const CANVAS_HEIGHT = 850 * CANVAS_SCALE;
 const LOGICAL_WIDTH = 700;
