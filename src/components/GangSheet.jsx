@@ -372,13 +372,19 @@ function GangSheet({ sharedArtwork }) {
   };
 
   // Recalculate layout when artworks or settings change
-  // Recalculate layout when artworks or settings change (debounced to avoid freezing)
+  // Recalculate layout when artworks or settings change (debounced)
   useEffect(() => {
+    if (artworks.length === 0) {
+      setLayoutData({ sheets: [{ items: [], totalHeight: 0 }], totalSheets: 1 });
+      return;
+    }
     const timer = setTimeout(() => {
-      const newLayout = calculateLayout(artworks, SHEET_WIDTH_INCHES, hGap, vGap, margins, tightPack);
-      setLayoutData(newLayout);
-      if (activeSheet >= newLayout.totalSheets) setActiveSheet(0);
-    }, 100);
+      requestAnimationFrame(() => {
+        const newLayout = calculateLayout(artworks, SHEET_WIDTH_INCHES, hGap, vGap, margins, tightPack);
+        setLayoutData(newLayout);
+        if (activeSheet >= newLayout.totalSheets) setActiveSheet(0);
+      });
+    }, 150);
     return () => clearTimeout(timer);
   }, [artworks, hGap, vGap, margins, tightPack]);
 
@@ -542,21 +548,19 @@ function GangSheet({ sharedArtwork }) {
     ctx.lineWidth = 1.5;
     ctx.setLineDash([]);
     ctx.strokeRect(0, 0, canvasWidth, canvasHeight);
-  }, [currentSheet, zoom, showGrid, showCutLines, bgTransparent, artworks, poNumber, orderNumber, orderLink, headerTopMargin, layoutData, activeSheet, includeHeader]);
+  }, [currentSheet, zoom, showGrid, showCutLines, bgTransparent, poNumber, orderNumber, orderLink, headerTopMargin, layoutData, activeSheet, includeHeader]);
 
-  // Load images into cache
+  // Load images into cache (separate from draw cycle to avoid cascade)
   useEffect(() => {
-    let allLoaded = true;
     for (const art of artworks) {
       if (!imageCache.current[art.dataUrl]) {
-        allLoaded = false;
         const img = new Image();
-        img.onload = () => { imageCache.current[art.dataUrl] = img; drawCanvas(); };
-        img.src = art.dataUrl;
+        const url = art.dataUrl;
+        img.onload = () => { imageCache.current[url] = img; drawCanvas(); };
+        img.src = url;
       }
     }
-    if (allLoaded) drawCanvas();
-  }, [artworks, drawCanvas]);
+  }, [artworks]); // eslint-disable-line — intentionally exclude drawCanvas to avoid loop
 
   useEffect(() => { drawCanvas(); }, [drawCanvas]);
 
