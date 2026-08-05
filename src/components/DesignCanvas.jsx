@@ -49,33 +49,15 @@ function DesignCanvas({
   // Load t-shirt base image (use custom garment if selected)
   useEffect(() => {
     if (customGarment && customGarment.dataUrl) {
-      // Use custom garment from Garment Manager
+      // Use garment from Garment Manager
       const img = new Image();
       img.onload = () => setTshirtImage(img);
-      img.onerror = () => {
-        console.warn('Custom garment failed to load:', customGarment.dataUrl);
-        setTshirtImage(null);
-      };
+      img.onerror = () => setTshirtImage(null);
       img.src = customGarment.dataUrl;
       return;
     }
-
-    const side = viewSide === 'front' ? 'front' : 'back';
-    const colorName = selectedColor.name.toLowerCase().replace(/\s+/g, '-');
-
-    // Try color-specific image first, then fall back to white
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => setTshirtImage(img);
-    img.onerror = () => {
-      // Try white version
-      const fallback = new Image();
-      fallback.crossOrigin = 'anonymous';
-      fallback.onload = () => setTshirtImage(fallback);
-      fallback.onerror = () => setTshirtImage(null);
-      fallback.src = `/tshirts/white-${side}1.png`;
-    };
-    img.src = `/tshirts/${colorName}-${side}.png`;
+    // No garment selected — use vector fallback (drawn in canvas render)
+    setTshirtImage(null);
   }, [viewSide, selectedColor, customGarment]);
 
   // Calculate print area on canvas
