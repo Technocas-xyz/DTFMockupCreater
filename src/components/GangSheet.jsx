@@ -181,52 +181,72 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
     return { sheets, totalSheets: sheets.length };
   }
 
-  // TIGHT PACK with multi-sheet support
-  // Try multiple sort strategies and pick the one with least total height (least waste)
+  // TIGHT PACK — Best fit with least waste
+  // Strategy: Pack items per-sheet with MAX_SHEET_HEIGHT constraint,
+  // trying multiple sort strategies to find the best packing for each sheet.
+  // Remaining items carry over to the next sheet, ensuring each sheet is fully utilized.
   const sortStrategies = [
-    (a, b) => (b.w * b.h) - (a.w * a.h),         // Largest area first
-    (a, b) => b.h - a.h,                           // Tallest first
-    (a, b) => b.w - a.w,                           // Widest first
-    (a, b) => Math.max(b.w, b.h) - Math.max(a.w, a.h), // Longest side first
-    (a, b) => (b.w * b.h) - (a.w * a.h) || b.w - a.w, // Area then width
-    (a, b) => b.h - a.h || b.w - a.w,             // Height then width
+    (a, b) => (b.w * b.h) - (a.w * a.h),
+    (a, b) => b.h - a.h,
+    (a, b) => b.w - a.w,
+    (a, b) => Math.max(b.w, b.h) - Math.max(a.w, a.h),
+    (a, b) => (b.w * b.h) - (a.w * a.h) || b.w - a.w,
+    (a, b) => b.h - a.h || b.w - a.w,
   ];
 
-  let bestSheets = null;
-  let bestTotalHeight = Infinity;
+  const sheets = [];
+  let remaining = [...items];
 
-  for (const sortFn of sortStrategies) {
-    const sortedItems = [...items].sort(sortFn);
-    let remaining = [...sortedItems];
-    const testSheets = [];
-    let totalH = 0;
+  while (remaining.length > 0) {
+    let bestResult = null;
+    let bestPlacedCount = 0;
+    let bestHeight = Infinity;
 
-    while (remaining.length > 0) {
-      const result = packItems(remaining, sheetWidth, hGap, vGap, marg, MAX_SHEET_HEIGHT);
-      if (result.placed.length === 0) {
-        const bigItem = remaining[0];
-        testSheets.push({
-          items: [{ ...bigItem, x: marg.left, y: marg.top, rotated: false }],
-          totalHeight: bigItem.h + marg.top + marg.bottom,
-        });
-        totalH += bigItem.h + marg.top + marg.bottom;
-        remaining = remaining.slice(1);
-      } else {
-        testSheets.push({ items: result.placed, totalHeight: result.totalHeight });
-        totalH += result.totalHeight;
-        remaining = result.remaining;
+    for (const sortFn of sortStrategies) {
+      const sortedRemaining = [...remaining].sort(sortFn);
+      const result = packItems(sortedRemaining, sheetWidth, hGap, vGap, marg, MAX_SHEET_HEIGHT);
+      // Prefer: most items placed, then least height used
+      if (result.placed.length > bestPlacedCount ||
+          (result.placed.length === bestPlacedCount && result.totalHeight < bestHeight)) {
+        bestPlacedCount = result.placed.length;
+        bestHeight = result.totalHeight;
+        bestResult = result;
       }
     }
 
-    if (totalH < bestTotalHeight) {
-      bestTotalHeight = totalH;
-      bestSheets = testSheets;
+    if (!bestResult || bestResult.placed.length === 0) {
+      // Safety: if nothing can be placed (item bigger than sheet), force-place one item
+      const forcedItem = remaining.shift();
+      sheets.push({
+        items: [{ ...forcedItem, x: marg.left, y: marg.top, rotated: false }],
+        totalHeight: forcedItem.h + marg.top + marg.bottom
+      });
+      continue;
     }
+
+    sheets.push({ items: bestResult.placed, totalHeight: bestResult.totalHeight });
+
+    // Determine which items were NOT placed on this sheet.
+    // Since sort order may differ, track placed items by building a usage count map.
+    const placedCounts = new Map();
+    for (const p of bestResult.placed) {
+      const key = `${p.artworkId}_${p.w}_${p.h}`;
+      placedCounts.set(key, (placedCounts.get(key) || 0) + 1);
+    }
+    const nextRemaining = [];
+    for (const item of remaining) {
+      const key = `${item.artworkId}_${item.w}_${item.h}`;
+      const count = placedCounts.get(key) || 0;
+      if (count > 0) {
+        placedCounts.set(key, count - 1);
+      } else {
+        nextRemaining.push(item);
+      }
+    }
+    remaining = nextRemaining;
   }
 
-  const sheets = bestSheets || [{ items: [], totalHeight: 0 }];
-
-  return { sheets, totalSheets: sheets.length };
+  return { sheets: sheets.length > 0 ? sheets : [{ items: [], totalHeight: 0 }], totalSheets: sheets.length || 1 };
 }
 
 // ─── COMPONENT ───────────────────────────────────────────────────────────────
