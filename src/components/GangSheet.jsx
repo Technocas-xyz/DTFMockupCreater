@@ -115,6 +115,11 @@ function packItems(items, sheetWidth, hGap, vGap, margins, maxHeight) {
       }
       if (!contained) freeRects.push(a);
     }
+    // Safety: cap free rects to prevent memory explosion
+    if (freeRects.length > 200) {
+      freeRects.sort((a, b) => (b.w * b.h) - (a.w * a.h));
+      freeRects = freeRects.slice(0, 100);
+    }
   }
 
   const totalHeight = usedMaxY + marg.bottom;
@@ -209,6 +214,8 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
   let remaining = [...items];
 
   while (remaining.length > 0) {
+    // Safety: prevent infinite loop (max 50 sheets)
+    if (sheets.length >= 50) break;
     let bestResult = null;
     let bestPlacedCount = 0;
     let bestHeight = Infinity;
@@ -372,19 +379,19 @@ function GangSheet({ sharedArtwork }) {
   };
 
   // Recalculate layout when artworks or settings change
-  // Recalculate layout when artworks or settings change (debounced)
+  // Recalculate layout when artworks or settings change (500ms debounce to prevent freezing)
   useEffect(() => {
     if (artworks.length === 0) {
       setLayoutData({ sheets: [{ items: [], totalHeight: 0 }], totalSheets: 1 });
       return;
     }
     const timer = setTimeout(() => {
-      requestAnimationFrame(() => {
+      try {
         const newLayout = calculateLayout(artworks, SHEET_WIDTH_INCHES, hGap, vGap, margins, tightPack);
         setLayoutData(newLayout);
         if (activeSheet >= newLayout.totalSheets) setActiveSheet(0);
-      });
-    }, 150);
+      } catch(e) { console.error('Layout calc error:', e); }
+    }, 500);
     return () => clearTimeout(timer);
   }, [artworks, hGap, vGap, margins, tightPack]);
 
