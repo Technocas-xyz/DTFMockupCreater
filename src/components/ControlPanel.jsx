@@ -53,15 +53,9 @@ function ControlPanel({
     if (!garmentLibrary || garmentLibrary.length === 0) return;
     const side = viewSide || 'front';
     if (selectedType === 'T-Shirt') {
-      // T-Shirt type: check if there's a tagged t-shirt garment for this size + side
-      const match = garmentLibrary.find(g => g.type === 'T-Shirt' && g.size === selectedSize && (g.side || 'front') === side);
-      if (match) {
-        onGarmentChange(match.id);
-      } else {
-        // Try same type+size without side constraint
-        const fallback = garmentLibrary.find(g => g.type === 'T-Shirt' && g.size === selectedSize);
-        onGarmentChange(fallback ? fallback.id : null);
-      }
+      // T-Shirt type: use default built-in template (don't auto-select from library)
+      // User can manually select from dropdown if they want a custom garment
+      onGarmentChange(null);
       return;
     }
     // Non-T-Shirt types: find a garment matching type + size + side
