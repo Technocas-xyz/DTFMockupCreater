@@ -124,7 +124,7 @@ function packItems(items, sheetWidth, hGap, vGap, margins, maxHeight) {
 // ─── MULTI-SHEET LAYOUT ENGINE ───────────────────────────────────────────────
 function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = false) {
   const marg = margins || { top: 0, bottom: 0, left: 0, right: 0 };
-  // Expand artworks into individual items
+  // Expand artworks into individual items (lightweight - no dataUrl for packing)
   const items = [];
   for (const art of artworks) {
     for (let i = 0; i < art.repetitions; i++) {
@@ -189,10 +189,16 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
     (a, b) => (b.w * b.h) - (a.w * a.h),
     (a, b) => b.h - a.h,
     (a, b) => b.w - a.w,
-    (a, b) => Math.max(b.w, b.h) - Math.max(a.w, a.h),
-    (a, b) => (b.w * b.h) - (a.w * a.h) || b.w - a.w,
-    (a, b) => b.h - a.h || b.w - a.w,
   ];
+  // Only add extra strategies if there are mixed sizes
+  const hasMultipleSizes = items.length > 1 && new Set(items.map(i => `${i.w}_${i.h}`)).size > 1;
+  if (hasMultipleSizes) {
+    sortStrategies.push(
+      (a, b) => Math.max(b.w, b.h) - Math.max(a.w, a.h),
+      (a, b) => (b.w * b.h) - (a.w * a.h) || b.w - a.w,
+      (a, b) => b.h - a.h || b.w - a.w,
+    );
+  }
 
   const sheets = [];
   let remaining = [...items];
@@ -361,16 +367,14 @@ function GangSheet({ sharedArtwork }) {
   };
 
   // Recalculate layout when artworks or settings change
+  // Recalculate layout when artworks or settings change (debounced to avoid freezing)
   useEffect(() => {
-    const newLayout = calculateLayout(artworks, SHEET_WIDTH_INCHES, hGap, vGap, margins, tightPack);
-    setLayoutData(newLayout);
-    if (activeSheet >= newLayout.totalSheets) setActiveSheet(0);
-    // Debug: log packing results
-    if (newLayout.sheets[0] && newLayout.sheets[0].items.length > 0) {
-      const items = newLayout.sheets[0].items;
-      const firstRowItems = items.filter(i => i.y === items[0].y);
-      console.log(`[GangSheet Pack] Sheet width: ${SHEET_WIDTH_INCHES}", Items in first row: ${firstRowItems.length}, Item widths: ${firstRowItems.map(i => i.w.toFixed(2)).join(', ')}, Total: ${firstRowItems.reduce((s,i,idx) => s + i.w + (idx > 0 ? hGap : 0), 0).toFixed(2)}"`);
-    }
+    const timer = setTimeout(() => {
+      const newLayout = calculateLayout(artworks, SHEET_WIDTH_INCHES, hGap, vGap, margins, tightPack);
+      setLayoutData(newLayout);
+      if (activeSheet >= newLayout.totalSheets) setActiveSheet(0);
+    }, 100);
+    return () => clearTimeout(timer);
   }, [artworks, hGap, vGap, margins, tightPack]);
 
   // Draw canvas
