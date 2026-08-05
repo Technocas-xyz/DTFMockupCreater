@@ -182,27 +182,49 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
   }
 
   // TIGHT PACK with multi-sheet support
-  // Sort largest area first for better packing
-  items.sort((a, b) => (b.w * b.h) - (a.w * a.h));
+  // Try multiple sort strategies and pick the one with least total height (least waste)
+  const sortStrategies = [
+    (a, b) => (b.w * b.h) - (a.w * a.h),         // Largest area first
+    (a, b) => b.h - a.h,                           // Tallest first
+    (a, b) => b.w - a.w,                           // Widest first
+    (a, b) => Math.max(b.w, b.h) - Math.max(a.w, a.h), // Longest side first
+    (a, b) => (b.w * b.h) - (a.w * a.h) || b.w - a.w, // Area then width
+    (a, b) => b.h - a.h || b.w - a.w,             // Height then width
+  ];
 
-  const sheets = [];
-  let remaining = [...items];
+  let bestSheets = null;
+  let bestTotalHeight = Infinity;
 
-  while (remaining.length > 0) {
-    const result = packItems(remaining, sheetWidth, hGap, vGap, marg, MAX_SHEET_HEIGHT);
-    if (result.placed.length === 0) {
-      // Item too large — force place on its own sheet
-      const bigItem = remaining[0];
-      sheets.push({
-        items: [{ ...bigItem, x: marg.left, y: marg.top, rotated: false }],
-        totalHeight: bigItem.h + marg.top + marg.bottom,
-      });
-      remaining = remaining.slice(1);
-    } else {
-      sheets.push({ items: result.placed, totalHeight: result.totalHeight });
-      remaining = result.remaining;
+  for (const sortFn of sortStrategies) {
+    const sortedItems = [...items].sort(sortFn);
+    let remaining = [...sortedItems];
+    const testSheets = [];
+    let totalH = 0;
+
+    while (remaining.length > 0) {
+      const result = packItems(remaining, sheetWidth, hGap, vGap, marg, MAX_SHEET_HEIGHT);
+      if (result.placed.length === 0) {
+        const bigItem = remaining[0];
+        testSheets.push({
+          items: [{ ...bigItem, x: marg.left, y: marg.top, rotated: false }],
+          totalHeight: bigItem.h + marg.top + marg.bottom,
+        });
+        totalH += bigItem.h + marg.top + marg.bottom;
+        remaining = remaining.slice(1);
+      } else {
+        testSheets.push({ items: result.placed, totalHeight: result.totalHeight });
+        totalH += result.totalHeight;
+        remaining = result.remaining;
+      }
+    }
+
+    if (totalH < bestTotalHeight) {
+      bestTotalHeight = totalH;
+      bestSheets = testSheets;
     }
   }
+
+  const sheets = bestSheets || [{ items: [], totalHeight: 0 }];
 
   return { sheets, totalSheets: sheets.length };
 }
