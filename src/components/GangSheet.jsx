@@ -124,14 +124,19 @@ function packItems(items, sheetWidth, hGap, vGap, margins, maxHeight) {
 // ─── MULTI-SHEET LAYOUT ENGINE ───────────────────────────────────────────────
 function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = false) {
   const marg = margins || { top: 0, bottom: 0, left: 0, right: 0 };
-  // Expand artworks into individual items (lightweight - no dataUrl for packing)
+  // Expand artworks into individual items (lightweight for packing - no dataUrl)
   const items = [];
+  const dataUrlMap = {};
   for (const art of artworks) {
+    dataUrlMap[art.id] = art.dataUrl;
     for (let i = 0; i < art.repetitions; i++) {
-      items.push({ artworkId: art.id, w: art.widthInches, h: art.heightInches, dataUrl: art.dataUrl });
+      items.push({ artworkId: art.id, w: art.widthInches, h: art.heightInches });
     }
   }
   if (items.length === 0) return { sheets: [{ items: [], totalHeight: 0 }], totalSheets: 1 };
+
+  // Helper to add dataUrl back to placed items for rendering
+  const enrichItems = (placedItems) => placedItems.map(item => ({ ...item, dataUrl: dataUrlMap[item.artworkId] }));
 
   const availableWidth = sheetWidth - marg.left - marg.right;
 
@@ -159,7 +164,7 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
 
     // Split into multiple sheets if exceeds max height
     if (currentY <= MAX_SHEET_HEIGHT) {
-      return { sheets: [{ items: placed, totalHeight: currentY }], totalSheets: 1 };
+      return { sheets: [{ items: enrichItems(placed), totalHeight: currentY }], totalSheets: 1 };
     }
     // Split rows across sheets
     const sheets = [];
@@ -178,7 +183,7 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
     if (sheetItems.length > 0) {
       sheets.push({ items: sheetItems, totalHeight: lastRowEnd - sheetStartY + marg.bottom });
     }
-    return { sheets, totalSheets: sheets.length };
+    return { sheets: sheets.map(s => ({ ...s, items: enrichItems(s.items) })), totalSheets: sheets.length };
   }
 
   // TIGHT PACK — Best fit with least waste
@@ -252,7 +257,7 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
     remaining = nextRemaining;
   }
 
-  return { sheets: sheets.length > 0 ? sheets : [{ items: [], totalHeight: 0 }], totalSheets: sheets.length || 1 };
+  return { sheets: sheets.length > 0 ? sheets.map(s => ({ ...s, items: enrichItems(s.items) })) : [{ items: [], totalHeight: 0 }], totalSheets: sheets.length || 1 };
 }
 
 // ─── COMPONENT ───────────────────────────────────────────────────────────────
@@ -566,28 +571,28 @@ function GangSheet({ sharedArtwork }) {
   const handleFileSelect = (e) => {
     const files = Array.from(e.target.files);
     for (const file of files) {
-      if (!file.type.includes('png')) continue;
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const img = new Image();
-        img.onload = () => {
-          const id = nextId.current++;
-          const aspect = img.naturalWidth / img.naturalHeight;
-          let widthInches = parseFloat((img.naturalWidth / DPI).toFixed(2));
-          let heightInches = parseFloat((img.naturalHeight / DPI).toFixed(2));
-          if (widthInches > SHEET_WIDTH_INCHES - 1) {
-            widthInches = SHEET_WIDTH_INCHES - 1;
-            heightInches = parseFloat((widthInches / aspect).toFixed(2));
-          }
-          setArtworks((prev) => [...prev, {
-            id, filename: file.name, dataUrl: ev.target.result,
-            originalWidth: img.naturalWidth, originalHeight: img.naturalHeight,
-            widthInches, heightInches, aspect, repetitions: 1,
-          }]);
-        };
-        img.src = ev.target.result;
+      if (!file.type.includes('png')) continue; // PNG only
+      // Use object URL instead of base64 to avoid 20MB strings in memory
+      const objectUrl = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        const id = nextId.current++;
+        const aspect = img.naturalWidth / img.naturalHeight;
+        let widthInches = parseFloat((img.naturalWidth / DPI).toFixed(2));
+        let heightInches = parseFloat((img.naturalHeight / DPI).toFixed(2));
+        if (widthInches > SHEET_WIDTH_INCHES - 1) {
+          widthInches = SHEET_WIDTH_INCHES - 1;
+          heightInches = parseFloat((widthInches / aspect).toFixed(2));
+        }
+        // Cache the image immediately
+        imageCache.current[objectUrl] = img;
+        setArtworks((prev) => [...prev, {
+          id, filename: file.name, dataUrl: objectUrl,
+          originalWidth: img.naturalWidth, originalHeight: img.naturalHeight,
+          widthInches, heightInches, aspect, repetitions: 1,
+        }]);
       };
-      reader.readAsDataURL(file);
+      img.src = objectUrl;
     }
     e.target.value = '';
   };
