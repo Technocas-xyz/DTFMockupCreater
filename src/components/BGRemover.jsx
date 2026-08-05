@@ -299,9 +299,11 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
   }, []);
 
   // ─── IMAGE LOADING ───────────────────────────────────────────────────────────
+  const loadedSharedRef = useRef(null);
   useEffect(() => {
-    if (sharedArtwork && sharedArtwork.dataUrl) {
+    if (sharedArtwork && sharedArtwork.dataUrl && sharedArtwork.dataUrl !== loadedSharedRef.current) {
       loadImageFromUrl(sharedArtwork.dataUrl, sharedArtwork.filename || 'shared-artwork.png');
+      loadedSharedRef.current = sharedArtwork.dataUrl;
     }
   }, [sharedArtwork]);
 
