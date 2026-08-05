@@ -91,7 +91,7 @@ function MultiSizePreview({
 
     // Build combined canvas
     const gap = 20;
-    const textH = 40;
+    const textH = 55;
     const totalW = numSizes * (maxCropW + gap) - gap;
     const totalH = maxCropH + textH;
 
@@ -112,10 +112,10 @@ function MultiSizePreview({
       const realSize = card.size.includes('_') ? card.size.split('_')[0] : card.size;
       const ref = cardRefs.current[card.size];
       const artW = ref?.artWidth || 0, artH = ref?.artHeight || 0;
-      ctx.font = 'bold 22px sans-serif';
+      ctx.font = 'bold 32px sans-serif';
       ctx.fillStyle = '#000000';
       ctx.textAlign = 'center';
-      ctx.fillText(`${realSize} | W${artW.toFixed(1)}" H${artH.toFixed(1)}"`, x + maxCropW / 2, maxCropH + 28);
+      ctx.fillText(`${realSize} | W${artW.toFixed(1)}" H${artH.toFixed(1)}"`, x + maxCropW / 2, maxCropH + 38);
     });
 
     const mimeType = format === 'jpeg' ? 'image/jpeg' : 'image/png';
@@ -454,10 +454,10 @@ const MSPCard = React.forwardRef(function MSPCard({
       const cropW = bounds.w, cropH = bounds.h;
       const text = `Shirt Size: ${realSize} | Artwork Size: W ${sizeArtW.toFixed(1)}" x H ${sizeArtH.toFixed(1)}"`;
       const mCtx = document.createElement('canvas').getContext('2d');
-      mCtx.font = 'bold 28px sans-serif';
+      mCtx.font = 'bold 40px sans-serif';
       const textW = mCtx.measureText(text).width + 20;
       const finalW = Math.max(cropW, Math.ceil(textW));
-      const finalH = cropH + 40;
+      const finalH = cropH + 55;
       const dlCanvas = document.createElement('canvas');
       dlCanvas.width = finalW; dlCanvas.height = finalH;
       const dlCtx = dlCanvas.getContext('2d');
@@ -465,10 +465,10 @@ const MSPCard = React.forwardRef(function MSPCard({
       dlCtx.fillRect(0, 0, finalW, finalH);
       const shirtX2 = Math.floor((finalW - cropW) / 2);
       dlCtx.drawImage(renderCanvas, bounds.left, bounds.top, cropW, cropH, shirtX2, 0, cropW, cropH);
-      dlCtx.font = 'bold 28px sans-serif';
+      dlCtx.font = 'bold 40px sans-serif';
       dlCtx.fillStyle = '#000000';
       dlCtx.textAlign = 'center';
-      dlCtx.fillText(text, finalW / 2, cropH + 28);
+      dlCtx.fillText(text, finalW / 2, cropH + 40);
       const link = document.createElement('a');
       link.download = `mockup-${realSize}.jpg`;
       link.href = dlCanvas.toDataURL('image/jpeg', 0.95);
