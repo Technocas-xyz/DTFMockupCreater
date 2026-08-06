@@ -1,5 +1,6 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { TSHIRT_COLORS, ARTWORK_SIZES, SIZE_ORDER, TSHIRT_SIZES } from '../constants/tshirtSizes';
+import { detectApiBase } from '../utils/apiConfig';
 import './ControlPanel.css';
 
 const GARMENT_TYPES_FILTER = ['T-Shirt', 'Hoodie', 'Long Sleeve', 'Tank Top', 'Other'];
@@ -37,6 +38,68 @@ function ControlPanel({
   const fileInputRef = useRef(null);
   const [selectedType, setSelectedType] = useState('T-Shirt');
   const aspectRatio = artworkDimensions.width / artworkDimensions.height;
+
+  // ─── DYNAMIC ARTWORK SIZE PRESETS ───────────────────────────────────────────
+  const [artworkSizePresets, setArtworkSizePresets] = useState(ARTWORK_SIZES);
+  const [showPresetManager, setShowPresetManager] = useState(false);
+  const [newPresetValue, setNewPresetValue] = useState('');
+  const [newPresetType, setNewPresetType] = useState('width');
+
+  // Load presets from server
+  const loadPresetsFromServer = useCallback(async () => {
+    try {
+      const apiBase = await detectApiBase();
+      const res = await fetch(`${apiBase}/artwork-sizes.php`);
+      if (!res.ok) throw new Error('API error');
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        // Convert API format to component format
+        const presets = data.map(p => ({
+          id: p.id,
+          label: p.label,
+          width: p.lockBy === 'width' ? p.value : 0,
+          height: p.lockBy === 'height' ? p.value : 0,
+          lockBy: p.lockBy,
+        }));
+        setArtworkSizePresets(presets);
+      }
+    } catch {
+      // Fallback to hardcoded ARTWORK_SIZES
+      setArtworkSizePresets(ARTWORK_SIZES);
+    }
+  }, []);
+
+  useEffect(() => { loadPresetsFromServer(); }, [loadPresetsFromServer]);
+
+  const handleAddPreset = async () => {
+    const val = parseFloat(newPresetValue);
+    if (!val || val <= 0 || val > 30) return;
+    try {
+      const apiBase = await detectApiBase();
+      const res = await fetch(`${apiBase}/artwork-sizes.php`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: val, lockBy: newPresetType }),
+      });
+      if (res.ok) {
+        setNewPresetValue('');
+        loadPresetsFromServer();
+      }
+    } catch {}
+  };
+
+  const handleDeletePreset = async (preset) => {
+    const id = preset.id || `${preset.lockBy === 'width' ? 'w' : 'h'}-${preset.lockBy === 'width' ? preset.width : preset.height}`;
+    try {
+      const apiBase = await detectApiBase();
+      await fetch(`${apiBase}/artwork-sizes.php`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      loadPresetsFromServer();
+    } catch {}
+  };
 
   // Only show types that exist in the garment library
   const availableTypes = garmentLibrary && garmentLibrary.length > 0
@@ -264,10 +327,48 @@ function ControlPanel({
         <h3 className="section-title">
           <span className="step-number">5</span>
           Artwork Size
+          <button
+            className="preset-manage-btn"
+            onClick={() => setShowPresetManager(!showPresetManager)}
+            title="Manage size presets"
+          >
+            {showPresetManager ? '✕' : '⚙'}
+          </button>
         </h3>
+
+        {showPresetManager && (
+          <div className="preset-manager">
+            <div className="preset-manager-add">
+              <input
+                type="number"
+                min="1"
+                max="30"
+                step="0.25"
+                placeholder="Size (inches)"
+                value={newPresetValue}
+                onChange={(e) => setNewPresetValue(e.target.value)}
+                className="preset-input"
+              />
+              <select value={newPresetType} onChange={(e) => setNewPresetType(e.target.value)} className="preset-select">
+                <option value="width">Width</option>
+                <option value="height">Height</option>
+              </select>
+              <button onClick={handleAddPreset} className="preset-add-btn" disabled={!newPresetValue}>+</button>
+            </div>
+            <div className="preset-manager-list">
+              {artworkSizePresets.filter(s => s.lockBy === 'width' || s.lockBy === 'height').map((preset, idx) => (
+                <div key={preset.id || idx} className="preset-manager-item">
+                  <span>{preset.label}</span>
+                  <button onClick={() => handleDeletePreset(preset)} className="preset-delete-btn" title="Remove">✕</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="artwork-size-grid">
           <div className="artwork-size-heading">W (set width, auto height)</div>
-          {ARTWORK_SIZES.filter(s => s.lockBy === 'width').map((size) => (
+          {artworkSizePresets.filter(s => s.lockBy === 'width').map((size) => (
             <button
               key={size.label}
               className={`artwork-size-btn ${
@@ -283,7 +384,7 @@ function ControlPanel({
             </button>
           ))}
           <div className="artwork-size-heading">H (set height, auto width)</div>
-          {ARTWORK_SIZES.filter(s => s.lockBy === 'height').map((size) => (
+          {artworkSizePresets.filter(s => s.lockBy === 'height').map((size) => (
             <button
               key={size.label}
               className={`artwork-size-btn ${
