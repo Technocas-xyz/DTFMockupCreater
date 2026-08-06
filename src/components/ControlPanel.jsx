@@ -101,7 +101,7 @@ function ControlPanel({
     } catch {}
   };
 
-  // Only show types that exist in the garment library
+  // Show types that exist in the garment library, fallback to full list if library is empty
   const availableTypes = garmentLibrary && garmentLibrary.length > 0
     ? [...new Set(garmentLibrary.map(g => g.type).filter(Boolean))]
     : GARMENT_TYPES_FILTER;
