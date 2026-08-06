@@ -3,7 +3,7 @@ import { TSHIRT_SIZES } from '../constants/tshirtSizes';
 import { GARMENTS_API, SERVE_IMAGE_URL, detectApiBase } from '../utils/apiConfig';
 import './GarmentManager.css';
 
-const GARMENT_TYPES = ['T-Shirt', 'Hoodie', 'Long Sleeve', 'Tank Top', 'Other'];
+const GARMENT_TYPES = ['T-Shirt', 'Hoodie', 'Women T-Shirt', 'Sweatshirt', 'Long Sleeve T-Shirt', 'Tank Top', 'Shorts', 'Bob Marley', 'Other'];
 const STORAGE_KEY = 'garment-library';
 const MAX_GARMENTS = 500;
 const SIZE_OPTIONS = ['2T','3T','4T','5T','YS','YM','YL','YXL','XS','S','M','L','XL','2XL','3XL','4XL','5XL'];

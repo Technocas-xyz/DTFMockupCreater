@@ -3,7 +3,7 @@ import { TSHIRT_COLORS, ARTWORK_SIZES, SIZE_ORDER, TSHIRT_SIZES } from '../const
 import { detectApiBase } from '../utils/apiConfig';
 import './ControlPanel.css';
 
-const GARMENT_TYPES_FILTER = ['T-Shirt', 'Hoodie', 'Long Sleeve', 'Tank Top', 'Other'];
+const GARMENT_TYPES_FILTER = ['T-Shirt', 'Hoodie', 'Women T-Shirt', 'Sweatshirt', 'Long Sleeve T-Shirt', 'Tank Top', 'Shorts', 'Bob Marley', 'Other'];
 
 function ControlPanel({
   selectedSize,
