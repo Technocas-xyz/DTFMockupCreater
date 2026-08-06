@@ -11,6 +11,11 @@ import {
   keepOnlyObjects,
   cleanEdges,
   enhanceImage,
+  colorKnockout,
+  fringeFix,
+  colorRangeRemoval,
+  channelsRemoval,
+  detectImageColors,
 } from '../utils/bgRemovalUtils';
 import './BGRemover.css';
 
@@ -193,7 +198,7 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
     upload: true, crop: false, transform: false, bgRemoval: true,
     enhancement: true, sharpness: false, edgeCleanup: false,
     colorTools: false, optimization: false, effects: false,
-    quality: false, exportSection: false, upscaler: true,
+    quality: false, exportSection: false, upscaler: true, dtfKnockout: true,
   });
 
   // Quality analysis
@@ -219,6 +224,21 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
   const [upscalePreview, setUpscalePreview] = useState(null);
   const [desiredPrintW, setDesiredPrintW] = useState('');
   const [desiredPrintH, setDesiredPrintH] = useState('');
+
+  // DTF Color Knockout state
+  const [knockoutColor, setKnockoutColor] = useState('#ffffff');
+  const [knockoutTolerance, setKnockoutTolerance] = useState(15);
+  const [knockoutAddStroke, setKnockoutAddStroke] = useState(false);
+  const [knockoutStrokeColor, setKnockoutStrokeColor] = useState('#000000');
+  const [knockoutStrokeWidth, setKnockoutStrokeWidth] = useState(2);
+  const [fringeFixColor, setFringeFixColor] = useState('');
+  const [fringeFixStrength, setFringeFixStrength] = useState(70);
+  const [channelsBlackPoint, setChannelsBlackPoint] = useState(30);
+  const [channelsWhitePoint, setChannelsWhitePoint] = useState(220);
+  const [channelsInvert, setChannelsInvert] = useState(false);
+  const [colorRangeFuzziness, setColorRangeFuzziness] = useState(40);
+  const [colorRangeTarget, setColorRangeTarget] = useState('#ffffff');
+  const [detectedColors, setDetectedColors] = useState([]);
 
   const fileInputRef = useRef(null);
   const canvasRef = useRef(null);
@@ -839,6 +859,87 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
       setDisplayUrl(dstCanvas.toDataURL('image/png'));
       pushHistory(result, type);
       if (!bgRemoved) setBgRemoved(true);
+      setIsProcessing(false);
+    }, 50);
+  };
+
+  // ─── DTF COLOR KNOCKOUT & ADVANCED TOOLS ──────────────────────────────────────
+  const handleDetectColors = () => {
+    const source = processedImageData || null;
+    if (!source && !displayUrl && !originalImage) return;
+    setIsProcessing(true);
+    setTimeout(async () => {
+      try {
+        let imgData = source;
+        if (!imgData) {
+          imgData = await getImageDataFromUrl(displayUrl || originalImage);
+        }
+        const colors = detectImageColors(imgData, 12);
+        setDetectedColors(colors);
+      } catch (err) { console.error('Color detection failed:', err); }
+      setIsProcessing(false);
+    }, 50);
+  };
+
+  const handleColorKnockout = () => {
+    const source = processedImageData;
+    if (!source) return;
+    setIsProcessing(true);
+    setTimeout(() => {
+      const result = colorKnockout(source, knockoutColor, knockoutTolerance, knockoutAddStroke, knockoutStrokeColor, knockoutStrokeWidth);
+      setProcessedImageData(result);
+      setDisplayUrl(imageDataToUrl(result));
+      pushHistory(result, `Knockout ${knockoutColor}`);
+      setIsProcessing(false);
+    }, 50);
+  };
+
+  const handleFringeFix = () => {
+    const source = processedImageData;
+    if (!source) return;
+    setIsProcessing(true);
+    setTimeout(() => {
+      const fillColor = fringeFixColor || null; // empty string = auto-detect
+      const result = fringeFix(source, fillColor, fringeFixStrength);
+      setProcessedImageData(result);
+      setDisplayUrl(imageDataToUrl(result));
+      pushHistory(result, 'Fringe Fix');
+      setIsProcessing(false);
+    }, 50);
+  };
+
+  const handleColorRangeRemoval = () => {
+    const source = processedImageData;
+    if (!source) return;
+    setIsProcessing(true);
+    setTimeout(() => {
+      const result = colorRangeRemoval(source, colorRangeTarget, colorRangeFuzziness, true);
+      setProcessedImageData(result);
+      setDisplayUrl(imageDataToUrl(result));
+      setBgRemoved(true);
+      pushHistory(result, `Color Range ${colorRangeTarget}`);
+      setImageDimensions({ width: result.width, height: result.height });
+      setIsProcessing(false);
+    }, 50);
+  };
+
+  const handleChannelsRemoval = () => {
+    const source = processedImageData || null;
+    if (!source && !displayUrl && !originalImage) return;
+    setIsProcessing(true);
+    setTimeout(async () => {
+      try {
+        let imgData = source;
+        if (!imgData) {
+          imgData = await getImageDataFromUrl(displayUrl || originalImage);
+        }
+        const result = channelsRemoval(imgData, channelsBlackPoint, channelsWhitePoint, channelsInvert);
+        setProcessedImageData(result);
+        setDisplayUrl(imageDataToUrl(result));
+        setBgRemoved(true);
+        pushHistory(result, 'Channels Removal');
+        setImageDimensions({ width: result.width, height: result.height });
+      } catch (err) { console.error('Channels removal failed:', err); }
       setIsProcessing(false);
     }, 50);
   };
@@ -1719,6 +1820,108 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
                 <button className="bgr-btn bgr-btn-outline" onClick={handleTrim} disabled={!bgRemoved || isProcessing}>Trim Transparent</button>
               </div>
             )}
+          </div>
+
+          {/* DTF Color Knockout */}
+          <div className="bgr-panel-card">
+            <h3 className="bgr-panel-title bgr-collapsible" onClick={() => toggleSection('dtfKnockout')}>
+              🎯 DTF Color Knockout {expandedSections.dtfKnockout ? '▾' : '▸'}
+            </h3>
+            {expandedSections.dtfKnockout && (<>
+              {/* Color Detection */}
+              <div className="bgr-control-group">
+                <button className="bgr-btn bgr-btn-sm bgr-btn-outline" onClick={handleDetectColors} disabled={!displayUrl || isProcessing}>
+                  Detect Colors in Image
+                </button>
+                {detectedColors.length > 0 && (
+                  <div className="bgr-detected-colors">
+                    {detectedColors.map((c, idx) => (
+                      <div
+                        key={idx}
+                        className={`bgr-color-swatch ${knockoutColor === c.hex ? 'active' : ''}`}
+                        style={{ backgroundColor: c.hex }}
+                        onClick={() => { setKnockoutColor(c.hex); setColorRangeTarget(c.hex); }}
+                        title={`${c.hex} (${c.percentage}%)`}
+                      >
+                        <span className="bgr-color-pct">{c.percentage}%</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Color Knockout */}
+              <div className="bgr-control-group">
+                <label className="bgr-label">Knockout Color</label>
+                <div className="bgr-inline-row">
+                  <input type="color" value={knockoutColor} onChange={(e) => setKnockoutColor(e.target.value)} />
+                  <span className="bgr-color-hex">{knockoutColor}</span>
+                </div>
+                <label className="bgr-label">Tolerance <span className="bgr-label-value">{knockoutTolerance}</span></label>
+                <input type="range" min="1" max="60" value={knockoutTolerance} onChange={(e) => setKnockoutTolerance(Number(e.target.value))} className="bgr-slider" />
+                <div className="bgr-checkbox-row">
+                  <label><input type="checkbox" checked={knockoutAddStroke} onChange={(e) => setKnockoutAddStroke(e.target.checked)} /> Add safety border</label>
+                </div>
+                {knockoutAddStroke && (
+                  <div className="bgr-inline-row">
+                    <input type="color" value={knockoutStrokeColor} onChange={(e) => setKnockoutStrokeColor(e.target.value)} />
+                    <label className="bgr-label-sm">Width: {knockoutStrokeWidth}px</label>
+                    <input type="range" min="1" max="5" value={knockoutStrokeWidth} onChange={(e) => setKnockoutStrokeWidth(Number(e.target.value))} className="bgr-slider-sm" />
+                  </div>
+                )}
+                <button className="bgr-btn bgr-btn-primary" onClick={handleColorKnockout} disabled={!processedImageData || isProcessing}>
+                  Knock Out Color
+                </button>
+                <p className="bgr-hint">Removes selected color so shirt shows through. Improves hand-feel and saves ink.</p>
+              </div>
+
+              {/* Fringe Fix */}
+              <div className="bgr-control-group">
+                <label className="bgr-label">⚡ Fringe Fix (Halo Repair)</label>
+                <div className="bgr-inline-row">
+                  <input type="color" value={fringeFixColor || '#000000'} onChange={(e) => setFringeFixColor(e.target.value)} />
+                  <span className="bgr-color-hex">{fringeFixColor || 'Auto-detect'}</span>
+                  {fringeFixColor && <button className="bgr-btn-tiny" onClick={() => setFringeFixColor('')}>Auto</button>}
+                </div>
+                <label className="bgr-label">Strength <span className="bgr-label-value">{fringeFixStrength}</span></label>
+                <input type="range" min="10" max="100" value={fringeFixStrength} onChange={(e) => setFringeFixStrength(Number(e.target.value))} className="bgr-slider" />
+                <button className="bgr-btn bgr-btn-primary" onClick={handleFringeFix} disabled={!processedImageData || isProcessing}>
+                  Fix Fringes
+                </button>
+                <p className="bgr-hint">Fills white/black edge halos with design color. Essential for dark shirt DTF prints.</p>
+              </div>
+
+              {/* Color Range Removal */}
+              <div className="bgr-control-group">
+                <label className="bgr-label">🎨 Color Range Removal</label>
+                <div className="bgr-inline-row">
+                  <input type="color" value={colorRangeTarget} onChange={(e) => setColorRangeTarget(e.target.value)} />
+                  <span className="bgr-color-hex">{colorRangeTarget}</span>
+                </div>
+                <label className="bgr-label">Fuzziness <span className="bgr-label-value">{colorRangeFuzziness}</span></label>
+                <input type="range" min="5" max="100" value={colorRangeFuzziness} onChange={(e) => setColorRangeFuzziness(Number(e.target.value))} className="bgr-slider" />
+                <button className="bgr-btn bgr-btn-outline" onClick={handleColorRangeRemoval} disabled={!processedImageData || isProcessing}>
+                  Remove Color Range
+                </button>
+                <p className="bgr-hint">Like Photoshop's Select → Color Range. Precise removal with soft edges.</p>
+              </div>
+
+              {/* Channels-Based Removal */}
+              <div className="bgr-control-group">
+                <label className="bgr-label">📺 Channels Removal (Luminance)</label>
+                <label className="bgr-label">Black Point <span className="bgr-label-value">{channelsBlackPoint}</span></label>
+                <input type="range" min="0" max="128" value={channelsBlackPoint} onChange={(e) => setChannelsBlackPoint(Number(e.target.value))} className="bgr-slider" />
+                <label className="bgr-label">White Point <span className="bgr-label-value">{channelsWhitePoint}</span></label>
+                <input type="range" min="128" max="255" value={channelsWhitePoint} onChange={(e) => setChannelsWhitePoint(Number(e.target.value))} className="bgr-slider" />
+                <div className="bgr-checkbox-row">
+                  <label><input type="checkbox" checked={channelsInvert} onChange={(e) => setChannelsInvert(e.target.checked)} /> Invert (light artwork on dark bg)</label>
+                </div>
+                <button className="bgr-btn bgr-btn-outline" onClick={handleChannelsRemoval} disabled={(!processedImageData && !displayUrl) || isProcessing}>
+                  Apply Channels Mask
+                </button>
+                <p className="bgr-hint">Best for high-contrast logos. Uses brightness to create precise masks like Photoshop Channels.</p>
+              </div>
+            </>)}
           </div>
 
           {/* Color Tools */}
