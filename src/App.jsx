@@ -38,7 +38,7 @@ function App() {
   const [viewSide, setViewSide] = useState('front');
   const [artworkPosition, setArtworkPosition] = useState({ x: 0, y: 0 });
   const artworkScale = 1;
-  const [artworkAreaSettings, setArtworkAreaSettings] = useState({ width: 18, height: 24, topOffset: 5 });
+  const [artworkAreaSettings, setArtworkAreaSettings] = useState({ width: 18, height: 24, topOffset: 6 });
   const [selectedMockupSizes, setSelectedMockupSizes] = useState(
     SIZE_ORDER.reduce((acc, size) => ({ ...acc, [size]: false }), {})
   );
@@ -46,7 +46,7 @@ function App() {
   const [customGarment, setCustomGarment] = useState(null);
   const [garmentLibrary, setGarmentLibrary] = useState([]);
   const [selectedGarmentId, setSelectedGarmentId] = useState(null);
-  const [comparisonSizes, setComparisonSizes] = useState([]);
+  const [comparisonSizes, setComparisonSizes] = useState(['L']);
   const [scalingMode, setScalingMode] = useState('proportional');
 
   // Restore session on mount

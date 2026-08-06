@@ -658,16 +658,95 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
   };
 
   const handleTrim = () => {
-    if (!processedImageData) return;
+    const sourceData = processedImageData;
+    // If no processedImageData, work from the original/display image
+    if (!sourceData && !displayUrl && !originalImage) return;
     setIsProcessing(true);
-    setTimeout(() => {
-      const { data, width: w, height: h } = processedImageData;
+    setTimeout(async () => {
+      let imgData = sourceData;
+      if (!imgData) {
+        imgData = await getImageDataFromUrl(displayUrl || originalImage);
+      }
+      const { data, width: w, height: h } = imgData;
+      // First pass: remove semi-transparent noise pixels (alpha < 20)
+      const cleaned = new ImageData(new Uint8ClampedArray(data), w, h);
+      const cd = cleaned.data;
+      for (let i = 0; i < cd.length; i += 4) {
+        if (cd[i + 3] > 0 && cd[i + 3] < 20) cd[i + 3] = 0;
+      }
+
+      // Detect if background hasn't been removed (most pixels are opaque)
+      // If so, detect dominant corner color and treat as BG for trimming purposes
+      let opaqueCount = 0, totalPixels = w * h;
+      for (let i = 0; i < cd.length; i += 4) {
+        if (cd[i + 3] > 200) opaqueCount++;
+      }
+      const hasOpaqueBackground = opaqueCount > totalPixels * 0.85;
+
+      let bgR = 255, bgG = 255, bgB = 255;
+      if (hasOpaqueBackground) {
+        // Sample corner pixels to detect background color
+        const corners = [];
+        const sampleSize = Math.min(20, Math.floor(w / 10), Math.floor(h / 10));
+        for (let y = 0; y < sampleSize; y++) {
+          for (let x = 0; x < sampleSize; x++) {
+            const idx = (y * w + x) * 4;
+            corners.push([cd[idx], cd[idx+1], cd[idx+2]]);
+          }
+        }
+        for (let y = 0; y < sampleSize; y++) {
+          for (let x = w - sampleSize; x < w; x++) {
+            const idx = (y * w + x) * 4;
+            corners.push([cd[idx], cd[idx+1], cd[idx+2]]);
+          }
+        }
+        for (let y = h - sampleSize; y < h; y++) {
+          for (let x = 0; x < sampleSize; x++) {
+            const idx = (y * w + x) * 4;
+            corners.push([cd[idx], cd[idx+1], cd[idx+2]]);
+          }
+        }
+        for (let y = h - sampleSize; y < h; y++) {
+          for (let x = w - sampleSize; x < w; x++) {
+            const idx = (y * w + x) * 4;
+            corners.push([cd[idx], cd[idx+1], cd[idx+2]]);
+          }
+        }
+        bgR = Math.round(corners.reduce((s, c) => s + c[0], 0) / corners.length);
+        bgG = Math.round(corners.reduce((s, c) => s + c[1], 0) / corners.length);
+        bgB = Math.round(corners.reduce((s, c) => s + c[2], 0) / corners.length);
+      }
+
+      // Find bounding box of meaningful content
       let minX = w, minY = h, maxX = 0, maxY = 0;
+      const bgTolerance = 30;
       for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
-          if (data[(y * w + x) * 4 + 3] > 0) {
-            if (x < minX) minX = x; if (x > maxX) maxX = x;
-            if (y < minY) minY = y; if (y > maxY) maxY = y;
+          const idx = (y * w + x) * 4;
+          const a = cd[idx + 3];
+          if (a < 20) continue;
+          const r = cd[idx], g = cd[idx + 1], b = cd[idx + 2];
+          // Skip background-colored pixels
+          if (hasOpaqueBackground) {
+            const dist = Math.abs(r - bgR) + Math.abs(g - bgG) + Math.abs(b - bgB);
+            if (dist < bgTolerance) continue;
+          } else {
+            // For transparent images, skip near-white semi-transparent pixels
+            if (r > 248 && g > 248 && b > 248 && a < 255) continue;
+          }
+          // This pixel is content
+          if (x < minX) minX = x; if (x > maxX) maxX = x;
+          if (y < minY) minY = y; if (y > maxY) maxY = y;
+        }
+      }
+      // Fallback: if strict check found nothing, use basic alpha > 0 check
+      if (maxX < minX || maxY < minY) {
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            if (cd[(y * w + x) * 4 + 3] > 0) {
+              if (x < minX) minX = x; if (x > maxX) maxX = x;
+              if (y < minY) minY = y; if (y > maxY) maxY = y;
+            }
           }
         }
       }
@@ -680,13 +759,14 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
       const ctx = canvas.getContext('2d');
       const tempCanvas = document.createElement('canvas');
       tempCanvas.width = w; tempCanvas.height = h;
-      tempCanvas.getContext('2d').putImageData(processedImageData, 0, 0);
+      tempCanvas.getContext('2d').putImageData(cleaned, 0, 0);
       ctx.drawImage(tempCanvas, minX, minY, newW, newH, 0, 0, newW, newH);
       const trimmedData = ctx.getImageData(0, 0, newW, newH);
       setProcessedImageData(trimmedData);
       setImageDimensions({ width: newW, height: newH });
       setDisplayUrl(canvas.toDataURL('image/png'));
       pushHistory(trimmedData, 'Trim');
+      if (!bgRemoved) setBgRemoved(true);
       const newObjects = detectObjects(trimmedData, newW, newH);
       const objectsWithThumbs = newObjects.map(obj => ({ ...obj, thumbnail: generateObjectThumbnail(trimmedData, obj.bounds) }));
       setDetectedObjects(objectsWithThumbs);
@@ -1172,12 +1252,25 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
       ctx.drawImage(img, 0, 0);
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const { data, width, height } = imageData;
-      for (let i = 0; i < data.length; i += 4) { if (data[i + 3] > 0 && data[i + 3] < 20) data[i + 3] = 0; }
+      // Clean semi-transparent noise pixels
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] > 0 && data[i + 3] < 20) data[i + 3] = 0;
+        // Also remove near-white semi-transparent pixels (halo remnants)
+        if (data[i + 3] > 0 && data[i + 3] < 128) {
+          const r = data[i], g = data[i + 1], b = data[i + 2];
+          if (r > 248 && g > 248 && b > 248) data[i + 3] = 0;
+        }
+      }
       ctx.putImageData(imageData, 0, 0);
+      // Find bounding box of meaningful content
       let top = height, bottom = 0, left = width, right = 0;
       for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
-          if (data[(y * width + x) * 4 + 3] >= 20) {
+          const idx = (y * width + x) * 4;
+          if (data[idx + 3] >= 20) {
+            // Skip near-white pixels at edges
+            const r = data[idx], g = data[idx + 1], b = data[idx + 2];
+            if (r > 248 && g > 248 && b > 248 && data[idx + 3] < 200) continue;
             if (y < top) top = y; if (y > bottom) bottom = y;
             if (x < left) left = x; if (x > right) right = x;
           }
