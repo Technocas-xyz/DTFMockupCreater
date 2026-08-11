@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import Login from './components/Login';
 import DesignCanvas from './components/DesignCanvas';
@@ -27,7 +27,9 @@ function App() {
   const [authLoading, setAuthLoading] = useState(true);
 
   // ─── APP STATE (must be declared before any early returns — React hooks rule) ──
-  const [currentPage, setCurrentPage] = useState('bgremover');
+  // The vault is where a job starts — pick the customer's file first, then take
+  // it to a tool. Opening on an empty editor made that the second step.
+  const [currentPage, setCurrentPage] = useState('vault');
   const [sharedArtwork, setSharedArtwork] = useState(null);
   const [artwork, setArtwork] = useState(null);
   const [artworkFile, setArtworkFile] = useState(null);
@@ -48,6 +50,113 @@ function App() {
   const [selectedGarmentId, setSelectedGarmentId] = useState(null);
   const [comparisonSizes, setComparisonSizes] = useState(['L']);
   const [scalingMode, setScalingMode] = useState('proportional');
+  const [studioToken, setStudioToken] = useState(null);
+  const [studioFileName, setStudioFileName] = useState('artwork.png');
+  const [studioSaving, setStudioSaving] = useState(false);
+  const [studioMessage, setStudioMessage] = useState('');
+
+  useEffect(() => {
+    const handoff = new URLSearchParams(window.location.search).get('artwork');
+    if (!handoff) return;
+    let active = true;
+    detectApiBase().then(async (apiBase) => {
+      const meta = await fetch(`${apiBase}/central-artwork.php?action=asset&token=${encodeURIComponent(handoff)}`).then(r => r.json());
+      const content = await fetch(`${apiBase}/central-artwork.php?action=content&token=${encodeURIComponent(handoff)}`).then(r => r.blob());
+      const dataUrl = await new Promise(resolve => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.readAsDataURL(content); });
+      if (!active) return;
+      setStudioToken(handoff);
+      setStudioFileName(meta.data?.file_name || 'artwork.png');
+      setArtwork(dataUrl);
+      setArtworkFile(new File([content], meta.data?.file_name || 'artwork.png', { type: content.type || 'image/png' }));
+      setCurrentPage('bgremover');
+    }).catch(() => { if (active) setStudioMessage('Artwork handoff could not be loaded'); });
+    return () => { active = false; };
+  }, []);
+
+  // ─── SAVING BACK TO NEXTCLOUD ───────────────────────────────────────────────
+  // Each tool saves its own stage of the same design, into that customer's own
+  // folder: the editor writes WRK, the mockup writes MU, the gang sheet writes
+  // GS. Every save is a new numbered version — nothing is ever overwritten.
+  const SAVE_STAGES = {
+    bgremover: { kind: 'WRK', label: 'Save WRK', folder: 'Artworks' },
+    mockupv2: { kind: 'MU', label: 'Save MU', folder: 'Mockups' },
+    gangsheet: { kind: 'GS', label: 'Save GS', folder: 'Gangsheets' },
+  };
+
+  // The mockup and gang sheet pages register how to produce their output, so
+  // Save asks for the finished render at the moment it is clicked rather than
+  // re-rendering on every slider move.
+  // Two ways to produce a mockup. The multi-size panel renders at print
+  // resolution and is preferred when the designer has generated it; otherwise
+  // Save MU uses the design canvas they are actually looking at, so the button
+  // never refuses to save a mockup that is plainly on screen.
+  const mockupHiResExportRef = useRef(null);
+  const mockupCanvasExportRef = useRef(null);
+  const gangsheetExportRef = useRef(null);
+  const registerMockupHiResExport = useCallback((fn) => { mockupHiResExportRef.current = fn; }, []);
+  const registerMockupCanvasExport = useCallback((fn) => { mockupCanvasExportRef.current = fn; }, []);
+  const registerGangsheetExport = useCallback((fn) => { gangsheetExportRef.current = fn; }, []);
+
+  // The upload's extension decides the saved file's extension, so a PNG export
+  // taken from a .ai source must not be named ".ai".
+  const uploadName = (blob) => {
+    const ext = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' }[blob.type] || 'png';
+    return `studio-output.${ext}`;
+  };
+
+  const postSave = async (apiBase, kind, blob) => {
+    const form = new FormData();
+    form.append('token', studioToken);
+    form.append('kind', kind);
+    form.append('file', new File([blob], uploadName(blob), { type: blob.type || 'image/png' }));
+    const response = await fetch(`${apiBase}/central-artwork.php?action=save`, { method: 'POST', body: form });
+    const payload = await response.json();
+    if (!response.ok || !payload.data?.studio_token) throw new Error(payload.message || 'Save failed');
+    return payload.data;
+  };
+
+  const saveStudioOutput = async () => {
+    const stage = SAVE_STAGES[currentPage];
+    if (!stage || !studioToken || studioSaving) return;
+    setStudioSaving(true);
+    setStudioMessage(`Saving ${stage.kind} to ${stage.folder}…`);
+    try {
+      const apiBase = await detectApiBase();
+
+      // A gang sheet can be several sheets; each is saved as its own version.
+      if (stage.kind === 'GS') {
+        const sheets = gangsheetExportRef.current ? await gangsheetExportRef.current() : [];
+        if (!sheets.length) throw new Error('Add artwork to the gang sheet first');
+        const names = [];
+        for (const blob of sheets) {
+          const saved = await postSave(apiBase, 'GS', blob);
+          setStudioToken(saved.studio_token);
+          setStudioFileName(saved.file_name);
+          names.push(saved.file_name);
+        }
+        setStudioMessage(`Saved: ${names.join(', ')}`);
+        return;
+      }
+
+      let source = artwork;
+      if (stage.kind === 'MU') {
+        const exporter = mockupHiResExportRef.current || mockupCanvasExportRef.current;
+        source = exporter ? await exporter() : null;
+      }
+      if (!source) {
+        throw new Error(stage.kind === 'MU'
+          ? 'Place an artwork on the garment first'
+          : 'Open an artwork from the Vault first');
+      }
+      const blob = source instanceof Blob ? source : await fetch(source).then(r => r.blob());
+      const saved = await postSave(apiBase, stage.kind, blob);
+      setStudioToken(saved.studio_token);
+      setStudioFileName(saved.file_name);
+      setStudioMessage(`Saved: ${saved.file_name}`);
+    } catch (error) {
+      setStudioMessage(error.message || 'Save failed');
+    } finally { setStudioSaving(false); }
+  };
 
   // Restore session on mount
   useEffect(() => {
@@ -278,6 +387,21 @@ function App() {
     setCurrentPage('mockupv2');
   };
 
+  // A file checked out of the Artwork Vault. It carries an asset-scoped token,
+  // so whatever the designer does next can be saved straight back to that file's
+  // customer folder in Nextcloud as a WRK version — no manual re-upload, and no
+  // copying artwork between PrintShop and the studio.
+  const openVaultAsset = (target, dataUrl, asset) => {
+    if (asset?.studio_token) {
+      setStudioToken(asset.studio_token);
+      setStudioFileName(asset.file_name || 'artwork.png');
+    }
+    if (target === 'mockupv2') { sendToMockup(dataUrl); return; }
+    setSharedArtwork({ dataUrl, filename: asset?.file_name || 'vault-artwork.png' });
+    setArtwork(dataUrl);
+    setCurrentPage(target);
+  };
+
   const sendToBGRemover = (imageDataUrl) => {
     setSharedArtwork({ dataUrl: imageDataUrl, filename: 'artwork.png' });
     setCurrentPage('bgremover');
@@ -290,22 +414,13 @@ function App() {
           sharedArtwork={sharedArtwork}
           onSendToQA={sendToQA}
           onSendToMockup={sendToMockup}
+          onArtworkChange={setArtwork}
         />
       );
     }
 
     if (currentPage === 'vault') {
-      return (
-        <Vault
-          onSendToEditor={(dataUrl) => {
-            setSharedArtwork({ dataUrl, filename: 'vault-artwork.png' });
-            setCurrentPage('bgremover');
-          }}
-          onSendToMockup={(dataUrl) => {
-            sendToMockup(dataUrl);
-          }}
-        />
-      );
+      return <Vault onOpenAsset={openVaultAsset} />;
     }
 
     if (currentPage === 'contrast') {
@@ -334,7 +449,7 @@ function App() {
     }
 
     if (currentPage === 'gangsheet') {
-      return <GangSheet sharedArtwork={sharedArtwork} />;
+      return <GangSheet sharedArtwork={sharedArtwork} onRegisterExport={registerGangsheetExport} />;
     }
 
     if (currentPage === 'gscalc') {
@@ -395,6 +510,7 @@ function App() {
                   artworkAreaSettings={artworkAreaSettings}
                   onPositionChange={handlePositionChange}
                   customGarment={customGarment}
+                  onRegisterExport={registerMockupCanvasExport}
                 />
                 {comparisonSizes.length > 0 && (
                   <MultiSizePreview
@@ -457,6 +573,7 @@ function App() {
               selectedMockupSizes={selectedMockupSizes}
               viewSide={viewSide}
               garmentLibrary={garmentLibrary}
+              onRegisterExport={registerMockupHiResExport}
             />
           )}
         </>
@@ -506,6 +623,7 @@ function App() {
                 artworkAreaSettings={artworkAreaSettings}
                 onPositionChange={handlePositionChange}
                 customGarment={customGarment}
+                onRegisterExport={registerMockupCanvasExport}
               />
               {comparisonSizes.length > 0 && (
                 <MultiSizePreview
@@ -576,6 +694,7 @@ function App() {
             selectedMockupSizes={selectedMockupSizes}
             viewSide={viewSide}
             garmentLibrary={garmentLibrary}
+            onRegisterExport={registerMockupHiResExport}
           />
         )}
       </>
@@ -593,6 +712,16 @@ function App() {
         {hasPageAccess(currentPage) ? renderPage() : (
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100%',color:'#64748b'}}>
             <p>You don't have access to this page. Contact your administrator.</p>
+          </div>
+        )}
+        {/* The save bar belongs to the tool that produces the file — it used to
+            follow the user onto every page, including User Management. */}
+        {studioToken && SAVE_STAGES[currentPage] && (
+          <div style={{position:'fixed',right:24,bottom:24,zIndex:50,display:'flex',alignItems:'center',gap:10,background:'#fff',padding:'10px 12px',borderRadius:10,boxShadow:'0 8px 30px rgba(15,23,42,.18)'}}>
+            {studioMessage && <span style={{fontSize:12,color:'#475569',maxWidth:360}}>{studioMessage}</span>}
+            <button onClick={saveStudioOutput} disabled={studioSaving} className="btn-primary">
+              {studioSaving ? 'Saving…' : SAVE_STAGES[currentPage].label}
+            </button>
           </div>
         )}
       </main>

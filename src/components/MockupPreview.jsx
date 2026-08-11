@@ -12,6 +12,7 @@ function MockupPreview({
   selectedMockupSizes,
   viewSide,
   garmentLibrary,
+  onRegisterExport,
 }) {
   const activeSizes = SIZE_ORDER.filter((size) => selectedMockupSizes[size]);
   const mockupRefs = useRef({});
@@ -597,6 +598,20 @@ function MockupPreview({
     
     return dlCanvas;
   };
+
+  // Hand the parent a way to produce the finished mockup on demand, so "Save MU"
+  // stores exactly the image the customer would be sent — the clean render with
+  // no measurement annotations, built by the same code path as the download.
+  useEffect(() => {
+    if (!onRegisterExport) return undefined;
+    onRegisterExport(async () => {
+      const size = activeSizes[0];
+      if (!artwork || !size) return null;
+      const canvas = createCompactExport(await renderHighRes(size, false), size);
+      return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    });
+    return () => onRegisterExport(null);
+  }, [onRegisterExport, artwork, activeSizes.join(','), selectedColor, viewSide, artworkDimensions, artworkPosition, artworkScale, artworkAreaSettings]);
 
   // Download a single mockup with dimensions
   const downloadSingle = async (size) => {
