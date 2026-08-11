@@ -1,213 +1,462 @@
-import React, { useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { detectApiBase } from '../utils/apiConfig';
 import './Vault.css';
 
-function Vault({ onSendToEditor, onSendToMockup }) {
-  const [sharedLink, setSharedLink] = useState('');
-  const [images, setImages] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [selectedImages, setSelectedImages] = useState(new Set());
-  const [searchQuery, setSearchQuery] = useState('');
-  const [serviceInfo, setServiceInfo] = useState(null);
+// ── Artwork Vault ────────────────────────────────────────────────────────────
+// The same central vault PrintShop shows, read straight from Nextcloud's index
+// so a designer never has to move a file between the two apps. Pick a customer,
+// pick a folder, open the file in whichever studio tool the job needs; saving
+// writes a WRK file back into that customer's Artworks folder in Nextcloud.
+//
+// Freshness comes from a change cursor, not from refetching the list: the vault
+// holds ~5 800 files, so the grid asks "has anything changed?" (a ~120 byte
+// answer) every few seconds and only reloads a page when the answer moves.
 
-  const fetchFromLink = async () => {
-    if (!sharedLink.trim()) { setError('Please enter a shared link'); return; }
-    setLoading(true);
-    setError('');
-    setImages([]);
-    setServiceInfo(null);
+const REVISION_POLL_MS = 3000;
+const PAGE_SIZE = 60;
 
-    try {
-      // Use PHP proxy to bypass CORS and parse cloud service links
-      const apiBase = await detectApiBase();
-      const res = await fetch(`${apiBase}/vault-proxy.php`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: sharedLink.trim() }),
-      });
-      const data = await res.json();
+// Where a selected file can be sent. These mirror the studio's own pages.
+const TARGETS = [
+  { page: 'bgremover', label: 'Artwork Editor', primary: true },
+  { page: 'mockupv2', label: 'Mockup' },
+  { page: 'gangsheet', label: 'Gang Sheet' },
+  { page: 'qa', label: 'QA Analysis' },
+  { page: 'contrast', label: 'Contrast' },
+];
 
-      if (data.error) { setError(data.error); setLoading(false); return; }
+// The shop's published file naming standard — AW-<CLIENT>-<NNNN>-<TYPE>.<ext>.
+const LIFECYCLE = {
+  SRC: { label: 'Source', tone: 'src' },
+  REF: { label: 'Reference', tone: 'src' },
+  WRK: { label: 'Working', tone: 'wrk' },
+  FNL: { label: 'Final', tone: 'fnl' },
+  FNLA: { label: 'Approved', tone: 'fnla' },
+  GS: { label: 'Gang Sheet', tone: 'gs' },
+  MU: { label: 'Mockup', tone: 'mu' },
+  MOCK: { label: 'Mockup', tone: 'mu' },
+  OUT: { label: 'Sent', tone: 'out' },
+};
 
-      setServiceInfo({ service: data.service, type: data.type });
-      const imgList = (data.images || []).map((img, idx) => ({
-        id: idx + 1,
-        name: img.name || `image-${idx+1}.png`,
-        url: img.url,
-        thumbnail: img.thumbnail || img.url,
-        size: img.size || 0,
-      }));
-      
-      // Show folders info if any
-      if (data.folders && data.folders.length > 0) {
-        const folderNames = data.folders.map(f => `📁 ${f.name} (${f.childCount || '?'} items)`).join('\n');
-        if (imgList.length === 0) {
-          setError(`Found ${data.folders.length} folder(s) but no images in root:\n${folderNames}\n\nTry sharing the specific folder containing images.`);
-        }
-      }
-      
-      if (data.note) setError(data.note);
-      setImages(imgList);
-      if (imgList.length === 0 && !(data.folders && data.folders.length > 0)) setError('No images found at this link');
-    } catch (err) {
-      setError('Failed to fetch. Check the link and try again.');
-    }
-    setLoading(false);
-  };
+const IMAGE_RE = /\.(png|jpe?g|webp|gif|bmp|tiff?|svg|avif)$/i;
 
-  // Filtered images by search
-  const filteredImages = searchQuery.trim()
-    ? images.filter(img => img.name.toLowerCase().includes(searchQuery.toLowerCase()))
-    : images;
+function isPreviewable(asset) {
+  return /^image\//i.test(asset.mime_type || '') || IMAGE_RE.test(asset.file_name || '');
+}
 
-  const toggleSelect = (id) => {
-    setSelectedImages(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
+function fileSize(bytes) {
+  if (!bytes) return '—';
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
 
-  const selectAll = () => setSelectedImages(new Set(images.map(i => i.id)));
-  const deselectAll = () => setSelectedImages(new Set());
+function formatDate(value) {
+  if (!value) return '—';
+  return new Date(value).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
 
-  const sendSelected = async (target) => {
-    const selected = images.filter(i => selectedImages.has(i.id));
-    if (selected.length === 0) { setError('Select at least one image'); return; }
-    const img = selected[0];
-    try {
-      let dataUrl;
-      if (img.blob) {
-        dataUrl = await blobToDataUrl(img.blob);
-      } else {
-        // Use proxy to fetch (bypass CORS)
-        const apiBase = await detectApiBase();
-        const res = await fetch(`${apiBase}/vault-proxy.php?url=${encodeURIComponent(img.url)}`);
-        const data = await res.json();
-        if (data.images && data.images[0]) {
-          // It's a redirect/meta — try direct fetch
-          const imgRes = await fetch(img.url);
-          const blob = await imgRes.blob();
-          dataUrl = await blobToDataUrl(blob);
-        } else {
-          const imgRes = await fetch(img.url);
-          const blob = await imgRes.blob();
-          dataUrl = await blobToDataUrl(blob);
-        }
-      }
-      if (target === 'editor' && onSendToEditor) onSendToEditor(dataUrl);
-      if (target === 'mockup' && onSendToMockup) onSendToMockup(dataUrl);
-    } catch (err) {
-      setError('Failed to load image. Try downloading it first.');
-    }
-  };
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('File could not be read'));
+    reader.readAsDataURL(blob);
+  });
+}
 
-  const downloadImage = async (img) => {
-    try {
-      let blob;
-      if (img.blob) { blob = img.blob; }
-      else { const res = await fetch(img.url); blob = await res.blob(); }
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.download = img.name;
-      link.href = url;
-      link.click();
-      setTimeout(() => URL.revokeObjectURL(url), 2000);
-    } catch (e) {
-      // Fallback: open in new tab
-      window.open(img.url, '_blank');
-    }
-  };
+// A searchable picker — 400+ customers is far too many for a row of tabs.
+function CustomerPicker({ customers, value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [term, setTerm] = useState('');
+  const boxRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = (event) => { if (boxRef.current && !boxRef.current.contains(event.target)) setOpen(false); };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+
+  const selected = customers.find(c => c.key === value);
+  // The list is already scoped to the selected source by the server, so every
+  // entry here is reachable — it is never truncated.
+  const matches = useMemo(() => {
+    const needle = term.trim().toLowerCase();
+    if (!needle) return customers;
+    return customers.filter(c => (c.name || '').toLowerCase().includes(needle) || (c.reference || '').toLowerCase().includes(needle));
+  }, [customers, term]);
 
   return (
-    <div className="vault-page">
-      <header className="vault-header">
-        <h1 className="vault-title">Vault</h1>
-        <p className="vault-subtitle">Fetch artwork from shared links</p>
-      </header>
-
-      <div className="vault-content">
-        {/* Fetch Section */}
-        <div className="vault-fetch-section">
-          <div className="vault-input-row">
-            <input type="text" className="vault-link-input" placeholder="Paste shared link (Google Drive, Dropbox, URL...)"
-              value={sharedLink} onChange={(e) => setSharedLink(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') fetchFromLink(); }} />
-            <button className="vault-btn vault-btn-primary" onClick={fetchFromLink} disabled={loading}>
-              {loading ? 'Fetching...' : 'Fetch Images'}
-            </button>
-          </div>
-          {error && <div className="vault-error">{error}</div>}
+    <div className="vault-picker" ref={boxRef}>
+      <button type="button" className={`vault-picker-btn ${value ? 'is-set' : ''}`} onClick={() => { setOpen(o => !o); setTerm(''); }}>
+        <span className="vault-picker-label">Customer</span>
+        <span className="vault-picker-value">{selected ? selected.name : 'All customers'}</span>
+        <span className="vault-picker-caret">▾</span>
+      </button>
+      {open && (
+        <div className="vault-picker-panel">
+          <input
+            className="vault-picker-search"
+            autoFocus
+            placeholder={`Search ${customers.length} customers…`}
+            value={term}
+            onChange={(e) => setTerm(e.target.value)}
+          />
+          <ul className="vault-picker-list">
+            <li>
+              <button type="button" className={!value ? 'active' : ''} onClick={() => { onChange(''); setOpen(false); }}>
+                All customers
+              </button>
+            </li>
+            {matches.map(customer => (
+              <li key={customer.key}>
+                <button type="button" className={value === customer.key ? 'active' : ''} onClick={() => { onChange(customer.key); setOpen(false); }}>
+                  <span className="vault-picker-name">{customer.name}</span>
+                  {customer.reference && <span className="vault-picker-ref">{customer.reference}</span>}
+                  <span className="vault-picker-count">{customer.files}</span>
+                </button>
+              </li>
+            ))}
+            {!matches.length && <li className="vault-picker-none">No customer matches “{term}”</li>}
+          </ul>
         </div>
-
-        {/* Results */}
-        {images.length > 0 && (
-          <>
-            {serviceInfo && (
-              <div className="vault-service-badge">
-                {serviceInfo.service === 'google-drive' && '📁 Google Drive'}
-                {serviceInfo.service === 'dropbox' && '📦 Dropbox'}
-                {serviceInfo.service === 'onedrive' && '☁️ OneDrive'}
-                {serviceInfo.service === 'nextcloud' && '🌐 Nextcloud'}
-                {serviceInfo.service === 'generic' && '🔗 Web URL'}
-                {serviceInfo.service === 'direct' && '🖼️ Direct Image'}
-                {serviceInfo.type === 'folder' && ' (Folder)'}
-              </div>
-            )}
-
-            <div className="vault-toolbar">
-              <div className="vault-search-row">
-                <input type="text" className="vault-search-input" placeholder="Search by filename..."
-                  value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-                <span className="vault-count">{filteredImages.length} of {images.length} · {selectedImages.size} selected</span>
-              </div>
-              <div className="vault-toolbar-actions">
-                <button className="vault-btn vault-btn-sm" onClick={selectAll}>Select All</button>
-                <button className="vault-btn vault-btn-sm" onClick={deselectAll}>Deselect</button>
-                <button className="vault-btn vault-btn-primary vault-btn-sm" onClick={() => sendSelected('editor')} disabled={selectedImages.size === 0}>
-                  → Artwork Editor
-                </button>
-                <button className="vault-btn vault-btn-sm" onClick={() => sendSelected('mockup')} disabled={selectedImages.size === 0}>
-                  → Mockup
-                </button>
-              </div>
-            </div>
-
-            <div className="vault-grid">
-              {filteredImages.map(img => (
-                <div key={img.id} className={`vault-card ${selectedImages.has(img.id) ? 'selected' : ''}`} onClick={() => toggleSelect(img.id)}>
-                  <div className="vault-card-img">
-                    <img src={img.url} alt={img.name} crossOrigin="anonymous" onError={(e) => { e.target.style.display='none'; }} />
-                    {selectedImages.has(img.id) && <div className="vault-check">✓</div>}
-                  </div>
-                  <div className="vault-card-footer">
-                    <span className="vault-card-name" title={img.name}>{img.name}</span>
-                    <button className="vault-btn vault-btn-xs" onClick={(e) => { e.stopPropagation(); downloadImage(img); }}>⬇</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-
-        {!loading && images.length === 0 && (
-          <div className="vault-empty">
-            <p>Paste a shared link above to fetch images</p>
-            <span>Supports: Direct image URLs, web pages with images, file hosting links</span>
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 }
 
-function blobToDataUrl(blob) {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.readAsDataURL(blob);
-  });
+function VaultCard({ asset, apiBase, selected, onSelect }) {
+  const [failed, setFailed] = useState(false);
+  const life = LIFECYCLE[asset.lifecycle_code] || null;
+  const previewable = isPreviewable(asset) && !failed;
+  const src = `${apiBase}/central-artwork.php?action=thumb&id=${encodeURIComponent(asset.id)}&w=320&h=240&v=${encodeURIComponent(asset.preview_key || '')}`;
+
+  return (
+    <button type="button" className={`vault-card ${selected ? 'selected' : ''}`} onClick={() => onSelect(asset)}>
+      <span className="vault-card-img">
+        {previewable
+          ? <img src={src} alt={asset.file_name} loading="lazy" decoding="async" onError={() => setFailed(true)} />
+          : <span className="vault-card-ext">{(asset.file_name.split('.').pop() || 'FILE').toUpperCase()}</span>}
+        {life && <span className={`vault-life vault-life-${life.tone}`}>{asset.lifecycle_code}</span>}
+        {selected && <span className="vault-check">✓</span>}
+      </span>
+      <span className="vault-card-body">
+        <span className="vault-card-name" title={asset.file_name}>{asset.file_name}</span>
+        <span className="vault-card-meta">
+          <span>{asset.folder}</span>
+          <span>{fileSize(asset.file_size_bytes)}</span>
+        </span>
+      </span>
+    </button>
+  );
+}
+
+function Vault({ onOpenAsset }) {
+  const [apiBase, setApiBase] = useState(null);
+  const [rows, setRows] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [facets, setFacets] = useState({ roots: [], customers: [], folders: [], lifecycles: [] });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [status, setStatus] = useState('');
+  const [live, setLive] = useState(false);
+  const [opening, setOpening] = useState('');
+
+  const [root, setRoot] = useState('');
+  const [customer, setCustomer] = useState('');
+  const [folder, setFolder] = useState('');
+  const [lifecycle, setLifecycle] = useState('');
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [selected, setSelected] = useState(null);
+
+  const revisionRef = useRef('');
+  const inFlight = useRef(false);
+  const pending = useRef(false);
+
+  useEffect(() => { detectApiBase().then(setApiBase).catch(() => setApiBase('/api')); }, []);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { setDebouncedSearch(search); setPage(1); }, 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  const query = useMemo(() => {
+    const params = new URLSearchParams();
+    if (root) params.set('root', root);
+    if (customer) params.set('entity_key', customer);
+    if (folder) params.set('folder', folder);
+    if (lifecycle) params.set('lifecycle', lifecycle);
+    if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
+    return params;
+  }, [root, customer, folder, lifecycle, debouncedSearch]);
+
+  // Two things ask for a reload: a filter change and the live cursor. If one
+  // arrives while the other is still fetching, remember it and run once more on
+  // the way out — dropping it would leave the grid showing the wrong filter.
+  const load = useCallback(async (showSpinner = false) => {
+    if (!apiBase) return;
+    if (inFlight.current) { pending.current = true; return; }
+    inFlight.current = true;
+    if (showSpinner) setLoading(true);
+    try {
+      const listParams = new URLSearchParams(query);
+      listParams.set('page', String(page));
+      listParams.set('limit', String(PAGE_SIZE));
+      const [listRes, facetRes] = await Promise.all([
+        fetch(`${apiBase}/central-artwork.php?action=vault&${listParams}`, { cache: 'no-store' }),
+        fetch(`${apiBase}/central-artwork.php?action=facets&${query}`, { cache: 'no-store' }),
+      ]);
+      if (!listRes.ok) throw new Error(`Vault unavailable (${listRes.status})`);
+      const listPayload = await listRes.json();
+      const data = listPayload.data || {};
+      setRows(data.rows || []);
+      setTotal(data.total || 0);
+      if (facetRes.ok) {
+        const facetPayload = await facetRes.json();
+        const next = facetPayload.data;
+        if (next) setFacets({ roots: next.roots || [], customers: next.customers || [], folders: next.folders || [], lifecycles: next.lifecycles || [] });
+      }
+      setError('');
+    } catch (err) {
+      setError(err.message || 'The Artwork Vault could not be loaded.');
+    } finally {
+      inFlight.current = false;
+      setLoading(false);
+      if (pending.current) { pending.current = false; load(false); }
+    }
+  }, [apiBase, query, page]);
+
+  useEffect(() => { load(true); }, [load]);
+
+  // Change cursor. Deliberately unfiltered: a file that lands for another
+  // customer still changes the folder counts on screen, so the whole view is
+  // refreshed whenever anything in the vault moves.
+  useEffect(() => {
+    if (!apiBase) return undefined;
+    let active = true;
+    const tick = async () => {
+      try {
+        const res = await fetch(`${apiBase}/central-artwork.php?action=revision`, { cache: 'no-store' });
+        if (!res.ok) throw new Error('offline');
+        const payload = await res.json();
+        const data = payload.data || {};
+        if (!active) return;
+        setLive(Boolean(data.watching));
+        const stamp = `${data.revision}/${data.total}`;
+        if (revisionRef.current && revisionRef.current !== stamp) load(false);
+        revisionRef.current = stamp;
+      } catch {
+        if (active) setLive(false);
+      }
+    };
+    tick();
+    const timer = window.setInterval(tick, REVISION_POLL_MS);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [apiBase, load]);
+
+  // Fetch the selected file's bytes under a token scoped to that one asset, then
+  // hand it to the requested studio tool. The token travels with it so the tool
+  // can save the result straight back to Nextcloud.
+  const openIn = async (target) => {
+    if (!selected || !apiBase) return;
+    setOpening(target.page);
+    setStatus(`Opening ${selected.file_name} in ${target.label}…`);
+    try {
+      const handoffRes = await fetch(`${apiBase}/central-artwork.php?action=handoff&id=${encodeURIComponent(selected.id)}`);
+      const handoff = await handoffRes.json();
+      if (!handoffRes.ok || !handoff.data?.token) throw new Error(handoff.message || 'Could not check out this artwork');
+      const contentRes = await fetch(`${apiBase}/central-artwork.php?action=content&token=${encodeURIComponent(handoff.data.token)}`);
+      if (!contentRes.ok) throw new Error('Artwork content could not be downloaded');
+      const dataUrl = await blobToDataUrl(await contentRes.blob());
+      onOpenAsset(target.page, dataUrl, {
+        ...selected,
+        studio_token: handoff.data.token,
+        file_name: handoff.data.file_name || selected.file_name,
+      });
+    } catch (err) {
+      setError(err.message || 'This artwork could not be opened');
+      setStatus('');
+    } finally {
+      setOpening('');
+    }
+  };
+
+  const download = async (asset) => {
+    if (!apiBase) return;
+    try {
+      const res = await fetch(`${apiBase}/central-artwork.php?action=content&id=${encodeURIComponent(asset.id)}`);
+      if (!res.ok) throw new Error('Download failed');
+      const url = URL.createObjectURL(await res.blob());
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = asset.file_name;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 30000);
+    } catch (err) {
+      setError(err.message || 'Download failed');
+    }
+  };
+
+  const selectRoot = (next) => {
+    setRoot(next); setCustomer(''); setFolder(''); setSelected(null); setPage(1);
+  };
+
+  const resetFilters = () => {
+    setRoot(''); setCustomer(''); setFolder(''); setLifecycle(''); setSearch(''); setDebouncedSearch(''); setPage(1);
+  };
+
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const activeFilters = Boolean(root || customer || folder || lifecycle || debouncedSearch.trim());
+  const rootTotal = facets.roots.reduce((sum, item) => sum + item.files, 0);
+
+  return (
+    <div className="vault-page">
+      <header className="vault-header">
+        <div>
+          <h1 className="vault-title">Artwork Vault</h1>
+          <p className="vault-subtitle">
+            Every customer file from Nextcloud, live — open one here, save it back as a WRK file.
+          </p>
+        </div>
+        <span className={`vault-live ${live ? 'is-live' : ''}`}>
+          <i /> {live ? 'Live' : 'Reconnecting…'}
+        </span>
+      </header>
+
+      {/* Leads and purchase orders are separate worlds with their own folder
+          conventions, so they are picked first and never shown mixed. */}
+      <div className="vault-sources">
+        {/* Switching source clears the customer too: the picker is scoped to the
+            source, so a customer carried over from the other one would filter
+            the grid down to nothing with no visible reason why. */}
+        <button type="button" className={!root ? 'active' : ''} onClick={() => selectRoot('')}>
+          All sources <span>{rootTotal.toLocaleString()}</span>
+        </button>
+        {facets.roots.map(item => (
+          <button
+            key={item.key}
+            type="button"
+            className={root === item.key ? 'active' : ''}
+            onClick={() => selectRoot(item.key)}
+          >
+            {item.key} <span>{item.files.toLocaleString()}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="vault-filters">
+        <CustomerPicker
+          customers={facets.customers}
+          value={customer}
+          onChange={(value) => { setCustomer(value); setFolder(''); setPage(1); }}
+        />
+        <input
+          className="vault-search"
+          placeholder="Search file name, artwork code, lead or customer…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <select className="vault-select" value={lifecycle} onChange={(e) => { setLifecycle(e.target.value); setPage(1); }}>
+          <option value="">All stages</option>
+          {facets.lifecycles.filter(item => item.key !== '—').map(item => (
+            <option key={item.key} value={item.key}>
+              {(LIFECYCLE[item.key]?.label) || item.key} ({item.files})
+            </option>
+          ))}
+        </select>
+        {activeFilters && <button type="button" className="vault-btn vault-btn-ghost" onClick={resetFilters}>Clear</button>}
+      </div>
+
+      <div className="vault-tabs">
+        <button type="button" className={!folder ? 'active' : ''} onClick={() => { setFolder(''); setPage(1); }}>
+          All folders <span>{total}</span>
+        </button>
+        {/* Empty folders stay on the strip: a customer's Mockups folder exists
+            in Nextcloud whether or not anything has been put in it yet. */}
+        {facets.folders.map(item => (
+          <button
+            key={item.key}
+            type="button"
+            className={`${folder === item.key ? 'active' : ''} ${item.files ? '' : 'is-empty'}`}
+            onClick={() => { setFolder(item.key); setPage(1); }}
+          >
+            {item.key} <span>{item.files}</span>
+          </button>
+        ))}
+      </div>
+
+      {error && <div className="vault-error">{error}</div>}
+
+      {loading && !rows.length && <div className="vault-empty"><p>Loading the vault…</p></div>}
+
+      {!loading && !rows.length && (
+        <div className="vault-empty">
+          <p>{folder ? `Nothing in ${folder} yet` : 'No artwork matches these filters'}</p>
+          <span>
+            {folder
+              ? 'The folder exists in Nextcloud — anything dropped into it shows up here within seconds.'
+              : activeFilters
+                ? 'Clear the filters to see the whole vault.'
+                : 'Files uploaded to Nextcloud appear here within seconds.'}
+          </span>
+        </div>
+      )}
+
+      {rows.length > 0 && (
+        <>
+          <div className="vault-grid">
+            {rows.map(asset => (
+              <VaultCard
+                key={asset.id}
+                asset={asset}
+                apiBase={apiBase}
+                selected={selected?.id === asset.id}
+                onSelect={(next) => { setSelected(prev => (prev?.id === next.id ? null : next)); setStatus(''); }}
+              />
+            ))}
+          </div>
+
+          <div className="vault-pager">
+            <button type="button" className="vault-btn vault-btn-ghost" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>← Previous</button>
+            <span>
+              {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total.toLocaleString()} files
+              {pages > 1 && ` · page ${page} of ${pages}`}
+            </span>
+            <button type="button" className="vault-btn vault-btn-ghost" disabled={page >= pages} onClick={() => setPage(p => Math.min(pages, p + 1))}>Next →</button>
+          </div>
+        </>
+      )}
+
+      {selected && (
+        <div className="vault-actionbar">
+          <div className="vault-actionbar-file">
+            <strong title={selected.file_name}>{selected.file_name}</strong>
+            <span>
+              {selected.entity_name || 'Unlinked'} · {selected.folder}
+              {selected.artwork_code ? ` · ${selected.artwork_code}` : ''}
+              {` · ${formatDate(selected.source_modified_at)}`}
+            </span>
+          </div>
+          <div className="vault-actionbar-actions">
+            {TARGETS.map(target => (
+              <button
+                key={target.page}
+                type="button"
+                className={`vault-btn ${target.primary ? 'vault-btn-primary' : ''}`}
+                disabled={Boolean(opening)}
+                onClick={() => openIn(target)}
+              >
+                {opening === target.page ? 'Opening…' : target.label}
+              </button>
+            ))}
+            <button type="button" className="vault-btn" onClick={() => download(selected)}>Download</button>
+            <button type="button" className="vault-btn vault-btn-ghost" onClick={() => { setSelected(null); setStatus(''); }}>Close</button>
+          </div>
+          {status && <div className="vault-actionbar-status">{status}</div>}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default Vault;

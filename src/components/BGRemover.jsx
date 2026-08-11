@@ -126,7 +126,7 @@ function analyzeImageQuality(imageData) {
 }
 
 // ─── COMPONENT ──────────────────────────────────────────────────────────────
-function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
+function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup, onArtworkChange }) {
   // Image state
   const [originalImage, setOriginalImage] = useState(null);
   const [processedImageData, setProcessedImageData] = useState(null);
@@ -1340,6 +1340,13 @@ function BGRemover({ sharedArtwork, onSendToQA, onSendToMockup }) {
     };
     img.src = displayUrl;
   };
+
+  // Publish the current edit upward so "Save to Nextcloud" writes what is on
+  // screen. Without this the save would silently store the file the designer
+  // opened rather than the one they just worked on.
+  useEffect(() => {
+    if (displayUrl && onArtworkChange) onArtworkChange(displayUrl);
+  }, [displayUrl, onArtworkChange]);
 
   const handleSendToQA = () => { if (displayUrl && onSendToQA) onSendToQA(displayUrl); };
 

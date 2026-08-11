@@ -268,7 +268,7 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
 }
 
 // ─── COMPONENT ───────────────────────────────────────────────────────────────
-function GangSheet({ sharedArtwork }) {
+function GangSheet({ sharedArtwork, onRegisterExport }) {
   const [artworks, setArtworks] = useState([]);
   const [hGap, setHGap] = useState(0.5);
   const [vGap, setVGap] = useState(0.5);
@@ -851,6 +851,26 @@ function GangSheet({ sharedArtwork }) {
     }
     return (crc ^ 0xFFFFFFFF) >>> 0;
   };
+
+  // Hand the parent the print-ready sheets on demand, so "Save GS" stores the
+  // exact same PNGs (300 DPI metadata and all) that Download produces. Each
+  // sheet is saved as its own version rather than being flattened together.
+  useEffect(() => {
+    if (!onRegisterExport) return undefined;
+    onRegisterExport(async () => {
+      const blobs = [];
+      for (let i = 0; i < layoutData.totalSheets; i++) {
+        const sheet = layoutData.sheets[i];
+        if (!sheet || sheet.items.length === 0) continue;
+        const canvas = await renderSheetCanvas(sheet, i);
+        if (!canvas) continue;
+        let blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+        if (blob) blobs.push(await embedDpiInPng(blob, DPI));
+      }
+      return blobs;
+    });
+    return () => onRegisterExport(null);
+  }, [onRegisterExport, layoutData, includeHeader, headerTopMargin, DPI]);
 
   const handleDownload = async () => {
     if (layoutData.sheets.every(s => s.items.length === 0)) {

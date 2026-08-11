@@ -26,6 +26,7 @@ function DesignCanvas({
   artworkAreaSettings,
   onPositionChange,
   customGarment,
+  onRegisterExport,
 }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
@@ -133,12 +134,11 @@ function DesignCanvas({
     };
   }, [selectedSize, artworkDimensions, artworkAreaSettings, customGarment, tshirtImage]);
 
-  // Draw canvas
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-
+  // One renderer, two uses. The on-screen preview draws the guides a designer
+  // works against — print area, selection handles, dimensions, rulers. The saved
+  // mockup draws the same scene without them, so what reaches the customer is
+  // just the garment and the artwork.
+  const drawScene = useCallback((ctx, { guides = true } = {}) => {
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
     const printArea = getPrintArea();
@@ -175,11 +175,13 @@ function DesignCanvas({
     }
 
     // Draw print area guide (dashed border)
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
-    ctx.lineWidth = 1 * CANVAS_SCALE;
-    ctx.setLineDash([6 * CANVAS_SCALE, 4 * CANVAS_SCALE]);
-    ctx.strokeRect(printArea.x, printArea.y, printArea.width, printArea.height);
-    ctx.setLineDash([]);
+    if (guides) {
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+      ctx.lineWidth = 1 * CANVAS_SCALE;
+      ctx.setLineDash([6 * CANVAS_SCALE, 4 * CANVAS_SCALE]);
+      ctx.strokeRect(printArea.x, printArea.y, printArea.width, printArea.height);
+      ctx.setLineDash([]);
+    }
 
     // Draw artwork
     if (artworkImage) {
@@ -216,7 +218,7 @@ function DesignCanvas({
       ctx.restore();
 
       // Selection handles
-      if (!isDragging) {
+      if (guides && !isDragging) {
         const handleSize = 8 * CANVAS_SCALE;
         ctx.strokeStyle = '#2563eb';
         ctx.lineWidth = 2 * CANVAS_SCALE;
@@ -238,6 +240,7 @@ function DesignCanvas({
       }
 
       // Dimension labels — show the set artwork dimensions
+      if (guides) {
       ctx.strokeStyle = '#ef4444';
       ctx.fillStyle = '#ef4444';
       ctx.lineWidth = 1.5 * CANVAS_SCALE;
@@ -287,8 +290,9 @@ function DesignCanvas({
       ctx.font = `bold ${12 * CANVAS_SCALE}px Inter, sans-serif`;
       ctx.fillText(`${actualH}"`, 0, 0);
       ctx.restore();
+      }
 
-    } else {
+    } else if (guides) {
       // Placeholder text
       ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
       ctx.font = `${14 * CANVAS_SCALE}px Inter, sans-serif`;
@@ -298,13 +302,15 @@ function DesignCanvas({
     }
 
     // Size label
-    ctx.fillStyle = 'rgba(255,255,255,0.7)';
-    ctx.font = `bold ${13 * CANVAS_SCALE}px Inter, sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.fillText(`Size: ${selectedSize} | ${viewSide.toUpperCase()}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT - 20 * CANVAS_SCALE);
+    if (guides) {
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.font = `bold ${13 * CANVAS_SCALE}px Inter, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText(`Size: ${selectedSize} | ${viewSide.toUpperCase()}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT - 20 * CANVAS_SCALE);
+    }
 
     // Draw rulers (inch marks along top and left)
-    if (printArea.pxPerInch > 0) {
+    if (guides && printArea.pxPerInch > 0) {
       const rulerColor = '#94a3b8';
       const rulerTextColor = '#64748b';
       const ppi = printArea.pxPerInch;
@@ -361,7 +367,28 @@ function DesignCanvas({
       ctx.stroke();
     }
 
-  }, [artworkImage, tshirtImage, selectedSize, selectedColor, artworkDimensions, viewSide, artworkPosition, artworkScale, isDragging, getPrintArea]);
+  }, [artworkImage, tshirtImage, selectedSize, selectedColor, artworkDimensions, viewSide, artworkPosition, artworkScale, artworkAreaSettings, isDragging, customGarment, getPrintArea]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    drawScene(canvas.getContext('2d'), { guides: true });
+  }, [drawScene]);
+
+  // "Save MU" saves what is on screen, so the mockup it stores comes from this
+  // very canvas — re-rendered once, clean, at the moment the button is pressed.
+  useEffect(() => {
+    if (!onRegisterExport) return undefined;
+    onRegisterExport(async () => {
+      if (!artworkImage) return null;
+      const out = document.createElement('canvas');
+      out.width = CANVAS_WIDTH;
+      out.height = CANVAS_HEIGHT;
+      drawScene(out.getContext('2d'), { guides: false });
+      return new Promise(resolve => out.toBlob(resolve, 'image/png'));
+    });
+    return () => onRegisterExport(null);
+  }, [onRegisterExport, drawScene, artworkImage]);
 
   // Mouse handlers for dragging artwork
   const handleMouseDown = (e) => {
