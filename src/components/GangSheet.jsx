@@ -245,10 +245,13 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
     sheets.push({ items: bestResult.placed, totalHeight: bestResult.totalHeight });
 
     // Determine which items were NOT placed on this sheet.
-    // Since sort order may differ, track placed items by building a usage count map.
+    // Track by count per artwork: just subtract placed count from remaining count.
+    // Use artworkId + original dimensions (min/max to handle rotation).
     const placedCounts = new Map();
     for (const p of bestResult.placed) {
-      const key = `${p.artworkId}_${p.w}_${p.h}`;
+      const origW = p.rotated ? p.h : p.w;
+      const origH = p.rotated ? p.w : p.h;
+      const key = `${p.artworkId}_${origW}_${origH}`;
       placedCounts.set(key, (placedCounts.get(key) || 0) + 1);
     }
     const nextRemaining = [];
