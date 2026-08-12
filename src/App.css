@@ -127,3 +127,93 @@
   width: 380px;
   flex-shrink: 0;
 }
+
+
+/* ─── RESPONSIVE LAYOUT ─────────────────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .main-content {
+    margin-left: 180px;
+  }
+
+  .designer-layout {
+    flex-direction: column;
+  }
+
+  .canvas-section {
+    max-width: 100%;
+  }
+
+  .controls-section {
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .top-bar {
+    padding: 10px 16px;
+  }
+
+  .breadcrumb {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 768px) {
+  .main-content {
+    margin-left: 0;
+    padding-top: 56px;
+  }
+
+  .designer-layout {
+    flex-direction: column;
+    padding: 10px;
+    gap: 12px;
+  }
+
+  .canvas-section {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .canvas-with-comparison {
+    flex-direction: column;
+  }
+
+  .controls-section {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .top-bar {
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+    padding: 8px 12px;
+  }
+
+  .top-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .top-actions button {
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 480px) {
+  .main-content {
+    margin-left: 0;
+    padding-top: 56px;
+  }
+
+  .designer-layout {
+    padding: 6px;
+    gap: 8px;
+  }
+
+  .breadcrumb {
+    font-size: 11px;
+    gap: 4px;
+  }
+}

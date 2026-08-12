@@ -1,0 +1,272 @@
+.garment-types-page {
+  padding: 24px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.gt-header h1 {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0;
+}
+
+.gt-header p {
+  font-size: 13px;
+  color: #64748b;
+  margin: 4px 0 0;
+}
+
+.gt-loading {
+  padding: 40px;
+  text-align: center;
+  color: #64748b;
+}
+
+.gt-message {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
+  padding: 10px 16px;
+  border-radius: 8px;
+  margin: 16px 0;
+  font-size: 13px;
+}
+
+/* Add Section */
+.gt-add-section {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 20px;
+  margin: 20px 0;
+}
+
+.gt-add-section h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0 0 12px;
+}
+
+.gt-add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.gt-input {
+  padding: 10px 14px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.gt-input:focus {
+  border-color: #2563eb;
+}
+
+.gt-input-sm {
+  padding: 6px 10px;
+  border: 1.5px solid #2563eb;
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+  width: 100%;
+}
+
+.gt-fits-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.gt-fit-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 1.5px solid #e2e8f0;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  user-select: none;
+  color: #64748b;
+  background: #f8fafc;
+}
+
+.gt-fit-chip input {
+  display: none;
+}
+
+.gt-fit-chip.active {
+  background: #eff6ff;
+  border-color: #2563eb;
+  color: #2563eb;
+}
+
+.gt-fit-chip.sm {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+.gt-btn-add {
+  padding: 10px 20px;
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  align-self: flex-start;
+}
+
+.gt-btn-add:hover { opacity: 0.9; }
+.gt-btn-add:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* List */
+.gt-list {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 20px;
+}
+
+.gt-list h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0 0 12px;
+}
+
+.gt-table-wrap {
+  overflow-x: auto;
+}
+
+.gt-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.gt-table th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #64748b;
+  padding: 10px 12px;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.gt-table td {
+  padding: 12px;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+}
+
+.gt-type-name {
+  font-weight: 500;
+  color: #1e293b;
+}
+
+.gt-fits-display {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.gt-fit-badge {
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.gt-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.gt-btn-edit, .gt-btn-save, .gt-btn-cancel, .gt-btn-delete {
+  padding: 5px 10px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  border: 1px solid;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.gt-btn-edit {
+  background: white;
+  border-color: #2563eb;
+  color: #2563eb;
+}
+.gt-btn-edit:hover { background: #eff6ff; }
+
+.gt-btn-save {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: white;
+}
+
+.gt-btn-cancel {
+  background: white;
+  border-color: #e2e8f0;
+  color: #64748b;
+}
+
+.gt-btn-delete {
+  background: white;
+  border-color: #fecaca;
+  color: #dc2626;
+}
+.gt-btn-delete:hover { background: #fef2f2; }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .garment-types-page {
+    padding: 12px;
+  }
+
+  .gt-header h1 { font-size: 18px; }
+
+  .gt-add-section, .gt-list {
+    padding: 14px;
+  }
+
+  .gt-table th, .gt-table td {
+    padding: 8px 6px;
+    font-size: 12px;
+  }
+
+  .gt-fits-row {
+    gap: 4px;
+  }
+
+  .gt-fit-chip {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+
+  .gt-actions {
+    flex-direction: column;
+    gap: 4px;
+  }
+}
+
+@media (max-width: 480px) {
+  .gt-table th:nth-child(2),
+  .gt-table td:nth-child(2) {
+    max-width: 120px;
+  }
+}

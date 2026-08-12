@@ -12,6 +12,7 @@ import GarmentManager from './components/GarmentManager';
 import GangSheet from './components/GangSheet';
 import AIArtworkLab from './components/AIArtworkLab';
 import UserManagement from './components/UserManagement';
+import GarmentTypes from './components/GarmentTypes';
 import MockupEngineV2 from './components/MockupEngineV2';
 import Vault from './components/Vault';
 import GangSheetCalculator from './components/GangSheetCalculator';
@@ -472,6 +473,10 @@ function App() {
 
     if (currentPage === 'users') {
       return <UserManagement authUser={authUser} />;
+    }
+
+    if (currentPage === 'garment-types') {
+      return <GarmentTypes />;
     }
 
     if (currentPage === 'mockupv2') {

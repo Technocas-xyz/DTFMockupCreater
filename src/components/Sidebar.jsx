@@ -20,6 +20,7 @@ const menuItems = [
     { icon: 'ailab', label: 'AI Artwork Lab (Beta)', page: 'ailab' },
   ]},
   { group: 'Configuration', items: [
+    { icon: 'settings', label: 'Garment Types', page: 'garment-types' },
     { icon: 'users', label: 'User Management', page: 'users' },
   ]},
 ];
