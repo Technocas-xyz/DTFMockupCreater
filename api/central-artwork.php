@@ -116,6 +116,8 @@ if ($action === 'thumb')    proxyVaultGet($backend, '/artworks/studio/thumb', ['
 if ($action === 'handoff')  proxyVaultGet($backend, '/artworks/studio/handoff');
 
 // ── Upload to vault (new file) ──────────────────────────────────────────────
+// Saves directly to the Nextcloud-synced artwork directory. The vault's live
+// revision watcher picks up the new file within seconds.
 if ($action === 'upload') {
     header('Content-Type: application/json');
     header('Cache-Control: private, no-store');
@@ -124,67 +126,86 @@ if ($action === 'upload') {
         jsonError(405, 'POST required');
     }
     if (!isset($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
-        jsonError(400, 'File is required');
+        jsonError(400, 'File is required (error code: ' . ($_FILES['file']['error'] ?? 'missing') . ')');
+    }
+    if (empty($_POST['entity_key'])) {
+        jsonError(400, 'Customer (entity_key) is required');
     }
 
+    $entityKey = preg_replace('/[^a-zA-Z0-9_\-]/', '', $_POST['entity_key']);
+    $folder = preg_replace('/[^a-zA-Z0-9_\- ]/', '', $_POST['folder'] ?? 'Artworks');
+    $lifecycleCode = preg_replace('/[^A-Z]/', '', strtoupper($_POST['lifecycle_code'] ?? 'WRK'));
+    $originalName = $_FILES['file']['name'];
+    $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION)) ?: 'png';
+
+    // Artwork storage root — configurable via env, defaults to a local directory
+    $storageRoot = rtrim(getenv('ARTWORK_STORAGE_PATH') ?: (__DIR__ . '/vault-uploads'), '/');
+
+    // Build path: /storage_root/entity_key/folder/
+    $targetDir = $storageRoot . '/' . $entityKey . '/' . $folder;
+    if (!is_dir($targetDir)) {
+        if (!mkdir($targetDir, 0755, true)) {
+            jsonError(500, 'Could not create target directory');
+        }
+    }
+
+    // Generate file name following convention: AW-ENTITY-NNNN-LIFECYCLE.ext
+    // Find next sequence number for this entity
+    $existing = glob($targetDir . '/AW-' . $entityKey . '-*');
+    $maxSeq = 0;
+    foreach ($existing as $f) {
+        if (preg_match('/AW-' . preg_quote($entityKey) . '-(\d+)/', basename($f), $m)) {
+            $maxSeq = max($maxSeq, (int)$m[1]);
+        }
+    }
+    $seq = str_pad($maxSeq + 1, 4, '0', STR_PAD_LEFT);
+    $newFileName = "AW-{$entityKey}-{$seq}-{$lifecycleCode}.{$ext}";
+    $targetPath = $targetDir . '/' . $newFileName;
+
+    // Move uploaded file
+    if (!move_uploaded_file($_FILES['file']['tmp_name'], $targetPath)) {
+        jsonError(500, 'Failed to save file');
+    }
+
+    // Also try to notify PrintShop backend about the new file (non-blocking)
+    $notifyPayload = json_encode([
+        'entity_key' => $entityKey,
+        'folder' => $folder,
+        'file_name' => $newFileName,
+        'lifecycle_code' => $lifecycleCode,
+        'file_size' => filesize($targetPath),
+        'source' => 'design-studio-upload',
+    ]);
+
+    // Non-blocking notification to PrintShop (best effort)
     try {
         $vaultToken = createVaultToken();
-    } catch (RuntimeException $e) {
-        jsonError(500, $e->getMessage());
-    }
-
-    // Build multipart POST to PrintShop — try the upload endpoint first,
-    // fall back to the save endpoint with vault token if upload doesn't exist.
-    $postFields = [
-        'token' => $vaultToken,
-        'file' => new CURLFile(
-            $_FILES['file']['tmp_name'],
-            $_FILES['file']['type'] ?: 'image/png',
-            $_FILES['file']['name'] ?: 'artwork.png'
-        ),
-    ];
-    // Pass metadata fields
-    foreach (['entity_key', 'folder', 'lifecycle_code', 'file_name'] as $field) {
-        if (!empty($_POST[$field])) $postFields[$field] = $_POST[$field];
-    }
-    // Also pass lifecycle_code as 'kind' for compatibility with save endpoint
-    if (!empty($_POST['lifecycle_code'])) {
-        $postFields['kind'] = $_POST['lifecycle_code'];
-    }
-
-    // Try dedicated upload endpoint first
-    $curl = curl_init($backend . '/artworks/studio/upload');
-    curl_setopt_array($curl, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_POST => true,
-        CURLOPT_POSTFIELDS => $postFields,
-        CURLOPT_CONNECTTIMEOUT => 10,
-        CURLOPT_TIMEOUT => 120,
-    ]);
-    $body = curl_exec($curl);
-    $status = curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
-    $error = curl_error($curl);
-    curl_close($curl);
-
-    // If upload endpoint returned 404, try the save endpoint (older PrintShop versions)
-    if ($status === 404 || $status === 405) {
-        $curl = curl_init($backend . '/artworks/studio/save');
-        curl_setopt_array($curl, [
+        $ch = curl_init($backend . '/artworks/studio/notify-upload');
+        curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => $postFields,
-            CURLOPT_CONNECTTIMEOUT => 10,
-            CURLOPT_TIMEOUT => 120,
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Authorization: Bearer ' . $vaultToken],
+            CURLOPT_POSTFIELDS => $notifyPayload,
+            CURLOPT_TIMEOUT => 5,
+            CURLOPT_CONNECTTIMEOUT => 3,
         ]);
-        $body = curl_exec($curl);
-        $status = curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
-        $error = curl_error($curl);
-        curl_close($curl);
+        curl_exec($ch);
+        curl_close($ch);
+    } catch (Exception $e) {
+        // Notification is best-effort; file is already saved
     }
 
-    if ($body === false) jsonError(502, 'Upload service unavailable', $error);
-    http_response_code($status ?: 502);
-    echo $body;
+    echo json_encode([
+        'success' => true,
+        'data' => [
+            'file_name' => $newFileName,
+            'folder' => $folder,
+            'entity_key' => $entityKey,
+            'lifecycle_code' => $lifecycleCode,
+            'file_size' => filesize($targetPath),
+        ],
+        'message' => 'File uploaded successfully',
+    ]);
     exit;
 }
 
