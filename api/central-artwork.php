@@ -115,6 +115,57 @@ if ($action === 'revision') proxyVaultGet($backend, '/artworks/studio/vault/revi
 if ($action === 'thumb')    proxyVaultGet($backend, '/artworks/studio/thumb', ['v'], true);
 if ($action === 'handoff')  proxyVaultGet($backend, '/artworks/studio/handoff');
 
+// ── Upload to vault (new file) ──────────────────────────────────────────────
+if ($action === 'upload') {
+    header('Content-Type: application/json');
+    header('Cache-Control: private, no-store');
+
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        jsonError(405, 'POST required');
+    }
+    if (!isset($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
+        jsonError(400, 'File is required');
+    }
+
+    try {
+        $vaultToken = createVaultToken();
+    } catch (RuntimeException $e) {
+        jsonError(500, $e->getMessage());
+    }
+
+    // Forward to PrintShop's upload endpoint
+    $postFields = [
+        'token' => $vaultToken,
+        'file' => new CURLFile(
+            $_FILES['file']['tmp_name'],
+            $_FILES['file']['type'] ?: 'image/png',
+            $_FILES['file']['name'] ?: 'artwork.png'
+        ),
+    ];
+    // Pass metadata fields
+    foreach (['entity_key', 'folder', 'lifecycle_code', 'file_name'] as $field) {
+        if (!empty($_POST[$field])) $postFields[$field] = $_POST[$field];
+    }
+
+    $curl = curl_init($backend . '/artworks/studio/upload');
+    curl_setopt_array($curl, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => $postFields,
+        CURLOPT_CONNECTTIMEOUT => 10,
+        CURLOPT_TIMEOUT => 120,
+    ]);
+    $body = curl_exec($curl);
+    $status = curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
+    $error = curl_error($curl);
+    curl_close($curl);
+
+    if ($body === false) jsonError(502, 'Upload service unavailable', $error);
+    http_response_code($status ?: 502);
+    echo $body;
+    exit;
+}
+
 if ($action === 'latest') {
     require_once __DIR__ . '/db.php';
     $row = getDB()->query("SELECT asset_id,file_name,version_no,last_opened_at

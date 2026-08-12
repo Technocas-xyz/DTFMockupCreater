@@ -111,3 +111,241 @@
 .vault-btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
 .vault-btn-primary:hover:not(:disabled) { background: var(--primary-hover); border-color: var(--primary-hover); }
 .vault-btn-ghost { background: transparent; color: var(--text-secondary); }
+
+
+/* ── Header actions ──────────────────────────────────────────────────────── */
+.vault-header-actions { display: flex; align-items: center; gap: 12px; }
+
+/* ── Upload Modal ────────────────────────────────────────────────────────── */
+.vault-upload-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(15, 23, 42, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.vault-upload-modal {
+  background: white;
+  border-radius: 14px;
+  width: 100%;
+  max-width: 520px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.25);
+}
+
+.vault-upload-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border);
+}
+
+.vault-upload-header h2 {
+  font-size: 17px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.vault-upload-close {
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: #f1f5f9;
+  border-radius: 6px;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vault-upload-close:hover { background: #e2e8f0; }
+
+.vault-upload-body {
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.vault-upload-context {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.vault-upload-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.vault-upload-field label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}
+
+.vault-upload-field span.has-value {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1e293b;
+}
+
+.vault-upload-field span.no-value {
+  font-size: 12px;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.vault-upload-lifecycle-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.vault-upload-lc-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+
+.vault-upload-lc-btn:hover { border-color: #94a3b8; }
+.vault-upload-lc-btn.active { border-color: var(--primary); background: #eff6ff; }
+
+.vault-upload-lc-btn .vault-life {
+  position: static;
+  font-size: 9px;
+  padding: 2px 5px;
+}
+
+/* Dropzone */
+.vault-upload-dropzone {
+  border: 2px dashed #cbd5e1;
+  border-radius: 10px;
+  padding: 30px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: #fafbfc;
+}
+
+.vault-upload-dropzone:hover { border-color: var(--primary); background: #f0f7ff; }
+.vault-upload-dropzone.has-file { border-color: var(--primary); border-style: solid; background: #eff6ff; }
+
+.vault-upload-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.vault-upload-icon {
+  width: 40px;
+  height: 40px;
+  background: #e2e8f0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  margin-bottom: 4px;
+}
+
+.vault-upload-hint { font-size: 11px; color: #94a3b8; }
+
+.vault-upload-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.vault-upload-preview img {
+  max-width: 180px;
+  max-height: 120px;
+  object-fit: contain;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+}
+
+.vault-upload-preview span { font-size: 12px; font-weight: 500; color: #1e293b; }
+.vault-upload-size { font-size: 11px; color: #64748b; }
+.vault-upload-file-icon { font-size: 32px; }
+
+.vault-upload-message {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.vault-upload-message.success { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
+.vault-upload-message.error { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+
+.vault-upload-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 22px;
+  border-top: 1px solid var(--border);
+}
+
+/* Responsive upload */
+@media (max-width: 600px) {
+  .vault-upload-modal { max-width: 100%; margin: 10px; }
+  .vault-upload-context { grid-template-columns: 1fr; }
+  .vault-upload-lifecycle-grid { grid-template-columns: 1fr; }
+  .vault-upload-body { padding: 14px; }
+}
+
+/* ── Responsive Vault ────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .vault-page { padding: 14px 14px 140px; }
+  .vault-header { flex-direction: column; gap: 10px; }
+  .vault-header-actions { width: 100%; justify-content: space-between; }
+  .vault-title { font-size: 18px; }
+  .vault-subtitle { font-size: 11px; }
+  .vault-sources { flex-wrap: wrap; }
+  .vault-sources button { padding: 6px 10px; font-size: 12px; }
+  .vault-filters { flex-direction: column; gap: 8px; }
+  .vault-search { min-width: 100%; flex: none; }
+  .vault-picker-btn { min-width: 100%; }
+  .vault-tabs { gap: 5px; }
+  .vault-tabs button { padding: 5px 10px; font-size: 11px; }
+  .vault-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+  .vault-card-img { height: 110px; }
+  .vault-actionbar { left: 10px; right: 10px; transform: none; max-width: 100%; flex-direction: column; align-items: stretch; gap: 10px; }
+  .vault-actionbar-file { max-width: 100%; }
+  .vault-actionbar-actions { justify-content: center; }
+  .vault-pager { flex-direction: column; gap: 8px; text-align: center; }
+}
+
+@media (max-width: 480px) {
+  .vault-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+  .vault-card-img { height: 90px; }
+  .vault-card-name { font-size: 10px; }
+  .vault-actionbar-actions { flex-wrap: wrap; }
+  .vault-actionbar-actions .vault-btn { flex: 1; min-width: 70px; font-size: 11px; padding: 6px 8px; }
+}

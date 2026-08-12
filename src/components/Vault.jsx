@@ -24,6 +24,13 @@ const TARGETS = [
   { page: 'contrast', label: 'Contrast' },
 ];
 
+const UPLOAD_LIFECYCLES = [
+  { code: 'SRC', label: 'Source (Original)' },
+  { code: 'WRK', label: 'Working File' },
+  { code: 'FNL', label: 'Final' },
+  { code: 'FNLA', label: 'Approved (Final)' },
+];
+
 // The shop's published file naming standard — AW-<CLIENT>-<NNNN>-<TYPE>.<ext>.
 const LIFECYCLE = {
   SRC: { label: 'Source', tone: 'src' },
@@ -170,6 +177,15 @@ function Vault({ onOpenAsset }) {
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState(null);
 
+  // Upload state
+  const [showUpload, setShowUpload] = useState(false);
+  const [uploadFile, setUploadFile] = useState(null);
+  const [uploadPreview, setUploadPreview] = useState(null);
+  const [uploadLifecycle, setUploadLifecycle] = useState('WRK');
+  const [uploading, setUploading] = useState(false);
+  const [uploadMessage, setUploadMessage] = useState('');
+  const uploadInputRef = useRef(null);
+
   const revisionRef = useRef('');
   const inFlight = useRef(false);
   const pending = useRef(false);
@@ -305,6 +321,56 @@ function Vault({ onOpenAsset }) {
     setRoot(''); setCustomer(''); setFolder(''); setLifecycle(''); setSearch(''); setDebouncedSearch(''); setPage(1);
   };
 
+  // Upload handlers
+  const handleUploadFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadFile(file);
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (ev) => setUploadPreview(ev.target.result);
+      reader.readAsDataURL(file);
+    } else {
+      setUploadPreview(null);
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!uploadFile || !apiBase) return;
+    if (!customer) { setUploadMessage('Please select a customer first'); return; }
+    setUploading(true);
+    setUploadMessage('');
+    try {
+      const formData = new FormData();
+      formData.append('file', uploadFile);
+      formData.append('entity_key', customer);
+      if (folder) formData.append('folder', folder);
+      formData.append('lifecycle_code', uploadLifecycle);
+
+      const res = await fetch(`${apiBase}/central-artwork.php?action=upload`, {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || data.error || 'Upload failed');
+      setUploadMessage('File uploaded successfully!');
+      setUploadFile(null);
+      setUploadPreview(null);
+      // Refresh the vault
+      setTimeout(() => { load(false); setShowUpload(false); setUploadMessage(''); }, 1500);
+    } catch (err) {
+      setUploadMessage(err.message || 'Upload failed');
+    }
+    setUploading(false);
+  };
+
+  const closeUploadModal = () => {
+    setShowUpload(false);
+    setUploadFile(null);
+    setUploadPreview(null);
+    setUploadMessage('');
+  };
+
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const activeFilters = Boolean(root || customer || folder || lifecycle || debouncedSearch.trim());
   const rootTotal = facets.roots.reduce((sum, item) => sum + item.files, 0);
@@ -318,9 +384,14 @@ function Vault({ onOpenAsset }) {
             Every customer file from Nextcloud, live — open one here, save it back as a WRK file.
           </p>
         </div>
-        <span className={`vault-live ${live ? 'is-live' : ''}`}>
-          <i /> {live ? 'Live' : 'Reconnecting…'}
-        </span>
+        <div className="vault-header-actions">
+          <button type="button" className="vault-btn vault-btn-primary" onClick={() => setShowUpload(true)}>
+            ↑ Upload Artwork
+          </button>
+          <span className={`vault-live ${live ? 'is-live' : ''}`}>
+            <i /> {live ? 'Live' : 'Reconnecting…'}
+          </span>
+        </div>
       </header>
 
       {/* Leads and purchase orders are separate worlds with their own folder
@@ -453,6 +524,104 @@ function Vault({ onOpenAsset }) {
             <button type="button" className="vault-btn vault-btn-ghost" onClick={() => { setSelected(null); setStatus(''); }}>Close</button>
           </div>
           {status && <div className="vault-actionbar-status">{status}</div>}
+        </div>
+      )}
+
+      {/* Upload Modal */}
+      {showUpload && (
+        <div className="vault-upload-overlay" onClick={closeUploadModal}>
+          <div className="vault-upload-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="vault-upload-header">
+              <h2>Upload Artwork</h2>
+              <button className="vault-upload-close" onClick={closeUploadModal}>×</button>
+            </div>
+            <div className="vault-upload-body">
+              {/* Customer & Folder info */}
+              <div className="vault-upload-context">
+                <div className="vault-upload-field">
+                  <label>Customer</label>
+                  <span className={customer ? 'has-value' : 'no-value'}>
+                    {customer ? (facets.customers.find(c => c.key === customer)?.name || customer) : 'Select a customer from the vault first'}
+                  </span>
+                </div>
+                <div className="vault-upload-field">
+                  <label>Folder</label>
+                  <span className={folder ? 'has-value' : 'no-value'}>
+                    {folder || 'Artworks (default)'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Lifecycle Selection */}
+              <div className="vault-upload-field">
+                <label>File Type</label>
+                <div className="vault-upload-lifecycle-grid">
+                  {UPLOAD_LIFECYCLES.map(lc => (
+                    <button
+                      key={lc.code}
+                      type="button"
+                      className={`vault-upload-lc-btn ${uploadLifecycle === lc.code ? 'active' : ''}`}
+                      onClick={() => setUploadLifecycle(lc.code)}
+                    >
+                      <span className={`vault-life vault-life-${LIFECYCLE[lc.code]?.tone || 'src'}`}>{lc.code}</span>
+                      <span>{lc.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* File Drop Zone */}
+              <div
+                className={`vault-upload-dropzone ${uploadFile ? 'has-file' : ''}`}
+                onClick={() => uploadInputRef.current?.click()}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) { setUploadFile(f); if (f.type.startsWith('image/')) { const r = new FileReader(); r.onload = (ev) => setUploadPreview(ev.target.result); r.readAsDataURL(f); } } }}
+              >
+                {uploadPreview ? (
+                  <div className="vault-upload-preview">
+                    <img src={uploadPreview} alt="Preview" />
+                    <span>{uploadFile.name}</span>
+                    <span className="vault-upload-size">{fileSize(uploadFile.size)}</span>
+                  </div>
+                ) : uploadFile ? (
+                  <div className="vault-upload-preview">
+                    <span className="vault-upload-file-icon">📄</span>
+                    <span>{uploadFile.name}</span>
+                    <span className="vault-upload-size">{fileSize(uploadFile.size)}</span>
+                  </div>
+                ) : (
+                  <div className="vault-upload-placeholder">
+                    <span className="vault-upload-icon">↑</span>
+                    <span>Drop file here or click to browse</span>
+                    <span className="vault-upload-hint">PNG, JPG, PDF, AI — any artwork file</span>
+                  </div>
+                )}
+                <input
+                  ref={uploadInputRef}
+                  type="file"
+                  accept="image/*,.pdf,.ai,.eps,.svg"
+                  style={{ display: 'none' }}
+                  onChange={handleUploadFileChange}
+                />
+              </div>
+
+              {uploadMessage && (
+                <div className={`vault-upload-message ${uploadMessage.includes('success') ? 'success' : 'error'}`}>
+                  {uploadMessage}
+                </div>
+              )}
+            </div>
+            <div className="vault-upload-footer">
+              <button className="vault-btn" onClick={closeUploadModal}>Cancel</button>
+              <button
+                className="vault-btn vault-btn-primary"
+                onClick={handleUpload}
+                disabled={!uploadFile || !customer || uploading}
+              >
+                {uploading ? 'Uploading...' : 'Upload to Vault'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
