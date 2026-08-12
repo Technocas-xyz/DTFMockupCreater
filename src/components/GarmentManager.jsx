@@ -3,7 +3,7 @@ import { TSHIRT_SIZES } from '../constants/tshirtSizes';
 import { GARMENTS_API, SERVE_IMAGE_URL, detectApiBase } from '../utils/apiConfig';
 import './GarmentManager.css';
 
-const GARMENT_TYPES = ['T-Shirt', 'Hoodie', 'Women T-Shirt', 'Sweatshirt', 'Long Sleeve T-Shirt', 'Tank Top', 'Shorts', 'Bob Marley', 'Other'];
+const GARMENT_TYPES_FALLBACK = ['T-Shirt', 'Hoodie', 'Women T-Shirt', 'Sweatshirt', 'Long Sleeve T-Shirt', 'Tank Top', 'Shorts', 'Bob Marley', 'Other'];
 const STORAGE_KEY = 'garment-library';
 const MAX_GARMENTS = 500;
 const SIZE_OPTIONS = ['2T','3T','4T','5T','YS','YM','YL','YXL','XS','S','M','L','XL','2XL','3XL','4XL','5XL'];
@@ -59,7 +59,9 @@ function GarmentManager({ onUseAsMockup }) {
   const [library, setLibrary] = useState([]);
   const [selectedGarment, setSelectedGarment] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingGarmentId, setEditingGarmentId] = useState(null); // null = adding, garment id = editing
   const [showPreviewPanel, setShowPreviewPanel] = useState(true);
+  const [garmentTypes, setGarmentTypes] = useState(GARMENT_TYPES_FALLBACK);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -140,6 +142,20 @@ function GarmentManager({ onUseAsMockup }) {
             if (stored) setLibrary(JSON.parse(stored));
           } catch (err) {}
         });
+    });
+  }, []);
+
+  // Load garment types from server
+  useEffect(() => {
+    detectApiBase().then(base => {
+      fetch(`${base}/garment-types.php`)
+        .then(res => res.ok ? res.json() : Promise.reject())
+        .then(data => {
+          if (Array.isArray(data) && data.length > 0) {
+            setGarmentTypes(data.map(t => t.name));
+          }
+        })
+        .catch(() => {});
     });
   }, []);
 
@@ -228,10 +244,10 @@ function GarmentManager({ onUseAsMockup }) {
     reader.readAsDataURL(file);
   }, [modalFields.autoTrim, modalFields.description]);
 
-  // Save garment (from modal)
+  // Save garment (from modal) — handles both add and edit
   const saveGarment = () => {
     if (!modalImage) { setErrorMsg('Please upload an image first.'); return; }
-    if (library.length >= MAX_GARMENTS) {
+    if (!editingGarmentId && library.length >= MAX_GARMENTS) {
       setErrorMsg(`Maximum ${MAX_GARMENTS} garments allowed. Delete one first.`);
       return;
     }
@@ -252,7 +268,7 @@ function GarmentManager({ onUseAsMockup }) {
       ctx.drawImage(img, 0, 0, w, h);
       const compressedUrl = canvas.toDataURL('image/png');
 
-      const newGarment = {
+      const garmentData = {
         name: modalFields.description || 'Untitled',
         description: modalFields.description || '',
         gender: modalFields.gender,
@@ -264,44 +280,81 @@ function GarmentManager({ onUseAsMockup }) {
         color: modalFields.color,
         colorHex: modalFields.colorHex,
         dataUrl: compressedUrl,
-        width: modalImage.width,
-        height: modalImage.height,
+        width: modalImage.width || w,
+        height: modalImage.height || h,
         fileName: modalImage.fileName,
         bodyMapping: { ...modalBodyMapping },
-        createdAt: new Date().toISOString(),
       };
 
-      fetch(API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newGarment),
-      })
-        .then(res => {
-          if (!res.ok) throw new Error(`Server error: ${res.status}`);
-          return res.json();
+      if (editingGarmentId) {
+        // EDIT MODE — update existing garment
+        garmentData.id = editingGarmentId;
+        garmentData.updatedAt = new Date().toISOString();
+
+        fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(garmentData),
         })
-        .then(saved => {
-          if (saved.error) throw new Error(saved.error);
-          saved.dataUrl = compressedUrl;
-          const newLibrary = [...library, saved];
-          saveLibrary(newLibrary);
-          setSuccessMsg('Garment saved successfully!');
-          setTimeout(() => setSuccessMsg(''), 3000);
-          closeModal();
+          .then(res => {
+            if (!res.ok) throw new Error(`Server error: ${res.status}`);
+            return res.json();
+          })
+          .then(saved => {
+            if (saved.error) throw new Error(saved.error);
+            saved.dataUrl = compressedUrl;
+            const newLibrary = library.map(g => g.id === editingGarmentId ? { ...g, ...saved, dataUrl: compressedUrl } : g);
+            saveLibrary(newLibrary);
+            setSelectedGarment({ ...garmentData, ...saved, dataUrl: compressedUrl });
+            setSuccessMsg('Garment updated successfully!');
+            setTimeout(() => setSuccessMsg(''), 3000);
+            closeModal();
+          })
+          .catch(e => {
+            console.error('Server update failed:', e);
+            const newLibrary = library.map(g => g.id === editingGarmentId ? { ...g, ...garmentData } : g);
+            saveLibrary(newLibrary);
+            setSuccessMsg('Updated locally (server unavailable).');
+            setTimeout(() => setSuccessMsg(''), 3000);
+            closeModal();
+          })
+          .finally(() => setModalSaving(false));
+      } else {
+        // ADD MODE — create new garment
+        garmentData.createdAt = new Date().toISOString();
+
+        fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(garmentData),
         })
-        .catch(e => {
-          console.error('Server save failed:', e);
-          newGarment.id = Date.now().toString();
-          newGarment.imageFile = null;
-          const newLibrary = [...library, newGarment];
-          saveLibrary(newLibrary);
-          setSuccessMsg('Saved locally (server unavailable).');
-          setTimeout(() => setSuccessMsg(''), 3000);
-          closeModal();
-        })
-        .finally(() => setModalSaving(false));
+          .then(res => {
+            if (!res.ok) throw new Error(`Server error: ${res.status}`);
+            return res.json();
+          })
+          .then(saved => {
+            if (saved.error) throw new Error(saved.error);
+            saved.dataUrl = compressedUrl;
+            const newLibrary = [...library, saved];
+            saveLibrary(newLibrary);
+            setSuccessMsg('Garment saved successfully!');
+            setTimeout(() => setSuccessMsg(''), 3000);
+            closeModal();
+          })
+          .catch(e => {
+            console.error('Server save failed:', e);
+            garmentData.id = Date.now().toString();
+            garmentData.imageFile = null;
+            const newLibrary = [...library, garmentData];
+            saveLibrary(newLibrary);
+            setSuccessMsg('Saved locally (server unavailable).');
+            setTimeout(() => setSuccessMsg(''), 3000);
+            closeModal();
+          })
+          .finally(() => setModalSaving(false));
+      }
     };
-    img.src = modalImage.dataUrl;
+    img.src = typeof modalImage === 'string' ? modalImage : modalImage.dataUrl;
   };
 
   // Delete garment
@@ -341,13 +394,40 @@ function GarmentManager({ onUseAsMockup }) {
   // Close modal and reset
   const closeModal = () => {
     setShowAddModal(false);
+    setEditingGarmentId(null);
     setModalImage(null);
     setModalFields({
       description: '', gender: 'Men', brand: '', styleNo: '',
-      type: 'T-Shirt', size: 'XL', side: 'front', color: '', colorHex: '#000000', autoTrim: true,
+      type: 'T-Shirt', size: 'L', side: 'front', color: '', colorHex: '#000000', autoTrim: true,
     });
     setModalBodyMapping({ shirtWidthInches: 20, shirtHeightInches: 29, widthInches: 13, heightInches: 14.5, topOffsetInches: 3 });
     setErrorMsg('');
+  };
+
+  // Open edit modal for a garment
+  const openEditModal = (garment) => {
+    setEditingGarmentId(garment.id);
+    setModalImage(garment.dataUrl || null);
+    setModalFields({
+      description: garment.description || garment.name || '',
+      gender: garment.gender || 'Men',
+      brand: garment.brand || '',
+      styleNo: garment.styleNo || '',
+      type: garment.type || 'T-Shirt',
+      size: garment.size || 'L',
+      side: garment.side || 'front',
+      color: garment.color || '',
+      colorHex: garment.colorHex || '#000000',
+      autoTrim: garment.autoTrim !== false,
+    });
+    setModalBodyMapping({
+      shirtWidthInches: garment.bodyMapping?.shirtWidthInches || 20,
+      shirtHeightInches: garment.bodyMapping?.shirtHeightInches || 29,
+      widthInches: garment.bodyMapping?.widthInches || 13,
+      heightInches: garment.bodyMapping?.heightInches || 14.5,
+      topOffsetInches: garment.bodyMapping?.topOffsetInches || 3,
+    });
+    setShowAddModal(true);
   };
 
   // Replace image for selected garment
@@ -445,7 +525,7 @@ function GarmentManager({ onUseAsMockup }) {
         </select>
         <select value={filterType} onChange={(e) => setFilterType(e.target.value)}>
           <option value="">All Types</option>
-          {GARMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+          {garmentTypes.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
         <select value={filterGender} onChange={(e) => setFilterGender(e.target.value)}>
           <option value="">All Genders</option>
@@ -520,7 +600,7 @@ function GarmentManager({ onUseAsMockup }) {
                           <button className="gm-action-btn" title="Use as Mockup" onClick={() => handleUseAsMockup(g)}>
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                           </button>
-                          <button className="gm-action-btn" title="Edit" onClick={() => selectGarment(g)}>
+                          <button className="gm-action-btn" title="Edit" onClick={() => openEditModal(g)}>
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                           </button>
                           <button className="gm-action-btn gm-action-delete" title="Delete" onClick={() => deleteFromLibrary(g.id)}>
@@ -654,7 +734,7 @@ function GarmentManager({ onUseAsMockup }) {
         <div className="gm-modal-overlay" onClick={closeModal}>
           <div className="gm-modal" onClick={(e) => e.stopPropagation()}>
             <div className="gm-modal-header">
-              <h2>Add New Garment</h2>
+              <h2>{editingGarmentId ? 'Edit Garment' : 'Add New Garment'}</h2>
               <button className="gm-modal-close" onClick={closeModal}>×</button>
             </div>
             <div className="gm-modal-body">
@@ -713,7 +793,7 @@ function GarmentManager({ onUseAsMockup }) {
                     <div className="gm-form-row">
                       <label>Garment Type</label>
                       <select value={modalFields.type} onChange={(e) => setModalFields({ ...modalFields, type: e.target.value })}>
-                        {GARMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                        {garmentTypes.map(t => <option key={t} value={t}>{t}</option>)}
                       </select>
                     </div>
                   </div>
@@ -777,7 +857,7 @@ function GarmentManager({ onUseAsMockup }) {
             <div className="gm-modal-footer">
               <button className="gm-btn-secondary" onClick={closeModal}>Cancel</button>
               <button className="gm-btn-primary" onClick={saveGarment} disabled={modalSaving}>
-                {modalSaving ? 'Saving...' : 'Save Garment'}
+                {modalSaving ? 'Saving...' : (editingGarmentId ? 'Update Garment' : 'Save Garment')}
               </button>
             </div>
           </div>

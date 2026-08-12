@@ -43,6 +43,7 @@ function ControlPanel({
   const [selectedFit, setSelectedFit] = useState('Men');
   const [selectedCategory, setSelectedCategory] = useState('T-Shirt');
   const [garmentSearch, setGarmentSearch] = useState('');
+  const [dynamicTypes, setDynamicTypes] = useState([]); // loaded from API
   const aspectRatio = artworkDimensions.width / artworkDimensions.height;
 
   // ─── DYNAMIC ARTWORK SIZE PRESETS ───────────────────────────────────────────
@@ -77,6 +78,24 @@ function ControlPanel({
 
   useEffect(() => { loadPresetsFromServer(); }, [loadPresetsFromServer]);
 
+  // Load garment types from server
+  const loadTypesFromServer = useCallback(async () => {
+    try {
+      const apiBase = await detectApiBase();
+      const res = await fetch(`${apiBase}/garment-types.php`);
+      if (!res.ok) throw new Error('API error');
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        setDynamicTypes(data);
+      }
+    } catch {
+      // Fallback to hardcoded
+      setDynamicTypes(GARMENT_TYPES_FILTER.map(name => ({ id: name.toLowerCase().replace(/\s+/g, '-'), name, fits: ['Men', 'Women', 'Unisex', 'Kids'] })));
+    }
+  }, []);
+
+  useEffect(() => { loadTypesFromServer(); }, [loadTypesFromServer]);
+
   const handleAddPreset = async () => {
     const val = parseFloat(newPresetValue);
     if (!val || val <= 0 || val > 30) return;
@@ -107,22 +126,31 @@ function ControlPanel({
     } catch {}
   };
 
-  // Show categories that exist in the garment library for the selected fit
+  // Show categories filtered by selected fit (from dynamic types API)
   const availableCategories = (() => {
-    if (!garmentLibrary || garmentLibrary.length === 0) return GARMENT_TYPES_FILTER;
-    let filtered = garmentLibrary;
-    if (selectedFit !== 'All') {
-      filtered = filtered.filter(g => {
-        const gFit = (g.gender || g.fit || 'Men').toLowerCase();
-        const selFit = selectedFit.toLowerCase();
-        if (selFit === 'kids') {
-          return gFit === 'kids' || KIDS_SIZES.includes(g.size);
-        }
-        return gFit === selFit || gFit === 'all' || gFit === 'unisex' && selFit === 'men';
-      });
+    if (dynamicTypes.length > 0) {
+      // Filter types by selected fit
+      let fitTypes = dynamicTypes;
+      if (selectedFit !== 'All') {
+        fitTypes = dynamicTypes.filter(t => t.fits && t.fits.includes(selectedFit));
+      }
+      return fitTypes.map(t => t.name);
     }
-    const types = [...new Set(filtered.map(g => g.type).filter(Boolean))];
-    return types.length > 0 ? types : GARMENT_TYPES_FILTER;
+    // Fallback: use library types or hardcoded
+    if (garmentLibrary && garmentLibrary.length > 0) {
+      let filtered = garmentLibrary;
+      if (selectedFit !== 'All') {
+        filtered = filtered.filter(g => {
+          const gFit = (g.gender || g.fit || 'Men').toLowerCase();
+          const selFit = selectedFit.toLowerCase();
+          if (selFit === 'kids') return gFit === 'kids' || KIDS_SIZES.includes(g.size);
+          return gFit === selFit || gFit === 'all';
+        });
+      }
+      const types = [...new Set(filtered.map(g => g.type).filter(Boolean))];
+      return types.length > 0 ? types : GARMENT_TYPES_FILTER;
+    }
+    return GARMENT_TYPES_FILTER;
   })();
 
   // Filter garment library by fit + category
