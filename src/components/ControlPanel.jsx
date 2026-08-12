@@ -5,6 +5,10 @@ import './ControlPanel.css';
 
 const GARMENT_TYPES_FILTER = ['T-Shirt', 'Hoodie', 'Women T-Shirt', 'Sweatshirt', 'Long Sleeve T-Shirt', 'Tank Top', 'Shorts', 'Bob Marley', 'Other'];
 
+const GARMENT_FITS = ['All', 'Men', 'Women', 'Unisex', 'Kids'];
+const KIDS_SIZES = ['2T', '3T', '4T', '5T', 'YS', 'YM', 'YL', 'YXL'];
+const ADULT_SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL'];
+
 function ControlPanel({
   selectedSize,
   onSizeChange,
@@ -36,7 +40,9 @@ function ControlPanel({
   viewSide,
 }) {
   const fileInputRef = useRef(null);
-  const [selectedType, setSelectedType] = useState('T-Shirt');
+  const [selectedFit, setSelectedFit] = useState('Men');
+  const [selectedCategory, setSelectedCategory] = useState('T-Shirt');
+  const [garmentSearch, setGarmentSearch] = useState('');
   const aspectRatio = artworkDimensions.width / artworkDimensions.height;
 
   // ─── DYNAMIC ARTWORK SIZE PRESETS ───────────────────────────────────────────
@@ -101,48 +107,74 @@ function ControlPanel({
     } catch {}
   };
 
-  // Show types that exist in the garment library, fallback to full list if library is empty
-  const availableTypes = garmentLibrary && garmentLibrary.length > 0
-    ? [...new Set(garmentLibrary.map(g => g.type).filter(Boolean))]
-    : GARMENT_TYPES_FILTER;
+  // Show categories that exist in the garment library for the selected fit
+  const availableCategories = (() => {
+    if (!garmentLibrary || garmentLibrary.length === 0) return GARMENT_TYPES_FILTER;
+    let filtered = garmentLibrary;
+    if (selectedFit !== 'All') {
+      filtered = filtered.filter(g => {
+        const gFit = (g.gender || g.fit || 'Men').toLowerCase();
+        const selFit = selectedFit.toLowerCase();
+        if (selFit === 'kids') {
+          return gFit === 'kids' || KIDS_SIZES.includes(g.size);
+        }
+        return gFit === selFit || gFit === 'all' || gFit === 'unisex' && selFit === 'men';
+      });
+    }
+    const types = [...new Set(filtered.map(g => g.type).filter(Boolean))];
+    return types.length > 0 ? types : GARMENT_TYPES_FILTER;
+  })();
 
-  // Filter garment library by selected type
-  const filteredGarments = garmentLibrary
-    ? garmentLibrary.filter(g => g.type === selectedType)
-    : [];
+  // Filter garment library by fit + category
+  const filteredGarments = (() => {
+    if (!garmentLibrary) return [];
+    let result = garmentLibrary.filter(g => g.type === selectedCategory);
+    if (selectedFit !== 'All') {
+      result = result.filter(g => {
+        const gFit = (g.gender || g.fit || 'Men').toLowerCase();
+        const selFit = selectedFit.toLowerCase();
+        if (selFit === 'kids') {
+          return gFit === 'kids' || KIDS_SIZES.includes(g.size);
+        }
+        return gFit === selFit || gFit === 'all';
+      });
+    }
+    // Apply search filter
+    if (garmentSearch.trim()) {
+      const q = garmentSearch.toLowerCase();
+      result = result.filter(g =>
+        (g.description || '').toLowerCase().includes(q) ||
+        (g.name || '').toLowerCase().includes(q) ||
+        (g.brand || '').toLowerCase().includes(q) ||
+        (g.styleNo || '').toLowerCase().includes(q) ||
+        (g.color || '').toLowerCase().includes(q)
+      );
+    }
+    return result;
+  })();
 
-  // Auto-select garment when type, size, or view side changes
+  // Sizes depend on fit selection
+  const availableSizes = selectedFit === 'Kids' ? KIDS_SIZES : ADULT_SIZES;
+
+  // Auto-select garment when category, size, or view side changes
   useEffect(() => {
     if (!garmentLibrary || garmentLibrary.length === 0) return;
     const side = viewSide || 'front';
-    if (selectedType === 'T-Shirt') {
-      // T-Shirt type: find matching garment from library for this size + side
-      const match = garmentLibrary.find(g => g.type === 'T-Shirt' && g.size === selectedSize && (g.side || 'front') === side);
-      if (match) {
-        onGarmentChange(match.id);
-      } else {
-        // Try same type+size any side
-        const fallback = garmentLibrary.find(g => g.type === 'T-Shirt' && g.size === selectedSize);
-        if (fallback) { onGarmentChange(fallback.id); }
-        else {
-          // Try any T-Shirt from library
-          const any = garmentLibrary.find(g => g.type === 'T-Shirt');
-          onGarmentChange(any ? any.id : null);
-        }
-      }
-      return;
-    }
-    // Non-T-Shirt types: find a garment matching type + size + side
-    const match = garmentLibrary.find(g => g.type === selectedType && g.size === selectedSize && (g.side || 'front') === side);
+    // Find matching garment from library for this category + size + side
+    const match = garmentLibrary.find(g => g.type === selectedCategory && g.size === selectedSize && (g.side || 'front') === side);
     if (match) {
       onGarmentChange(match.id);
     } else {
-      const fallback1 = garmentLibrary.find(g => g.type === selectedType && g.size === selectedSize);
-      if (fallback1) { onGarmentChange(fallback1.id); return; }
-      const fallback2 = garmentLibrary.find(g => g.type === selectedType);
-      onGarmentChange(fallback2 ? fallback2.id : null);
+      // Try same category+size any side
+      const fallback = garmentLibrary.find(g => g.type === selectedCategory && g.size === selectedSize);
+      if (fallback) { onGarmentChange(fallback.id); }
+      else {
+        // Try any garment of this category
+        const any = garmentLibrary.find(g => g.type === selectedCategory);
+        onGarmentChange(any ? any.id : null);
+      }
     }
-  }, [selectedType, selectedSize, garmentLibrary, viewSide]);
+  }, [selectedCategory, selectedSize, garmentLibrary, viewSide]);
 
   const handleWidthChange = (newWidth) => {
     const w = parseFloat(newWidth) || 0;
@@ -239,55 +271,92 @@ function ControlPanel({
         />
       </section>
 
-      {/* Garment Type Selection */}
+      {/* Garment Fit */}
       <section className="panel-section">
         <h3 className="section-title">
           <span className="step-number">2</span>
-          Garment Type
+          Garment Fit
         </h3>
         <div className="type-grid">
-          {(garmentLibrary && garmentLibrary.length > 0 ? availableTypes : GARMENT_TYPES_FILTER).map((type) => (
+          {GARMENT_FITS.map((fit) => (
+            <button
+              key={fit}
+              className={`type-btn ${selectedFit === fit ? 'active' : ''}`}
+              onClick={() => {
+                setSelectedFit(fit);
+                // Reset size to appropriate default when switching fit
+                if (fit === 'Kids' && !KIDS_SIZES.includes(selectedSize)) {
+                  onSizeChange('YM');
+                } else if (fit !== 'Kids' && !ADULT_SIZES.includes(selectedSize)) {
+                  onSizeChange('L');
+                }
+              }}
+            >
+              {fit}
+            </button>
+          ))}
+        </div>
+        <p className="section-hint">Choose who the garment is designed for.</p>
+      </section>
+
+      {/* Garment Category */}
+      <section className="panel-section">
+        <h3 className="section-title">
+          <span className="step-number">3</span>
+          Garment Category
+        </h3>
+        <div className="type-grid">
+          {availableCategories.map((type) => (
             <button
               key={type}
-              className={`type-btn ${selectedType === type ? 'active' : ''}`}
-              onClick={() => setSelectedType(type)}
+              className={`type-btn ${selectedCategory === type ? 'active' : ''}`}
+              onClick={() => setSelectedCategory(type)}
             >
               {type}
             </button>
           ))}
         </div>
+        <p className="section-hint">Select the type of garment.</p>
       </section>
 
-      {/* Garment Selector (filtered by type) */}
-      {filteredGarments.length > 0 && (
-        <section className="panel-section">
-          <h3 className="section-title">
-            <span className="step-number">3</span>
-            Select Garment
-          </h3>
-          <select
-            className="garment-select"
-            value={selectedGarmentId || 'default'}
-            onChange={(e) => onGarmentChange(e.target.value === 'default' ? null : e.target.value)}
-          >
-            <option value="default">Default (from size chart)</option>
-            {filteredGarments.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.description || g.name} — {g.size} {g.side ? `(${g.side})` : ''} {g.color ? `[${g.color}]` : ''}
-              </option>
-            ))}
-          </select>
-        </section>
-      )}
+      {/* Select Garment */}
+      <section className="panel-section">
+        <h3 className="section-title">
+          <span className="step-number">4</span>
+          Select Garment
+        </h3>
+        <div className="garment-search-wrapper">
+          <input
+            type="text"
+            className="garment-search-input"
+            placeholder="Search by style, brand or color..."
+            value={garmentSearch}
+            onChange={(e) => setGarmentSearch(e.target.value)}
+          />
+        </div>
+        <select
+          className="garment-select"
+          value={selectedGarmentId || 'default'}
+          onChange={(e) => onGarmentChange(e.target.value === 'default' ? null : e.target.value)}
+        >
+          <option value="default">Default (from size chart)</option>
+          {filteredGarments.map((g) => (
+            <option key={g.id} value={g.id}>
+              {g.description || g.styleNo || g.name || 'Garment'} — {g.size} {g.side ? `(${g.side})` : ''} {g.color ? `[${g.color}]` : ''}
+            </option>
+          ))}
+        </select>
+        <p className="section-hint">Example: G5000, Gildan 5000, Comfort Colors</p>
+      </section>
 
       {/* Size Selection */}
       <section className="panel-section">
         <h3 className="section-title">
-          <span className="step-number">4</span>
+          <span className="step-number">5</span>
           Select Size ({selectedSize})
         </h3>
         <div className="size-grid">
-          {SIZE_ORDER.map((size) => (
+          {availableSizes.map((size) => (
             <button
               key={size}
               className={`size-btn ${selectedSize === size ? 'active' : ''}`}
@@ -325,7 +394,7 @@ function ControlPanel({
       {/* Artwork Size */}
       <section className="panel-section">
         <h3 className="section-title">
-          <span className="step-number">5</span>
+          <span className="step-number">6</span>
           Artwork Size
           <button
             className="preset-manage-btn"
@@ -479,7 +548,7 @@ function ControlPanel({
       {/* Artwork Area Placement */}
       <section className="panel-section">
         <h3 className="section-title">
-          <span className="step-number">6</span>
+          <span className="step-number">7</span>
           Artwork Area
         </h3>
         <div className="area-settings-grid">
@@ -541,7 +610,7 @@ function ControlPanel({
       {/* Color Selection */}
       <section className="panel-section">
         <h3 className="section-title">
-          <span className="step-number">7</span>
+          <span className="step-number">8</span>
           Select Color
         </h3>
         <div className="color-grid">
@@ -589,7 +658,7 @@ function ControlPanel({
       {artwork && (
         <section className="panel-section">
           <h3 className="section-title">
-            <span className="step-number">8</span>
+            <span className="step-number">9</span>
             Adjust Position
           </h3>
           <div className="adjustment-controls">
@@ -633,7 +702,7 @@ function ControlPanel({
       {/* Size Comparison */}
       <section className="panel-section">
         <h3 className="section-title">
-          <span className="step-number">9</span>
+          <span className="step-number">10</span>
           Size Comparison
         </h3>
         <div className="scaling-mode-toggle">

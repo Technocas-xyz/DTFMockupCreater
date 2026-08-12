@@ -178,6 +178,35 @@
   color: var(--primary);
 }
 
+.section-hint {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin: 4px 0 0;
+  font-style: italic;
+}
+
+.garment-search-wrapper {
+  margin-bottom: 8px;
+}
+
+.garment-search-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.garment-search-input:focus {
+  border-color: var(--primary);
+}
+
+.garment-search-input::placeholder {
+  color: #94a3b8;
+}
+
 .preset-manager {
   background: #f8fafc;
   border: 1px solid var(--border);

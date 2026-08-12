@@ -7,7 +7,7 @@ const GARMENT_TYPES = ['T-Shirt', 'Hoodie', 'Women T-Shirt', 'Sweatshirt', 'Long
 const STORAGE_KEY = 'garment-library';
 const MAX_GARMENTS = 500;
 const SIZE_OPTIONS = ['2T','3T','4T','5T','YS','YM','YL','YXL','XS','S','M','L','XL','2XL','3XL','4XL','5XL'];
-const GENDER_OPTIONS = ['Unisex', 'Male', 'Female'];
+const GENDER_OPTIONS = ['Men', 'Women', 'Unisex', 'Kids'];
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
 function trimTransparentPixels(imageDataUrl) {
@@ -86,11 +86,11 @@ function GarmentManager({ onUseAsMockup }) {
   const [modalDragOver, setModalDragOver] = useState(false);
   const [modalFields, setModalFields] = useState({
     description: '',
-    gender: 'Unisex',
+    gender: 'Men',
     brand: '',
     styleNo: '',
     type: 'T-Shirt',
-    size: 'XL',
+    size: 'L',
     side: 'front',
     color: '',
     colorHex: '#000000',
@@ -343,7 +343,7 @@ function GarmentManager({ onUseAsMockup }) {
     setShowAddModal(false);
     setModalImage(null);
     setModalFields({
-      description: '', gender: 'Unisex', brand: '', styleNo: '',
+      description: '', gender: 'Men', brand: '', styleNo: '',
       type: 'T-Shirt', size: 'XL', side: 'front', color: '', colorHex: '#000000', autoTrim: true,
     });
     setModalBodyMapping({ shirtWidthInches: 20, shirtHeightInches: 29, widthInches: 13, heightInches: 14.5, topOffsetInches: 3 });
