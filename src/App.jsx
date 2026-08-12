@@ -40,7 +40,7 @@ function App() {
   const [viewSide, setViewSide] = useState('front');
   const [artworkPosition, setArtworkPosition] = useState({ x: 0, y: 0 });
   const artworkScale = 1;
-  const [artworkAreaSettings, setArtworkAreaSettings] = useState({ width: 18, height: 24, topOffset: 6 });
+  const [artworkAreaSettings, setArtworkAreaSettings] = useState({ width: 18, height: 24, topOffset: 7 });
   const [selectedMockupSizes, setSelectedMockupSizes] = useState(
     SIZE_ORDER.reduce((acc, size) => ({ ...acc, [size]: false }), {})
   );
