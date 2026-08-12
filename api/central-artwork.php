@@ -133,7 +133,8 @@ if ($action === 'upload') {
         jsonError(500, $e->getMessage());
     }
 
-    // Forward to PrintShop's upload endpoint
+    // Build multipart POST to PrintShop — try the upload endpoint first,
+    // fall back to the save endpoint with vault token if upload doesn't exist.
     $postFields = [
         'token' => $vaultToken,
         'file' => new CURLFile(
@@ -146,7 +147,12 @@ if ($action === 'upload') {
     foreach (['entity_key', 'folder', 'lifecycle_code', 'file_name'] as $field) {
         if (!empty($_POST[$field])) $postFields[$field] = $_POST[$field];
     }
+    // Also pass lifecycle_code as 'kind' for compatibility with save endpoint
+    if (!empty($_POST['lifecycle_code'])) {
+        $postFields['kind'] = $_POST['lifecycle_code'];
+    }
 
+    // Try dedicated upload endpoint first
     $curl = curl_init($backend . '/artworks/studio/upload');
     curl_setopt_array($curl, [
         CURLOPT_RETURNTRANSFER => true,
@@ -159,6 +165,22 @@ if ($action === 'upload') {
     $status = curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
     $error = curl_error($curl);
     curl_close($curl);
+
+    // If upload endpoint returned 404, try the save endpoint (older PrintShop versions)
+    if ($status === 404 || $status === 405) {
+        $curl = curl_init($backend . '/artworks/studio/save');
+        curl_setopt_array($curl, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => $postFields,
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_TIMEOUT => 120,
+        ]);
+        $body = curl_exec($curl);
+        $status = curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
+        $error = curl_error($curl);
+        curl_close($curl);
+    }
 
     if ($body === false) jsonError(502, 'Upload service unavailable', $error);
     http_response_code($status ?: 502);

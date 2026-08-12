@@ -349,6 +349,9 @@ function Vault({ onOpenAsset }) {
 
       const res = await fetch(`${apiBase}/central-artwork.php?action=upload`, {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token') || ''}`,
+        },
         body: formData,
       });
       const data = await res.json();
