@@ -13,6 +13,7 @@ import GangSheet from './components/GangSheet';
 import AIArtworkLab from './components/AIArtworkLab';
 import UserManagement from './components/UserManagement';
 import GarmentTypes from './components/GarmentTypes';
+import BatchProcessor from './components/BatchProcessor';
 import MockupEngineV2 from './components/MockupEngineV2';
 import Vault from './components/Vault';
 import GangSheetCalculator from './components/GangSheetCalculator';
@@ -477,6 +478,10 @@ function App() {
 
     if (currentPage === 'garment-types') {
       return <GarmentTypes />;
+    }
+
+    if (currentPage === 'batch') {
+      return <BatchProcessor />;
     }
 
     if (currentPage === 'mockupv2') {

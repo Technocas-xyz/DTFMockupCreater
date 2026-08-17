@@ -7,6 +7,7 @@ const menuItems = [
     { icon: 'bgremover', label: 'Artwork Editor', page: 'bgremover' },
     { icon: 'mockupv2', label: 'Mockup Preview', page: 'mockupv2' },
     { icon: 'garments', label: 'Garment Manager', page: 'garments' },
+    { icon: 'designs', label: 'Batch Processor', page: 'batch' },
   ]},
   { group: 'Post-Order Process', items: [
     { icon: 'gangsheet', label: 'Gang Sheet', page: 'gangsheet' },

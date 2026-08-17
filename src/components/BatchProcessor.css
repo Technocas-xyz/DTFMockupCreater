@@ -1,0 +1,99 @@
+.batch-page { padding: 24px; overflow-y: auto; height: 100%; }
+
+.batch-header h1 { font-size: 22px; font-weight: 700; margin: 0; color: #1e293b; }
+.batch-header p { font-size: 13px; color: #64748b; margin: 4px 0 0; }
+
+/* Settings */
+.batch-settings {
+  display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end;
+  margin: 20px 0; padding: 16px; background: white; border-radius: 10px;
+  border: 1px solid #e2e8f0;
+}
+.batch-setting-group { display: flex; flex-direction: column; gap: 6px; }
+.batch-setting-group label { font-size: 11px; font-weight: 600; text-transform: uppercase; color: #64748b; letter-spacing: 0.04em; }
+.batch-color-row { display: flex; gap: 4px; flex-wrap: wrap; }
+.batch-color-btn { width: 28px; height: 28px; border-radius: 50%; cursor: pointer; transition: transform 0.15s; }
+.batch-color-btn:hover { transform: scale(1.15); }
+.batch-color-btn.active { box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.4); transform: scale(1.1); }
+.batch-select { padding: 7px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13px; background: white; }
+.batch-garment-status { font-size: 12px; color: #10b981; font-weight: 500; }
+
+/* Upload Zone */
+.batch-upload-zone {
+  border: 2px dashed #cbd5e1; border-radius: 12px; padding: 40px 20px;
+  text-align: center; cursor: pointer; transition: all 0.2s; background: #fafbfc;
+  margin-bottom: 20px;
+}
+.batch-upload-zone:hover { border-color: #2563eb; background: #f0f7ff; }
+.batch-upload-content { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.batch-upload-icon { font-size: 32px; }
+.batch-upload-text { font-size: 14px; color: #475569; font-weight: 500; }
+.batch-upload-hint { font-size: 11px; color: #94a3b8; }
+
+/* File List */
+.batch-file-list { background: white; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; margin-bottom: 20px; }
+.batch-file-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.batch-file-header span { font-size: 13px; font-weight: 600; color: #1e293b; }
+.batch-file-actions { display: flex; gap: 8px; }
+.batch-file-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.batch-file-item {
+  display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+  background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 12px;
+}
+.batch-file-name { font-weight: 500; color: #1e293b; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.batch-file-size { color: #94a3b8; font-size: 11px; }
+.batch-file-remove { border: none; background: none; color: #ef4444; cursor: pointer; font-size: 16px; font-weight: 700; padding: 0 4px; }
+
+/* Progress */
+.batch-progress { margin-bottom: 20px; }
+.batch-progress-bar { height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
+.batch-progress-fill { height: 100%; background: linear-gradient(90deg, #2563eb, #3b82f6); border-radius: 4px; transition: width 0.3s; }
+.batch-progress-info { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; color: #64748b; }
+
+/* Results */
+.batch-results { background: white; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; }
+.batch-results-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
+.batch-results-header h3 { font-size: 15px; font-weight: 600; margin: 0; }
+.batch-results-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.batch-results-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+
+.batch-result-card {
+  border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; background: #fafbfc;
+  transition: box-shadow 0.2s;
+}
+.batch-result-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
+.batch-result-card.error { border-color: #fecaca; background: #fef2f2; }
+
+.batch-result-previews { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.batch-result-thumb { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.batch-result-thumb img { width: 100%; height: 100px; object-fit: contain; border-radius: 6px; border: 1px solid #e2e8f0; background: repeating-conic-gradient(#f1f5f9 0% 25%, white 0% 50%) 50%/16px 16px; }
+.batch-result-label { font-size: 10px; font-weight: 600; color: #64748b; text-transform: uppercase; }
+
+.batch-result-info { margin-bottom: 8px; }
+.batch-result-filename { display: block; font-size: 12px; font-weight: 500; color: #1e293b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.batch-result-dims { display: block; font-size: 11px; color: #64748b; margin-top: 2px; }
+
+.batch-result-btns { display: flex; gap: 6px; }
+.batch-result-error { text-align: center; padding: 20px 10px; }
+.batch-result-err-msg { display: block; font-size: 11px; color: #dc2626; margin-top: 6px; }
+
+/* Buttons */
+.batch-btn { padding: 8px 14px; border-radius: 7px; font-size: 12px; font-weight: 500; border: 1px solid #e2e8f0; background: white; color: #1e293b; cursor: pointer; transition: all 0.15s; }
+.batch-btn:hover { border-color: #2563eb; }
+.batch-btn-primary { background: #2563eb; color: white; border-color: #2563eb; }
+.batch-btn-primary:hover { background: #1d4ed8; }
+.batch-btn-ghost { background: transparent; color: #64748b; border-color: transparent; }
+.batch-btn-ghost:hover { color: #1e293b; }
+.batch-btn-danger { background: #ef4444; color: white; border-color: #ef4444; }
+.batch-btn-sm { padding: 5px 10px; font-size: 11px; border: 1px solid #e2e8f0; border-radius: 5px; background: white; cursor: pointer; font-weight: 500; }
+.batch-btn-sm:hover { border-color: #2563eb; color: #2563eb; }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .batch-page { padding: 12px; }
+  .batch-settings { flex-direction: column; gap: 12px; }
+  .batch-upload-zone { padding: 24px 12px; }
+  .batch-results-grid { grid-template-columns: 1fr; }
+  .batch-file-header { flex-direction: column; gap: 8px; align-items: flex-start; }
+  .batch-results-header { flex-direction: column; align-items: flex-start; }
+}
