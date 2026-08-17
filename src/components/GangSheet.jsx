@@ -61,7 +61,7 @@ function maxRectsPack(items, sheetWidth, hGap, vGap, margins, maxHeight, allowRo
       }
     }
 
-    if (!bestRect) break; // Cannot place — item overflows
+    if (!bestRect) continue; // Skip this item — try remaining ones (they might be smaller) — item overflows
 
     const pw = bestRotated ? item.h : item.w;
     const ph = bestRotated ? item.w : item.h;
