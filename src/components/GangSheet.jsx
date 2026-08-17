@@ -140,24 +140,47 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
   const availableWidth = sheetWidth - marg.left - marg.right;
 
   if (!tightPack) {
-    // Simple row-by-row packing (single sheet, no height limit for simple mode)
-    items.sort((a, b) => b.h - a.h);
+    // Row-by-row packing with rotation for optimal fit
+    // Try each item in both orientations — pick the one that fills the row better
+    items.sort((a, b) => b.h - a.h || b.w - a.w);
     const placed = [];
     let currentY = marg.top;
     let rowX = marg.left;
     let rowMaxH = 0;
 
     for (const item of items) {
-      const endPos = rowX > marg.left ? rowX + hGap + item.w : rowX + item.w;
-      if (rowX > marg.left && endPos > sheetWidth - marg.right + 0.01) {
+      // Try normal orientation
+      const normalFits = (rowX > marg.left ? rowX + hGap + item.w : rowX + item.w) <= sheetWidth - marg.right + 0.01;
+      // Try rotated orientation
+      const rotW = item.h, rotH = item.w;
+      const rotatedFits = item.w !== item.h && (rowX > marg.left ? rowX + hGap + rotW : rowX + rotW) <= sheetWidth - marg.right + 0.01;
+
+      let useRotated = false;
+      let useW = item.w, useH = item.h;
+
+      if (normalFits && rotatedFits) {
+        // Both fit — prefer the one that results in less row height
+        useRotated = rotH < item.h;
+      } else if (!normalFits && rotatedFits) {
+        // Only rotated fits in current row
+        useRotated = true;
+      } else if (!normalFits && !rotatedFits) {
+        // Neither fits — start new row, then pick shortest orientation
         currentY += rowMaxH + vGap;
         rowX = marg.left;
         rowMaxH = 0;
+        // In new row, pick orientation that's shorter (less height used)
+        if (item.w !== item.h && rotH < item.h && rotW <= availableWidth) {
+          useRotated = true;
+        }
       }
+
+      if (useRotated) { useW = rotW; useH = rotH; }
+
       const placeX = rowX > marg.left ? rowX + hGap : rowX;
-      placed.push({ ...item, x: placeX, y: currentY, rotated: false });
-      rowX = placeX + item.w;
-      rowMaxH = Math.max(rowMaxH, item.h);
+      placed.push({ ...item, x: placeX, y: currentY, w: useW, h: useH, rotated: useRotated });
+      rowX = placeX + useW;
+      rowMaxH = Math.max(rowMaxH, useH);
     }
     currentY += rowMaxH + marg.bottom;
 
