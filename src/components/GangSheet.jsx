@@ -610,7 +610,7 @@ function GangSheet({ sharedArtwork, onRegisterExport }) {
         updated.heightInches = parseFloat(value) || 0;
         updated.widthInches = parseFloat((updated.heightInches * art.aspect).toFixed(2));
       } else if (field === 'repetitions') {
-        updated.repetitions = Math.max(1, Math.min(100, parseInt(value) || 1));
+        updated.repetitions = Math.max(1, parseInt(value) || 1);
       }
       return updated;
     }));
@@ -1018,7 +1018,7 @@ function GangSheet({ sharedArtwork, onRegisterExport }) {
                     </div>
                     <div className="gs-input-group">
                       <label>×</label>
-                      <input type="number" min="1" max="100" value={art.repetitions}
+                      <input type="number" min="1" value={art.repetitions}
                         onChange={(e) => updateArtwork(art.id, 'repetitions', e.target.value)} />
                     </div>
                   </div>
