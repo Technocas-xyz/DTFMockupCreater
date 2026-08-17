@@ -8,7 +8,8 @@ const DPI = 300;
 const COST_PER_FOOT = 5;
 
 // ─── ADVANCED MAXRECTS BIN PACKING ───────────────────────────────────────────
-// Improved MaxRects-BSSF (Best Short Side Fit) with gap-filling optimization
+// Optimized for minimum height and maximum utilization on a fixed-width roll.
+// Uses Best Area Fit with Bottom-Left gravity and aggressive rotation.
 function packItems(items, sheetWidth, hGap, vGap, margins, maxHeight) {
   const marg = margins || { top: 0, bottom: 0, left: 0, right: 0 };
   const availW = sheetWidth - marg.left - marg.right;
@@ -19,106 +20,99 @@ function packItems(items, sheetWidth, hGap, vGap, margins, maxHeight) {
   let usedMaxY = marg.top;
 
   for (const item of items) {
-    const iw = item.w + hGap;
-    const ih = item.h + vGap;
-    const iwR = item.h + hGap; // rotated width
-    const ihR = item.w + vGap; // rotated height
-
-    let bestScore1 = Infinity, bestScore2 = Infinity;
-    let bestRect = null, bestRotated = false;
+    // Try both orientations — pick the one that wastes least area
+    let bestScore = Infinity;
+    let bestRect = null;
+    let bestRotated = false;
 
     for (const rect of freeRects) {
-      // Normal orientation — BSSF scoring
-      if (item.w <= rect.w + 0.01 && item.h <= rect.h + 0.01) {
-        const leftover_h = Math.abs(rect.w - item.w);
-        const leftover_v = Math.abs(rect.h - item.h);
-        const score1 = Math.min(leftover_h, leftover_v);
-        const score2 = Math.max(leftover_h, leftover_v);
-        // Prefer lowest Y (bottom-left), then best fit
-        const yScore = rect.y * 10000 + score1;
-        if (yScore < bestScore1 || (yScore === bestScore1 && score2 < bestScore2)) {
-          bestScore1 = yScore;
-          bestScore2 = score2;
+      // Normal orientation
+      if (item.w + 0.01 <= rect.w && item.h + 0.01 <= rect.h) {
+        // Score: minimize the resulting Y+height (keeps total height low)
+        // Secondary: minimize wasted area in the chosen free rect
+        const endY = rect.y + item.h;
+        const wastedArea = (rect.w * rect.h) - (item.w * item.h);
+        // Prefer: lowest endY first, then least wasted area, then leftmost
+        const score = endY * 100000 + wastedArea * 0.1 + rect.x;
+        if (score < bestScore) {
+          bestScore = score;
           bestRect = rect;
           bestRotated = false;
         }
       }
-      // Rotated orientation — try 90° rotation if it fits
-      if (item.h <= rect.w + 0.01 && item.w <= rect.h + 0.01 && (item.w !== item.h)) {
-        const leftover_h = Math.abs(rect.w - item.h);
-        const leftover_v = Math.abs(rect.h - item.w);
-        const score1 = Math.min(leftover_h, leftover_v);
-        const score2 = Math.max(leftover_h, leftover_v);
-        const yScore = rect.y * 10000 + score1;
-        if (yScore < bestScore1 || (yScore === bestScore1 && score2 < bestScore2)) {
-          bestScore1 = yScore;
-          bestScore2 = score2;
+      // Rotated orientation (90°) — only if dimensions differ
+      if (item.w !== item.h && item.h + 0.01 <= rect.w && item.w + 0.01 <= rect.h) {
+        const endY = rect.y + item.w; // rotated: height becomes item.w
+        const wastedArea = (rect.w * rect.h) - (item.w * item.h);
+        const score = endY * 100000 + wastedArea * 0.1 + rect.x;
+        if (score < bestScore) {
+          bestScore = score;
           bestRect = rect;
           bestRotated = true;
         }
       }
     }
 
-    if (!bestRect) break; // Can't place — will go to next sheet
+    if (!bestRect) break; // Can't fit — overflow to next sheet
 
     const pw = bestRotated ? item.h : item.w;
     const ph = bestRotated ? item.w : item.h;
     const px = bestRect.x;
     const py = bestRect.y;
 
-    placed.push({
-      ...item,
-      x: px,
-      y: py,
-      w: pw,
-      h: ph,
-      rotated: bestRotated,
-    });
+    placed.push({ ...item, x: px, y: py, w: pw, h: ph, rotated: bestRotated });
     usedMaxY = Math.max(usedMaxY, py + ph);
 
-    // Split free rects around placed item (with gaps)
-    const occX = px;
-    const occY = py;
-    const occW = pw + hGap;
-    const occH = ph + vGap;
+    // Split free rects using Guillotine split (shorter leftover axis)
+    const occX = px, occY = py;
+    const occW = pw + hGap, occH = ph + vGap;
 
     const newFree = [];
     for (const fr of freeRects) {
+      // No overlap — keep as is
       if (occX >= fr.x + fr.w || occX + occW <= fr.x ||
           occY >= fr.y + fr.h || occY + occH <= fr.y) {
         newFree.push(fr);
         continue;
       }
-      // Left
-      if (occX > fr.x) newFree.push({ x: fr.x, y: fr.y, w: occX - fr.x, h: fr.h });
-      // Right
-      if (occX + occW < fr.x + fr.w) newFree.push({ x: occX + occW, y: fr.y, w: (fr.x + fr.w) - (occX + occW), h: fr.h });
-      // Top
-      if (occY > fr.y) newFree.push({ x: fr.x, y: fr.y, w: fr.w, h: occY - fr.y });
-      // Bottom
-      if (occY + occH < fr.y + fr.h) newFree.push({ x: fr.x, y: occY + occH, w: fr.w, h: (fr.y + fr.h) - (occY + occH) });
+      // Right remainder
+      if (occX + occW < fr.x + fr.w) {
+        newFree.push({ x: occX + occW, y: fr.y, w: (fr.x + fr.w) - (occX + occW), h: fr.h });
+      }
+      // Left remainder
+      if (occX > fr.x) {
+        newFree.push({ x: fr.x, y: fr.y, w: occX - fr.x, h: fr.h });
+      }
+      // Below remainder
+      if (occY + occH < fr.y + fr.h) {
+        newFree.push({ x: fr.x, y: occY + occH, w: fr.w, h: (fr.y + fr.h) - (occY + occH) });
+      }
+      // Above remainder (rare but valid)
+      if (occY > fr.y) {
+        newFree.push({ x: fr.x, y: fr.y, w: fr.w, h: occY - fr.y });
+      }
     }
 
-    // Prune contained rects
+    // Prune: remove rects that are fully contained in another
     freeRects = [];
     for (let i = 0; i < newFree.length; i++) {
       const a = newFree[i];
-      if (a.w < 0.25 || a.h < 0.25) continue;
+      if (a.w < 0.3 || a.h < 0.3) continue; // too small to be useful
       let contained = false;
       for (let j = 0; j < newFree.length; j++) {
         if (i === j) continue;
         const b = newFree[j];
-        if (a.x >= b.x && a.y >= b.y && a.x + a.w <= b.x + b.w && a.y + a.h <= b.y + b.h) {
+        if (a.x >= b.x && a.y >= b.y && a.x + a.w <= b.x + b.w + 0.01 && a.y + a.h <= b.y + b.h + 0.01) {
           contained = true;
           break;
         }
       }
       if (!contained) freeRects.push(a);
     }
-    // Safety: cap free rects to prevent memory explosion
-    if (freeRects.length > 200) {
+    // Cap free rects
+    if (freeRects.length > 300) {
       freeRects.sort((a, b) => (b.w * b.h) - (a.w * a.h));
-      freeRects = freeRects.slice(0, 100);
+      freeRects = freeRects.slice(0, 150);
     }
   }
 
@@ -195,20 +189,19 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
   // Strategy: Pack items per-sheet with MAX_SHEET_HEIGHT constraint,
   // trying multiple sort strategies to find the best packing for each sheet.
   // Remaining items carry over to the next sheet, ensuring each sheet is fully utilized.
+  // More strategies = better chance of finding optimal layout
   const sortStrategies = [
-    (a, b) => (b.w * b.h) - (a.w * a.h),
-    (a, b) => b.h - a.h,
-    (a, b) => b.w - a.w,
+    (a, b) => (b.w * b.h) - (a.w * a.h), // Largest area first
+    (a, b) => b.h - a.h, // Tallest first
+    (a, b) => b.w - a.w, // Widest first
+    (a, b) => Math.max(b.w, b.h) - Math.max(a.w, a.h), // Longest side first
+    (a, b) => (b.w * b.h) - (a.w * a.h) || b.w - a.w, // Area then width
+    (a, b) => b.h - a.h || b.w - a.w, // Height then width
+    (a, b) => (b.w / b.h) - (a.w / a.h), // Widest aspect ratio first
+    (a, b) => (a.w / a.h) - (b.w / b.h), // Tallest aspect ratio first
+    (a, b) => Math.min(b.w, b.h) - Math.min(a.w, a.h), // Largest short side first
+    (a, b) => (b.w + b.h) - (a.w + a.h), // Largest perimeter first
   ];
-  // Only add extra strategies if there are mixed sizes
-  const hasMultipleSizes = items.length > 1 && new Set(items.map(i => `${i.w}_${i.h}`)).size > 1;
-  if (hasMultipleSizes) {
-    sortStrategies.push(
-      (a, b) => Math.max(b.w, b.h) - Math.max(a.w, a.h),
-      (a, b) => (b.w * b.h) - (a.w * a.h) || b.w - a.w,
-      (a, b) => b.h - a.h || b.w - a.w,
-    );
-  }
 
   const sheets = [];
   let remaining = [...items];
@@ -219,16 +212,29 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
     let bestResult = null;
     let bestPlacedCount = 0;
     let bestHeight = Infinity;
+    let bestUtilization = 0;
 
     for (const sortFn of sortStrategies) {
       const sortedRemaining = [...remaining].sort(sortFn);
       const result = packItems(sortedRemaining, sheetWidth, hGap, vGap, marg, MAX_SHEET_HEIGHT);
-      // Prefer: most items placed, then least height used
-      if (result.placed.length > bestPlacedCount ||
-          (result.placed.length === bestPlacedCount && result.totalHeight < bestHeight)) {
+      // Calculate utilization (area used / total area)
+      const usedArea = result.placed.reduce((sum, p) => sum + p.w * p.h, 0);
+      const totalArea = sheetWidth * result.totalHeight;
+      const utilization = totalArea > 0 ? usedArea / totalArea : 0;
+
+      // Prefer: least height with all items placed, then best utilization
+      const allPlaced = result.placed.length >= remaining.length;
+      if (allPlaced && result.totalHeight < bestHeight) {
         bestPlacedCount = result.placed.length;
         bestHeight = result.totalHeight;
         bestResult = result;
+        bestUtilization = utilization;
+      } else if (!allPlaced && (result.placed.length > bestPlacedCount ||
+          (result.placed.length === bestPlacedCount && result.totalHeight < bestHeight))) {
+        bestPlacedCount = result.placed.length;
+        bestHeight = result.totalHeight;
+        bestResult = result;
+        bestUtilization = utilization;
       }
     }
 
