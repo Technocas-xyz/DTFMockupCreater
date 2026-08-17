@@ -36,10 +36,11 @@ function maxRectsPack(items, sheetWidth, hGap, vGap, margins, maxHeight, allowRo
     for (const rect of freeRects) {
       // Normal orientation: can it fit?
       if (item.w <= rect.w + 0.001 && item.h <= rect.h + 0.001) {
-        // Score = endY (primary, lower is better) + leftover short side (secondary)
+        // Score: endY*10000 + x*10 + shortSideFit
+        // This prioritizes: lowest bottom edge > leftmost > tightest fit
         const endY = rect.y + item.h;
         const shortSide = Math.min(rect.w - item.w, rect.h - item.h);
-        const score = endY * 1000000 + shortSide;
+        const score = endY * 10000 + rect.x * 10 + shortSide;
         if (score < bestScore) {
           bestScore = score;
           bestRect = rect;
@@ -49,9 +50,9 @@ function maxRectsPack(items, sheetWidth, hGap, vGap, margins, maxHeight, allowRo
       // Rotated orientation (only if different and allowed)
       if (allowRotation && Math.abs(item.w - item.h) > 0.01) {
         if (item.h <= rect.w + 0.001 && item.w <= rect.h + 0.001) {
-          const endY = rect.y + item.w; // height after rotation = original width
+          const endY = rect.y + item.w;
           const shortSide = Math.min(rect.w - item.h, rect.h - item.w);
-          const score = endY * 1000000 + shortSide;
+          const score = endY * 10000 + rect.x * 10 + shortSide;
           if (score < bestScore) {
             bestScore = score;
             bestRect = rect;
@@ -61,7 +62,7 @@ function maxRectsPack(items, sheetWidth, hGap, vGap, margins, maxHeight, allowRo
       }
     }
 
-    if (!bestRect) continue; // Skip this item — try remaining ones (they might be smaller) — item overflows
+    if (!bestRect) continue; // Skip — try smaller items that might fit
 
     const pw = bestRotated ? item.h : item.w;
     const ph = bestRotated ? item.w : item.h;
@@ -1226,6 +1227,27 @@ function GangSheet({ sharedArtwork, onRegisterExport }) {
             setLayoutData(newLayout);
           }}>
             ↻ Recalculate Layout
+          </button>
+          <button className="gs-btn-optimize" onClick={async () => {
+            if (artworks.length === 0) return;
+            const prevHeight = totalHeight;
+            // Run optimization with rotation enabled for maximum packing
+            const optimized = calculateLayout(artworks, SHEET_WIDTH_INCHES, hGap, vGap, margins, true);
+            // Also try without rotation
+            const noRot = calculateLayout(artworks, SHEET_WIDTH_INCHES, hGap, vGap, margins, false);
+            const optH = optimized.sheets.reduce((s, sh) => s + sh.totalHeight, 0);
+            const noRotH = noRot.sheets.reduce((s, sh) => s + sh.totalHeight, 0);
+            const best = optH <= noRotH ? optimized : noRot;
+            const bestH = Math.min(optH, noRotH);
+            setLayoutData(best);
+            const saved = prevHeight - bestH;
+            if (saved > 0.1) {
+              alert(`✓ Optimized! Height: ${Math.ceil(bestH)}" (saved ${saved.toFixed(1)}" / ${(saved * SHEET_WIDTH_INCHES).toFixed(0)} sq.in.)`);
+            } else {
+              alert(`✓ Already optimal at ${Math.ceil(bestH)}"`);
+            }
+          }}>
+            ⚡ Optimize Now
           </button>
         </div>
       </div>
