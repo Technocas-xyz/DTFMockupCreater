@@ -5,77 +5,95 @@ const SHEET_WIDTH = 22;
 const MAX_SHEET_HEIGHT = 108;
 const COST_PER_FOOT = 5;
 
-// Same packing algorithm as GangSheet (MaxRects-BSSF)
-function calculatePackedHeight(items, sheetWidth, hGap, vGap) {
+// Same optimized MaxRects packing as GangSheet — tests multiple sort orders, picks best
+function maxRectsPackCalc(items, sheetWidth, hGap, vGap) {
   if (items.length === 0) return 0;
 
   let freeRects = [{ x: 0, y: 0, w: sheetWidth, h: 99999 }];
-  let usedMaxY = 0;
+  const placed = [];
 
   for (const item of items) {
-    let bestScore1 = Infinity, bestScore2 = Infinity;
-    let bestRect = null, bestRotated = false;
+    let bestScore = Infinity;
+    let bestRect = null;
+    let bestRotated = false;
 
     for (const rect of freeRects) {
-      // Normal — only rotate if it makes item narrower
-      if (item.w <= rect.w + 0.01 && item.h <= rect.h + 0.01) {
-        const leftover_h = Math.abs(rect.w - item.w);
-        const leftover_v = Math.abs(rect.h - item.h);
-        const score1 = Math.min(leftover_h, leftover_v);
-        const score2 = Math.max(leftover_h, leftover_v);
-        const yScore = rect.y * 10000 + score1;
-        if (yScore < bestScore1 || (yScore === bestScore1 && score2 < bestScore2)) {
-          bestScore1 = yScore; bestScore2 = score2; bestRect = rect; bestRotated = false;
-        }
+      // Normal orientation
+      if (item.w <= rect.w + 0.001 && item.h <= rect.h + 0.001) {
+        const endY = rect.y + item.h;
+        const shortSide = Math.min(rect.w - item.w, rect.h - item.h);
+        const score = endY * 10000 + rect.x * 10 + shortSide;
+        if (score < bestScore) { bestScore = score; bestRect = rect; bestRotated = false; }
       }
-      // Rotated — only if height < width (makes narrower)
-      if (item.h < item.w && item.h <= rect.w + 0.01 && item.w <= rect.h + 0.01) {
-        const leftover_h = Math.abs(rect.w - item.h);
-        const leftover_v = Math.abs(rect.h - item.w);
-        const score1 = Math.min(leftover_h, leftover_v);
-        const score2 = Math.max(leftover_h, leftover_v);
-        const yScore = rect.y * 10000 + score1;
-        if (yScore < bestScore1 || (yScore === bestScore1 && score2 < bestScore2)) {
-          bestScore1 = yScore; bestScore2 = score2; bestRect = rect; bestRotated = true;
-        }
+      // Rotated orientation
+      if (Math.abs(item.w - item.h) > 0.01 && item.h <= rect.w + 0.001 && item.w <= rect.h + 0.001) {
+        const endY = rect.y + item.w;
+        const shortSide = Math.min(rect.w - item.h, rect.h - item.w);
+        const score = endY * 10000 + rect.x * 10 + shortSide;
+        if (score < bestScore) { bestScore = score; bestRect = rect; bestRotated = true; }
       }
     }
 
-    if (!bestRect) break;
+    if (!bestRect) continue; // Skip unfittable, try smaller items
 
     const pw = bestRotated ? item.h : item.w;
     const ph = bestRotated ? item.w : item.h;
-    usedMaxY = Math.max(usedMaxY, bestRect.y + ph);
+    const px = bestRect.x, py = bestRect.y;
+    placed.push({ x: px, y: py, w: pw, h: ph });
 
-    const occX = bestRect.x, occY = bestRect.y;
-    const occW = pw + hGap, occH = ph + vGap;
-
+    // Split free rects
+    const placedRect = { x: px, y: py, w: pw + hGap, h: ph + vGap };
     const newFree = [];
     for (const fr of freeRects) {
-      if (occX >= fr.x + fr.w || occX + occW <= fr.x || occY >= fr.y + fr.h || occY + occH <= fr.y) {
+      if (placedRect.x >= fr.x + fr.w || placedRect.x + placedRect.w <= fr.x ||
+          placedRect.y >= fr.y + fr.h || placedRect.y + placedRect.h <= fr.y) {
         newFree.push(fr); continue;
       }
-      if (occX > fr.x) newFree.push({ x: fr.x, y: fr.y, w: occX - fr.x, h: fr.h });
-      if (occX + occW < fr.x + fr.w) newFree.push({ x: occX + occW, y: fr.y, w: (fr.x + fr.w) - (occX + occW), h: fr.h });
-      if (occY > fr.y) newFree.push({ x: fr.x, y: fr.y, w: fr.w, h: occY - fr.y });
-      if (occY + occH < fr.y + fr.h) newFree.push({ x: fr.x, y: occY + occH, w: fr.w, h: (fr.y + fr.h) - (occY + occH) });
+      if (placedRect.x > fr.x) newFree.push({ x: fr.x, y: fr.y, w: placedRect.x - fr.x, h: fr.h });
+      if (placedRect.x + placedRect.w < fr.x + fr.w) newFree.push({ x: placedRect.x + placedRect.w, y: fr.y, w: (fr.x + fr.w) - (placedRect.x + placedRect.w), h: fr.h });
+      if (placedRect.y > fr.y) newFree.push({ x: fr.x, y: fr.y, w: fr.w, h: placedRect.y - fr.y });
+      if (placedRect.y + placedRect.h < fr.y + fr.h) newFree.push({ x: fr.x, y: placedRect.y + placedRect.h, w: fr.w, h: (fr.y + fr.h) - (placedRect.y + placedRect.h) });
     }
-
+    // Prune contained
     freeRects = [];
     for (let i = 0; i < newFree.length; i++) {
       const a = newFree[i];
-      if (a.w < 0.25 || a.h < 0.25) continue;
+      if (a.w < 0.1 || a.h < 0.1) continue;
       let contained = false;
       for (let j = 0; j < newFree.length; j++) {
         if (i === j) continue;
         const b = newFree[j];
-        if (a.x >= b.x && a.y >= b.y && a.x + a.w <= b.x + b.w && a.y + a.h <= b.y + b.h) { contained = true; break; }
+        if (a.x >= b.x - 0.001 && a.y >= b.y - 0.001 && a.x + a.w <= b.x + b.w + 0.001 && a.y + a.h <= b.y + b.h + 0.001) { contained = true; break; }
       }
       if (!contained) freeRects.push(a);
     }
+    if (freeRects.length > 500) { freeRects.sort((a, b) => (b.w * b.h) - (a.w * a.h)); freeRects = freeRects.slice(0, 250); }
   }
 
-  return usedMaxY;
+  let maxBottom = 0;
+  for (const p of placed) { if (p.y + p.h > maxBottom) maxBottom = p.y + p.h; }
+  return maxBottom;
+}
+
+function calculateOptimalHeight(items, sheetWidth, hGap, vGap) {
+  if (items.length === 0) return 0;
+  const sortStrategies = [
+    (a, b) => (b.w * b.h) - (a.w * a.h),
+    (a, b) => b.h - a.h || b.w - a.w,
+    (a, b) => b.w - a.w || b.h - a.h,
+    (a, b) => Math.max(b.w, b.h) - Math.max(a.w, a.h),
+    (a, b) => Math.min(b.w, b.h) - Math.min(a.w, a.h),
+    (a, b) => (b.w + b.h) - (a.w + a.h),
+    (a, b) => (b.w / b.h) - (a.w / a.h),
+    (a, b) => (a.w / a.h) - (b.w / b.h),
+  ];
+  let bestHeight = Infinity;
+  for (const sortFn of sortStrategies) {
+    const sorted = [...items].sort(sortFn);
+    const h = maxRectsPackCalc(sorted, sheetWidth, hGap, vGap);
+    if (h > 0 && h < bestHeight) bestHeight = h;
+  }
+  return bestHeight === Infinity ? 0 : bestHeight;
 }
 
 function GangSheetCalculator() {
@@ -109,9 +127,7 @@ function GangSheetCalculator() {
     if (items.length === 0) return null;
 
     // Sort by area (largest first) — same as GangSheet
-    items.sort((a, b) => (b.w * b.h) - (a.w * a.h));
-
-    const totalHeight = calculatePackedHeight(items, SHEET_WIDTH, hGap, vGap);
+    const totalHeight = calculateOptimalHeight(items, SHEET_WIDTH, hGap, vGap);
     const sheets = Math.ceil(totalHeight / MAX_SHEET_HEIGHT);
     const totalFeet = totalHeight / 12;
     const cost = totalFeet * COST_PER_FOOT;
@@ -157,7 +173,7 @@ function GangSheetCalculator() {
                   <td>{idx + 1}</td>
                   <td><input type="number" step="0.1" min="0.5" max="21" value={art.width} onChange={e => updateArtwork(art.id, 'width', e.target.value)} /></td>
                   <td><input type="number" step="0.1" min="0.5" max="108" value={art.height} onChange={e => updateArtwork(art.id, 'height', e.target.value)} /></td>
-                  <td><input type="number" step="1" min="1" max="500" value={art.qty} onChange={e => updateArtwork(art.id, 'qty', e.target.value)} /></td>
+                  <td><input type="number" step="1" min="1" value={art.qty} onChange={e => updateArtwork(art.id, 'qty', e.target.value)} /></td>
                   <td className="gsc-area">{(art.width * art.height).toFixed(1)} sq"</td>
                   <td>{artworks.length > 1 && <button className="gsc-btn-remove" onClick={() => removeArtwork(art.id)}>×</button>}</td>
                 </tr>
