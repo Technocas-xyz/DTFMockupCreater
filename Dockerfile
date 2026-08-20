@@ -16,11 +16,11 @@ RUN apt-get update && apt-get install -y libcurl4-openssl-dev libpq-dev && \
     docker-php-ext-install pdo pdo_mysql pdo_pgsql curl && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Set PHP settings for large uploads
-RUN echo "post_max_size = 50M" >> /usr/local/etc/php/conf.d/uploads.ini && \
-    echo "upload_max_filesize = 50M" >> /usr/local/etc/php/conf.d/uploads.ini && \
-    echo "memory_limit = 256M" >> /usr/local/etc/php/conf.d/uploads.ini && \
-    echo "max_execution_time = 60" >> /usr/local/etc/php/conf.d/uploads.ini
+# Gang sheets are the largest upload: a 22x108" sheet at 300 DPI is 6600x32400 px.
+RUN echo "post_max_size = 300M" >> /usr/local/etc/php/conf.d/uploads.ini && \
+    echo "upload_max_filesize = 300M" >> /usr/local/etc/php/conf.d/uploads.ini && \
+    echo "memory_limit = 512M" >> /usr/local/etc/php/conf.d/uploads.ini && \
+    echo "max_execution_time = 300" >> /usr/local/etc/php/conf.d/uploads.ini
 
 # Copy built React app to Apache document root
 COPY --from=builder /app/dist/ /var/www/html/
