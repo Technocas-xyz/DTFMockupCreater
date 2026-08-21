@@ -174,14 +174,13 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
 
   for (const strategy of ALL_STRATEGIES) {
     // Run each strategy TWICE: once with original dimensions, once with all items pre-rotated.
-    // This ensures the algorithm finds layouts where rotation benefits the GLOBAL arrangement,
-    // not just individual item placement (e.g., 13.4×10.6 → rotate all to 10.6×13.4 so 2 fit side-by-side).
+    // For pre-rotated items, disable per-item rotation so the packer respects the orientation.
     const orientations = [
-      [...items], // original
-      items.map(item => ({ ...item, w: item.h, h: item.w, preRotated: true })), // all pre-rotated
+      { items: [...items], disableRotation: false },
+      { items: items.map(item => ({ ...item, w: item.h, h: item.w, preRotated: true })), disableRotation: true },
     ];
 
-    for (const orientedItems of orientations) {
+    for (const { items: orientedItems, disableRotation } of orientations) {
       const sortedItems = [...orientedItems].sort(strategy.compare);
       const sheets = [];
       let remaining = [...sortedItems];
@@ -189,7 +188,8 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
       while (remaining.length > 0) {
         if (sheets.length >= 50) break;
 
-        const result = maxRectsPack(remaining, sheetWidth, hGap, vGap, marg, MAX_SHEET_HEIGHT, allowRotation);
+        // Key: pre-rotated pass uses allowRotation=false so items stay in rotated orientation
+        const result = maxRectsPack(remaining, sheetWidth, hGap, vGap, marg, MAX_SHEET_HEIGHT, !disableRotation);
 
         if (result.placed.length === 0) {
           const forced = remaining.shift();
@@ -203,7 +203,7 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
         // Mark pre-rotated items correctly
         const placedItems = result.placed.map(p => ({
           ...p,
-          rotated: p.preRotated ? !p.rotated : p.rotated, // if item was pre-rotated, flip the rotation flag
+          rotated: p.preRotated ? true : p.rotated, // pre-rotated items are always rotated relative to original
         }));
         sheets.push({ items: placedItems, totalHeight: result.totalHeight });
 
