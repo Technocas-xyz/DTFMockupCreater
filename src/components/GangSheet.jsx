@@ -1,11 +1,18 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import './GangSheet.css';
 import { detectApiBase } from '../utils/apiConfig';
+import { authFetch, apiError } from '../utils/authFetch';
+import { ALL_STRATEGIES } from '../utils/packingStrategies';
 
 const SHEET_WIDTH_INCHES = 22;
 const MAX_SHEET_HEIGHT = 108;
 const DPI = 300;
 const COST_PER_FOOT = 5;
+
+// The DTF customer list keys rows by customer_id, supplier_id, or — when an order
+// has neither — the lowercased customer name, so a selection is only a real
+// customer id when it parses as a UUID.
+const isUuid = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''));
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 2D RECTANGLE PACKING ENGINE (MaxRects BSSF/BAF)
@@ -158,26 +165,15 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
 
   const enrichItems = (placedItems) => placedItems.map(item => ({ ...item, dataUrl: dataUrlMap[item.artworkId] }));
 
-  // Step 2: Define sort strategies (different item orderings to test)
-  const sortStrategies = [
-    (a, b) => (b.w * b.h) - (a.w * a.h),                    // Largest area
-    (a, b) => b.h - a.h || b.w - a.w,                       // Tallest then widest
-    (a, b) => b.w - a.w || b.h - a.h,                       // Widest then tallest
-    (a, b) => Math.max(b.w, b.h) - Math.max(a.w, a.h),      // Longest side
-    (a, b) => Math.min(b.w, b.h) - Math.min(a.w, a.h),      // Largest short side
-    (a, b) => (b.w + b.h) - (a.w + a.h),                    // Largest perimeter
-    (a, b) => (b.w / b.h) - (a.w / a.h),                    // Widest aspect ratio
-    (a, b) => (a.w / a.h) - (b.w / b.h),                    // Tallest aspect ratio
-    (a, b) => (b.w * b.h) - (a.w * a.h) || (b.w+b.h) - (a.w+a.h), // Area then perimeter
-    (a, b) => b.h - a.h || (b.w * b.h) - (a.w * a.h),      // Height then area
-  ];
-
-  // Step 3: Try all sort strategies, pack into sheets, keep best global result
+  // Step 2: Try every sort order, pack into sheets, keep the best global result.
+  // The strategies are shared with the Calculator and the Optimizer so all three
+  // tools search the same space — see utils/packingStrategies.js.
   let bestLayout = null;
   let bestTotalHeight = Infinity;
+  let bestStrategy = null;
 
-  for (const sortFn of sortStrategies) {
-    const sortedItems = [...items].sort(sortFn);
+  for (const strategy of ALL_STRATEGIES) {
+    const sortedItems = [...items].sort(strategy.compare);
     const sheets = [];
     let remaining = [...sortedItems];
 
@@ -224,6 +220,7 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
     if (totalH < bestTotalHeight) {
       bestTotalHeight = totalH;
       bestLayout = sheets;
+      bestStrategy = strategy;
     }
   }
 
@@ -234,6 +231,7 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
   return {
     sheets: bestLayout.map(s => ({ ...s, items: enrichItems(s.items) })),
     totalSheets: bestLayout.length,
+    strategy: bestStrategy,
   };
 }
 
@@ -279,15 +277,18 @@ function GangSheet({ sharedArtwork, onRegisterExport }) {
   const selectedCustomer = customers.find((customer) => String(customer.id) === selectedCustomerId);
   const visibleCustomers = customers.filter((customer) => `${customer.name} ${customer.email || ''} ${customer.orders.map(o => o.order_number).join(' ')}`.toLowerCase().includes(customerSearch.toLowerCase()));
 
-  const apiHeaders = () => ({ 'Authorization': `Bearer ${localStorage.getItem('auth_token') || ''}` });
-
+  // A stale session used to surface here as "Could not load DTF customers",
+  // which pointed at the wrong thing entirely — the list was fine, the week-old
+  // token in localStorage had expired. authFetch renews it through SSO and
+  // replays the request, so this only reports a problem when there is one.
   const refreshCustomers = useCallback(async () => {
     try {
       const base = await detectApiBase();
-      const response = await fetch(`${base}/production-orders.php`, { headers: apiHeaders() });
-      if (!response.ok) throw new Error('Could not load DTF customers');
+      const response = await authFetch(base, '/production-orders.php');
+      if (!response.ok) throw await apiError(response, 'Could not load DTF customers');
       const data = await response.json();
       setCustomers(data.customers || []);
+      setIntegrationMessage(current => (current.startsWith('Could not load DTF customers') ? '' : current));
     } catch (error) { setIntegrationMessage(error.message); }
   }, []);
 
@@ -302,13 +303,13 @@ function GangSheet({ sharedArtwork, onRegisterExport }) {
     setIntegrationLoading(true); setIntegrationMessage('Loading sales order and artworks...');
     try {
       const base = await detectApiBase();
-      const response = await fetch(`${base}/production-orders.php?order_id=${encodeURIComponent(orderId)}`, { headers: apiHeaders() });
+      const response = await authFetch(base, `/production-orders.php?order_id=${encodeURIComponent(orderId)}`);
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not load sales order');
       const imported = [];
       for (const [idx, item] of (data.items || []).entries()) {
         if (!item.has_image) continue;
-        const imageResponse = await fetch(`${base}/artwork-image.php?item_id=${encodeURIComponent(item.order_item_id)}`, { headers: apiHeaders() });
+        const imageResponse = await authFetch(base, `/artwork-image.php?item_id=${encodeURIComponent(item.order_item_id)}`);
         if (!imageResponse.ok) continue;
         const blob = await imageResponse.blob();
         const dataUrl = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(blob); });
@@ -326,24 +327,97 @@ function GangSheet({ sharedArtwork, onRegisterExport }) {
     finally { setIntegrationLoading(false); }
   };
 
+  // ── Save ─────────────────────────────────────────────────────────────────
+  // A finished gang sheet belongs in the customer's own Nextcloud folder, not
+  // only in a database row: production opens these files from the vault, so a
+  // save that recorded the layout but wrote no file left them with nothing to
+  // print. Save now does both — the print-ready PNGs go to
+  // Leads 2.0/<customer>/Gangsheets/AW-<CLIENT>-<NNNN>-GS<VV>.png, and the
+  // layout is still recorded against the sales order when one is selected.
+  //
+  // Multi-sheet jobs upload one sheet per request (a 22×108" sheet at 300 DPI is
+  // far too large to batch), and the artwork code from the first response is
+  // passed back on the rest so every sheet of one job keeps a single piece
+  // number and only the version moves: …-GS01, …-GS02, …
   const saveGangSheet = async () => {
-    if (!selectedOrder?.id || artworks.length === 0) { setIntegrationMessage('Select a DTF sales order with artwork before saving a gang sheet.'); return; }
+    if (artworks.length === 0) { setIntegrationMessage('Add artwork to the gang sheet before saving.'); return; }
+
+    // Who the sheet belongs to. The sales order is the most precise handle; a
+    // customer picked without an order, or a file opened from the Vault, both
+    // still identify a folder on their own.
+    const customer = customers.find(c => String(c.id) === selectedCustomerId);
+    const context = {
+      order_id: selectedOrder?.id || '',
+      customer_id: selectedOrder?.customer_id || (isUuid(selectedCustomerId) ? selectedCustomerId : ''),
+      customer_name: selectedOrder?.customer_name || customer?.name || sharedArtwork?.customerName || '',
+      asset_id: sharedArtwork?.assetId || '',
+    };
+    if (!context.order_id && !context.customer_id && !context.customer_name && !context.asset_id) {
+      setIntegrationMessage('Select a DTF customer (or open the artwork from the Vault) so the sheet can be filed under them.');
+      return;
+    }
+
     setSavingSheet(true);
+    setIntegrationMessage('Rendering gang sheet…');
     try {
       const base = await detectApiBase();
-      const payload = { order_id: selectedOrder.id, total_height: totalHeight, total_sheets: layoutData.totalSheets, total_quantity: totalItemCount, estimated_price: (Math.ceil(totalHeight) / 12) * COST_PER_FOOT,
-        settings: { hGap, vGap, margins, arrangement, tightPack, showCutLines, includeHeader, headerTopMargin },
-        artworks: artworks.map(a => ({ orderItemId:a.orderItemId,artworkId:a.artworkId,artworkNo:a.artworkNo,filename:a.filename,widthInches:a.widthInches,heightInches:a.heightInches,repetitions:a.repetitions })),
-        layout: {
-          sheets: layoutData.sheets.map(sheet => ({
-            totalHeight: sheet.totalHeight,
-            items: sheet.items.map(({ dataUrl, ...item }) => item),
-          })),
-        },
-      };
-      const response = await fetch(`${base}/production-orders.php`, { method:'POST', headers:{...apiHeaders(),'Content-Type':'application/json'}, body:JSON.stringify(payload) });
-      const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Save failed');
-      setIntegrationMessage(`Gang sheet saved successfully (${data.saved_at}).`);
+
+      // Exactly the PNGs "Download" produces — 300 DPI metadata and all.
+      const sheets = [];
+      for (let i = 0; i < layoutData.totalSheets; i++) {
+        const sheet = layoutData.sheets[i];
+        if (!sheet || sheet.items.length === 0) continue;
+        const canvas = await renderSheetCanvas(sheet, i);
+        if (!canvas) continue;
+        const raw = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+        if (raw) sheets.push(await embedDpiInPng(raw, DPI));
+      }
+      if (!sheets.length) throw new Error('The gang sheet is empty — nothing to save.');
+
+      const savedPaths = [];
+      let artworkCode = '';
+      for (const [index, blob] of sheets.entries()) {
+        setIntegrationMessage(`Saving sheet ${index + 1} of ${sheets.length} to Nextcloud…`);
+        const form = new FormData();
+        Object.entries(context).forEach(([key, value]) => { if (value) form.append(key, value); });
+        if (artworkCode) form.append('artwork_code', artworkCode);
+        form.append('sheet_no', String(index + 1));
+        form.append('sheet_count', String(sheets.length));
+        form.append('file', new File([blob], `gangsheet-${index + 1}.png`, { type: 'image/png' }));
+
+        const response = await authFetch(base, '/gangsheet-save.php', { method: 'POST', body: form });
+        if (!response.ok) throw await apiError(response, 'Gang sheet could not be saved to Nextcloud');
+        const data = await response.json();
+        artworkCode = data.artwork_code || artworkCode;
+        savedPaths.push(data.path);
+      }
+
+      // The layout itself is still worth recording, but only a real sales order
+      // has a row to hang it on — a customer-level sheet skips this rather than
+      // failing the save that already succeeded.
+      let recorded = '';
+      if (selectedOrder?.id) {
+        const payload = {
+          order_id: selectedOrder.id, total_height: totalHeight, total_sheets: layoutData.totalSheets,
+          total_quantity: totalItemCount, estimated_price: (Math.ceil(totalHeight) / 12) * COST_PER_FOOT,
+          settings: { hGap, vGap, margins, arrangement, tightPack, showCutLines, includeHeader, headerTopMargin },
+          artworks: artworks.map(a => ({ orderItemId:a.orderItemId,artworkId:a.artworkId,artworkNo:a.artworkNo,filename:a.filename,widthInches:a.widthInches,heightInches:a.heightInches,repetitions:a.repetitions })),
+          layout: {
+            sheets: layoutData.sheets.map(sheet => ({
+              totalHeight: sheet.totalHeight,
+              items: sheet.items.map(({ dataUrl, ...item }) => item),
+            })),
+          },
+        };
+        const response = await authFetch(base, '/production-orders.php', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+        });
+        recorded = response.ok
+          ? ` Linked to ${selectedOrder.order_number}.`
+          : ` (Saved to Nextcloud, but it could not be linked to ${selectedOrder.order_number}.)`;
+      }
+
+      setIntegrationMessage(`Saved to ${savedPaths.join(', ')}.${recorded}`);
     } catch (error) { setIntegrationMessage(error.message); }
     finally { setSavingSheet(false); }
   };
@@ -578,7 +652,7 @@ function GangSheet({ sharedArtwork, onRegisterExport }) {
     e.target.value = '';
   };
 
-  const handleUsePrevious = () => {
+  const addSharedArtwork = useCallback(() => {
     if (!sharedArtwork?.dataUrl) return;
     const img = new Image();
     img.onload = () => {
@@ -597,7 +671,25 @@ function GangSheet({ sharedArtwork, onRegisterExport }) {
       }]);
     };
     img.src = sharedArtwork.dataUrl;
-  };
+  }, [sharedArtwork]);
+
+  const handleUsePrevious = addSharedArtwork;
+
+  // Opening an artwork from the Vault straight into the Gang Sheet used to land
+  // on an empty roll: the file arrived on the page but nothing put it on the
+  // sheet, and the only way to place it was a "Use Previous" button that reads
+  // like it is for something else. The handoff now places it, exactly as the
+  // Artwork Editor and Mockup pages already do with the same artwork.
+  //
+  // Keyed on the artwork itself, so leaving the page and coming back does not
+  // stack a second copy of a sheet the designer is still working on.
+  const importedArtworkRef = useRef(null);
+  useEffect(() => {
+    const key = sharedArtwork?.assetId || sharedArtwork?.dataUrl;
+    if (!key || importedArtworkRef.current === key) return;
+    importedArtworkRef.current = key;
+    addSharedArtwork();
+  }, [sharedArtwork, addSharedArtwork]);
 
   const updateArtwork = (id, field, value) => {
     setArtworks((prev) => prev.map((art) => {
@@ -945,7 +1037,8 @@ function GangSheet({ sharedArtwork, onRegisterExport }) {
           <p>Arrange artworks on a {SHEET_WIDTH_INCHES}" wide roll for DTF printing</p>
         </div>
         <div className="gang-sheet-header-actions">
-          <button className="gs-btn-save" onClick={saveGangSheet} disabled={!selectedOrder || artworks.length === 0 || savingSheet}>{savingSheet ? 'Saving...' : 'Save Gang Sheet'}</button>
+          <button className="gs-btn-save" onClick={saveGangSheet} disabled={artworks.length === 0 || savingSheet}
+            title="Save the print-ready sheets into this customer's Gangsheets folder in Nextcloud">{savingSheet ? 'Saving...' : 'Save Gang Sheet'}</button>
           <button className="gs-btn-download" onClick={handleDownload}
             disabled={currentSheet.items.length === 0 || isExporting}>
             {isExporting ? 'Exporting...' : layoutData.totalSheets > 1
@@ -976,7 +1069,7 @@ function GangSheet({ sharedArtwork, onRegisterExport }) {
             </button>
             <button className="gs-btn-add" onClick={handleUsePrevious}
               disabled={!sharedArtwork?.dataUrl}
-              title={sharedArtwork?.dataUrl ? 'Load artwork from BG Remover / QA' : 'No shared artwork available'}>
+              title={sharedArtwork?.dataUrl ? 'Add another copy of the artwork you came in with' : 'No shared artwork available'}>
               Use Previous
             </button>
           </div>
@@ -1200,6 +1293,17 @@ function GangSheet({ sharedArtwork, onRegisterExport }) {
               <label>Export Size</label>
               <span>{SHEET_WIDTH_INCHES * DPI} × {Math.ceil(currentSheet.totalHeight) * DPI} px</span>
             </div>
+            {/* Which of the sort orders won. The engine packs the sheet once per
+                strategy and keeps the shortest run, so this says why the layout
+                looks the way it does — otherwise the choice is invisible. */}
+            {layoutData.strategy && (
+              <div className="gs-stat-row">
+                <label>Packing</label>
+                <span title={`${layoutData.strategy.note} — shortest of ${ALL_STRATEGIES.length} sort orders tried`}>
+                  {layoutData.strategy.name}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Cost Calculation */}

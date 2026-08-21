@@ -399,7 +399,15 @@ function App() {
       setStudioFileName(asset.file_name || 'artwork.png');
     }
     if (target === 'mockupv2') { sendToMockup(dataUrl); return; }
-    setSharedArtwork({ dataUrl, filename: asset?.file_name || 'vault-artwork.png' });
+    // The asset id and customer travel with the artwork: the gang sheet files its
+    // output back into this same customer's folder, and it can only work out
+    // which folder that is from where the file it was handed already lives.
+    setSharedArtwork({
+      dataUrl,
+      filename: asset?.file_name || 'vault-artwork.png',
+      assetId: asset?.id || null,
+      customerName: asset?.entity_name || null,
+    });
     setArtwork(dataUrl);
     setCurrentPage(target);
   };

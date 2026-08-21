@@ -1,8 +1,8 @@
-# Allow PHP to handle large garment image uploads
-php_value post_max_size 50M
-php_value upload_max_filesize 50M
-php_value memory_limit 256M
-php_value max_execution_time 60
+# Gang sheets are the largest upload here: a 22x108" sheet at 300 DPI.
+php_value post_max_size 300M
+php_value upload_max_filesize 300M
+php_value memory_limit 512M
+php_value max_execution_time 300
 
 # Allow CORS
 <IfModule mod_headers.c>

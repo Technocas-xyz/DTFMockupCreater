@@ -1,14 +1,14 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import './GangSheetOptimizer.css';
+import { packBestOf } from '../utils/packingStrategies';
 
 const SHEET_WIDTH = 22;
 const MAX_SHEET_HEIGHT = 108;
 const COST_PER_FOOT = 5;
 
 // ─── PACKING ENGINE (same MaxRects-BSSF as production) ────────────────────────
-function packAndMeasure(items, sheetWidth, hGap, vGap, allowRotation = false) {
-  if (items.length === 0) return { height: 0, efficiency: 0 };
-  const sorted = [...items].sort((a, b) => (b.w * b.h) - (a.w * a.h));
+// One packing run over items already in the order the caller wants them tried.
+function packOnce(sorted, sheetWidth, hGap, vGap, allowRotation = false) {
   let freeRects = [{ x: 0, y: 0, w: sheetWidth, h: 99999 }];
   let usedMaxY = 0;
   let placedCount = 0;
@@ -62,8 +62,19 @@ function packAndMeasure(items, sheetWidth, hGap, vGap, allowRotation = false) {
   }
 
   const totalArea = sheetWidth * usedMaxY;
-  const artworkArea = items.reduce((s, i) => s + i.w * i.h, 0);
+  const artworkArea = sorted.reduce((s, i) => s + i.w * i.h, 0);
   return { height: usedMaxY, efficiency: totalArea > 0 ? (artworkArea / totalArea * 100) : 0, placed: placedCount };
+}
+
+// The Optimizer only earns its keep if the height it quotes is the height the
+// Gang Sheet page will actually produce. That page searches every sort order and
+// keeps the shortest run, so measuring a candidate with one ordering understated
+// what it was worth — a suggestion could be dismissed for costing film it would
+// never have cost. Every candidate is now measured the same way production packs.
+function packAndMeasure(items, sheetWidth, hGap, vGap, allowRotation = false) {
+  if (items.length === 0) return { height: 0, efficiency: 0 };
+  const best = packBestOf(items, sorted => packOnce(sorted, sheetWidth, hGap, vGap, allowRotation));
+  return best ? { ...best.result, strategy: best.strategy } : { height: 0, efficiency: 0 };
 }
 
 // ─── OPTIMIZATION ENGINE ──────────────────────────────────────────────────────
