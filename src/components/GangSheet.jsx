@@ -150,7 +150,7 @@ function maxRectsPack(items, sheetWidth, hGap, vGap, margins, maxHeight, allowRo
  */
 function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = false) {
   const marg = margins || { top: 0, bottom: 0, left: 0, right: 0 };
-  const allowRotation = tightPack; // Tight Pack enables rotation optimization
+  const allowRotation = true; // Always try rotation for optimal packing
 
   // Step 1: Expand quantities into individual placement items
   const items = [];
