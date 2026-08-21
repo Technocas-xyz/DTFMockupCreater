@@ -173,54 +173,67 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
   let bestStrategy = null;
 
   for (const strategy of ALL_STRATEGIES) {
-    const sortedItems = [...items].sort(strategy.compare);
-    const sheets = [];
-    let remaining = [...sortedItems];
+    // Run each strategy TWICE: once with original dimensions, once with all items pre-rotated.
+    // This ensures the algorithm finds layouts where rotation benefits the GLOBAL arrangement,
+    // not just individual item placement (e.g., 13.4×10.6 → rotate all to 10.6×13.4 so 2 fit side-by-side).
+    const orientations = [
+      [...items], // original
+      items.map(item => ({ ...item, w: item.h, h: item.w, preRotated: true })), // all pre-rotated
+    ];
 
-    while (remaining.length > 0) {
-      if (sheets.length >= 50) break; // safety
+    for (const orientedItems of orientations) {
+      const sortedItems = [...orientedItems].sort(strategy.compare);
+      const sheets = [];
+      let remaining = [...sortedItems];
 
-      const result = maxRectsPack(remaining, sheetWidth, hGap, vGap, marg, MAX_SHEET_HEIGHT, allowRotation);
+      while (remaining.length > 0) {
+        if (sheets.length >= 50) break;
 
-      if (result.placed.length === 0) {
-        // Force-place one oversized item
-        const forced = remaining.shift();
-        sheets.push({
-          items: [{ ...forced, x: marg.left, y: marg.top, rotated: false }],
-          totalHeight: forced.h + marg.top + marg.bottom,
-        });
-        continue;
-      }
+        const result = maxRectsPack(remaining, sheetWidth, hGap, vGap, marg, MAX_SHEET_HEIGHT, allowRotation);
 
-      sheets.push({ items: result.placed, totalHeight: result.totalHeight });
-
-      // Remove placed items from remaining (handle rotation: match by artworkId + original dims)
-      const placedCounts = new Map();
-      for (const p of result.placed) {
-        const origW = p.rotated ? p.h : p.w;
-        const origH = p.rotated ? p.w : p.h;
-        const key = `${p.artworkId}_${origW}_${origH}`;
-        placedCounts.set(key, (placedCounts.get(key) || 0) + 1);
-      }
-      const nextRemaining = [];
-      for (const item of remaining) {
-        const key = `${item.artworkId}_${item.w}_${item.h}`;
-        const count = placedCounts.get(key) || 0;
-        if (count > 0) {
-          placedCounts.set(key, count - 1);
-        } else {
-          nextRemaining.push(item);
+        if (result.placed.length === 0) {
+          const forced = remaining.shift();
+          sheets.push({
+            items: [{ ...forced, x: marg.left, y: marg.top, rotated: forced.preRotated || false }],
+            totalHeight: forced.h + marg.top + marg.bottom,
+          });
+          continue;
         }
-      }
-      remaining = nextRemaining;
-    }
 
-    // Evaluate this layout: total height across all sheets
-    const totalH = sheets.reduce((sum, s) => sum + s.totalHeight, 0);
-    if (totalH < bestTotalHeight) {
-      bestTotalHeight = totalH;
-      bestLayout = sheets;
-      bestStrategy = strategy;
+        // Mark pre-rotated items correctly
+        const placedItems = result.placed.map(p => ({
+          ...p,
+          rotated: p.preRotated ? !p.rotated : p.rotated, // if item was pre-rotated, flip the rotation flag
+        }));
+        sheets.push({ items: placedItems, totalHeight: result.totalHeight });
+
+        // Remove placed from remaining
+        const placedCounts = new Map();
+        for (const p of result.placed) {
+          const origW = p.rotated ? p.h : p.w;
+          const origH = p.rotated ? p.w : p.h;
+          const key = `${p.artworkId}_${origW}_${origH}`;
+          placedCounts.set(key, (placedCounts.get(key) || 0) + 1);
+        }
+        const nextRemaining = [];
+        for (const item of remaining) {
+          const key = `${item.artworkId}_${item.w}_${item.h}`;
+          const count = placedCounts.get(key) || 0;
+          if (count > 0) {
+            placedCounts.set(key, count - 1);
+          } else {
+            nextRemaining.push(item);
+          }
+        }
+        remaining = nextRemaining;
+      }
+
+      const totalH = sheets.reduce((sum, s) => sum + s.totalHeight, 0);
+      if (totalH < bestTotalHeight) {
+        bestTotalHeight = totalH;
+        bestLayout = sheets;
+        bestStrategy = strategy;
+      }
     }
   }
 
