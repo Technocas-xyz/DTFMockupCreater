@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import './GangSheet.css';
 import { detectApiBase } from '../utils/apiConfig';
 import { authFetch, apiError } from '../utils/authFetch';
+import { ALL_STRATEGIES } from '../utils/packingStrategies';
 
 const SHEET_WIDTH_INCHES = 22;
 const MAX_SHEET_HEIGHT = 108;
@@ -164,26 +165,15 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
 
   const enrichItems = (placedItems) => placedItems.map(item => ({ ...item, dataUrl: dataUrlMap[item.artworkId] }));
 
-  // Step 2: Define sort strategies (different item orderings to test)
-  const sortStrategies = [
-    (a, b) => (b.w * b.h) - (a.w * a.h),                    // Largest area
-    (a, b) => b.h - a.h || b.w - a.w,                       // Tallest then widest
-    (a, b) => b.w - a.w || b.h - a.h,                       // Widest then tallest
-    (a, b) => Math.max(b.w, b.h) - Math.max(a.w, a.h),      // Longest side
-    (a, b) => Math.min(b.w, b.h) - Math.min(a.w, a.h),      // Largest short side
-    (a, b) => (b.w + b.h) - (a.w + a.h),                    // Largest perimeter
-    (a, b) => (b.w / b.h) - (a.w / a.h),                    // Widest aspect ratio
-    (a, b) => (a.w / a.h) - (b.w / b.h),                    // Tallest aspect ratio
-    (a, b) => (b.w * b.h) - (a.w * a.h) || (b.w+b.h) - (a.w+a.h), // Area then perimeter
-    (a, b) => b.h - a.h || (b.w * b.h) - (a.w * a.h),      // Height then area
-  ];
-
-  // Step 3: Try all sort strategies, pack into sheets, keep best global result
+  // Step 2: Try every sort order, pack into sheets, keep the best global result.
+  // The strategies are shared with the Calculator and the Optimizer so all three
+  // tools search the same space — see utils/packingStrategies.js.
   let bestLayout = null;
   let bestTotalHeight = Infinity;
+  let bestStrategy = null;
 
-  for (const sortFn of sortStrategies) {
-    const sortedItems = [...items].sort(sortFn);
+  for (const strategy of ALL_STRATEGIES) {
+    const sortedItems = [...items].sort(strategy.compare);
     const sheets = [];
     let remaining = [...sortedItems];
 
@@ -230,6 +220,7 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
     if (totalH < bestTotalHeight) {
       bestTotalHeight = totalH;
       bestLayout = sheets;
+      bestStrategy = strategy;
     }
   }
 
@@ -240,6 +231,7 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
   return {
     sheets: bestLayout.map(s => ({ ...s, items: enrichItems(s.items) })),
     totalSheets: bestLayout.length,
+    strategy: bestStrategy,
   };
 }
 
@@ -1301,6 +1293,17 @@ function GangSheet({ sharedArtwork, onRegisterExport }) {
               <label>Export Size</label>
               <span>{SHEET_WIDTH_INCHES * DPI} × {Math.ceil(currentSheet.totalHeight) * DPI} px</span>
             </div>
+            {/* Which of the sort orders won. The engine packs the sheet once per
+                strategy and keeps the shortest run, so this says why the layout
+                looks the way it does — otherwise the choice is invisible. */}
+            {layoutData.strategy && (
+              <div className="gs-stat-row">
+                <label>Packing</label>
+                <span title={`${layoutData.strategy.note} — shortest of ${ALL_STRATEGIES.length} sort orders tried`}>
+                  {layoutData.strategy.name}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Cost Calculation */}

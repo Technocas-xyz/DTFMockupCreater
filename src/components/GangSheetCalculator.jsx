@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import './GangSheetCalculator.css';
+import { packBestOf } from '../utils/packingStrategies';
 
 const SHEET_WIDTH = 22;
 const MAX_SHEET_HEIGHT = 108;
@@ -77,23 +78,8 @@ function maxRectsPackCalc(items, sheetWidth, hGap, vGap) {
 
 function calculateOptimalHeight(items, sheetWidth, hGap, vGap) {
   if (items.length === 0) return 0;
-  const sortStrategies = [
-    (a, b) => (b.w * b.h) - (a.w * a.h),
-    (a, b) => b.h - a.h || b.w - a.w,
-    (a, b) => b.w - a.w || b.h - a.h,
-    (a, b) => Math.max(b.w, b.h) - Math.max(a.w, a.h),
-    (a, b) => Math.min(b.w, b.h) - Math.min(a.w, a.h),
-    (a, b) => (b.w + b.h) - (a.w + a.h),
-    (a, b) => (b.w / b.h) - (a.w / a.h),
-    (a, b) => (a.w / a.h) - (b.w / b.h),
-  ];
-  let bestHeight = Infinity;
-  for (const sortFn of sortStrategies) {
-    const sorted = [...items].sort(sortFn);
-    const h = maxRectsPackCalc(sorted, sheetWidth, hGap, vGap);
-    if (h > 0 && h < bestHeight) bestHeight = h;
-  }
-  return bestHeight === Infinity ? 0 : bestHeight;
+  const best = packBestOf(items, sorted => maxRectsPackCalc(sorted, sheetWidth, hGap, vGap));
+  return best ? best.height : 0;
 }
 
 function GangSheetCalculator() {
