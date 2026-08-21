@@ -207,20 +207,16 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
         }));
         sheets.push({ items: placedItems, totalHeight: result.totalHeight });
 
-        // Remove placed from remaining
+        // Remove placed from remaining — use artworkId count (copies are interchangeable)
         const placedCounts = new Map();
         for (const p of result.placed) {
-          const origW = p.rotated ? p.h : p.w;
-          const origH = p.rotated ? p.w : p.h;
-          const key = `${p.artworkId}_${origW}_${origH}`;
-          placedCounts.set(key, (placedCounts.get(key) || 0) + 1);
+          placedCounts.set(p.artworkId, (placedCounts.get(p.artworkId) || 0) + 1);
         }
         const nextRemaining = [];
         for (const item of remaining) {
-          const key = `${item.artworkId}_${item.w}_${item.h}`;
-          const count = placedCounts.get(key) || 0;
+          const count = placedCounts.get(item.artworkId) || 0;
           if (count > 0) {
-            placedCounts.set(key, count - 1);
+            placedCounts.set(item.artworkId, count - 1);
           } else {
             nextRemaining.push(item);
           }
