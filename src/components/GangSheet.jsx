@@ -55,10 +55,11 @@ function maxRectsPack(items, sheetWidth, hGap, vGap, margins, maxHeight, allowRo
         const ph = item.h;
         const endY = rect.y + ph;
         const remainingW = rect.w - pw - hGap;
-        // Reward: can another item fit beside this one? If yes, prioritize this placement.
-        // "fitsAnother" = 0 if space remains for another item, 1 if not
+        // Primary: can another item fit beside? (0=yes, 1=no)
+        // Secondary: lowest endY (minimize total height)
+        // Tertiary: leftmost x, then tightest width
         const fitsAnother = remainingW >= minItemW ? 0 : 1;
-        const score = endY * 1000000 + fitsAnother * 500000 + rect.x * 10 + (rect.w - pw);
+        const score = fitsAnother * 1e9 + endY * 10000 + rect.x * 10 + (rect.w - pw);
         if (score < bestScore) {
           bestScore = score;
           bestRect = rect;
@@ -73,7 +74,7 @@ function maxRectsPack(items, sheetWidth, hGap, vGap, margins, maxHeight, allowRo
           const endY = rect.y + ph;
           const remainingW = rect.w - pw - hGap;
           const fitsAnother = remainingW >= minItemW ? 0 : 1;
-          const score = endY * 1000000 + fitsAnother * 500000 + rect.x * 10 + (rect.w - pw);
+          const score = fitsAnother * 1e9 + endY * 10000 + rect.x * 10 + (rect.w - pw);
           if (score < bestScore) {
             bestScore = score;
             bestRect = rect;
@@ -192,9 +193,10 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
     // 4. Portrait-forced: items wider than tall get pre-rotated, rest stay
     const orientations = [
       { items: [...items], disableRotation: false, label: 'normal' },
+      { items: [...items], disableRotation: true, label: 'no-rotation' },
       { items: items.map(item => ({ ...item, w: item.h, h: item.w, preRotated: true })), disableRotation: true, label: 'all-rotated' },
-      { items: items.map(item => item.h > item.w ? { ...item, w: item.h, h: item.w, preRotated: true } : item), disableRotation: false, label: 'landscape-forced' },
-      { items: items.map(item => item.w > item.h ? { ...item, w: item.h, h: item.w, preRotated: true } : item), disableRotation: false, label: 'portrait-forced' },
+      { items: items.map(item => item.h > item.w ? { ...item, w: item.h, h: item.w, preRotated: true } : item), disableRotation: true, label: 'landscape-forced' },
+      { items: items.map(item => item.w > item.h ? { ...item, w: item.h, h: item.w, preRotated: true } : item), disableRotation: true, label: 'portrait-forced' },
     ];
 
     for (const { items: orientedItems, disableRotation } of orientations) {

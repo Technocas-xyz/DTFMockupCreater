@@ -32,7 +32,7 @@ function maxRectsPackCalc(items, sheetWidth, hGap, vGap) {
         const endY = rect.y + ph;
         const remainingW = rect.w - pw - hGap;
         const fitsAnother = remainingW >= minItemW ? 0 : 1;
-        const score = endY * 1000000 + fitsAnother * 500000 + rect.x * 10 + (rect.w - pw);
+        const score = fitsAnother * 1e9 + endY * 10000 + rect.x * 10 + (rect.w - pw);
         if (score < bestScore) { bestScore = score; bestRect = rect; bestRotated = false; }
       }
       // Rotated orientation
@@ -41,7 +41,7 @@ function maxRectsPackCalc(items, sheetWidth, hGap, vGap) {
         const endY = rect.y + ph;
         const remainingW = rect.w - pw - hGap;
         const fitsAnother = remainingW >= minItemW ? 0 : 1;
-        const score = endY * 1000000 + fitsAnother * 500000 + rect.x * 10 + (rect.w - pw);
+        const score = fitsAnother * 1e9 + endY * 10000 + rect.x * 10 + (rect.w - pw);
         if (score < bestScore) { bestScore = score; bestRect = rect; bestRotated = true; }
       }
     }
