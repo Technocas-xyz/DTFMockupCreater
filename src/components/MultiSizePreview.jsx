@@ -407,7 +407,10 @@ const MSPCard = React.forwardRef(function MSPCard({
   // Download single card — magenta background crop detection (works for white shirts)
   // ─── DOWNLOAD SINGLE CARD: Render fresh at high-res from original source ──────
   const handleDownloadSingle = () => {
-    if (!artwork) return;
+    const hasContent = multiLayerEnabled
+      ? (layers && layers.some(l => l.visible && l.artwork))
+      : !!artwork;
+    if (!hasContent) return;
 
     // Render at 2800x3400 (same as DesignCanvas 4x) for sharp output
     const RW = 2800, RH = 3400;
@@ -451,27 +454,37 @@ const MSPCard = React.forwardRef(function MSPCard({
     else { const sp = 1.3; dw = tshirtW * sp; dh = dw / garImgAspect; dx = (RW - dw) / 2; dy = tshirtY - (dh - tshirtH) * 0.15; }
     drawRecoloredGarment(rCtx, garmentImg, dx, dy, dw, dh, selectedColor.hex, RW, RH);
 
-    // Draw artwork from original source
-    const artImg = new Image();
-    artImg.onload = () => {
+    // Helper to draw one artwork at high-res
+    const drawOneHiRes = (img, dims, pos, opacity = 1) => {
       const artPxPerInch = pxPerInch;
       const printAreaPxW = artworkAreaSettings.width * artPxPerInch;
       const printAreaPxH = artworkAreaSettings.height * artPxPerInch;
       const printX = tshirtX + (tshirtW - printAreaPxW) / 2;
       const printY = tshirtY + (artworkAreaSettings.topOffset * artPxPerInch);
-      const artworkPxW = sizeArtW * artPxPerInch;
-      const artworkPxH = sizeArtH * artPxPerInch;
-      const imgAR = artImg.naturalWidth / artImg.naturalHeight;
+
+      // Scale artwork dimensions for this size
+      const scaledArtW = (sizeData.bodyWidth * activePercent) / 100;
+      const layerAspect = dims.height / dims.width;
+      const scaledArtH = scaledArtW * layerAspect;
+      const artworkPxW = scaledArtW * artPxPerInch;
+      const artworkPxH = scaledArtH * artPxPerInch;
+
+      const imgAR = img.naturalWidth / img.naturalHeight;
       const boxAR = artworkPxW / artworkPxH;
       let artW, artH;
       if (imgAR > boxAR) { artW = artworkPxW; artH = artworkPxW / imgAR; }
       else { artH = artworkPxH; artW = artworkPxH * imgAR; }
       const scaleFactor = RW / 700;
-      const drawX = printX + (printAreaPxW - artW) / 2 + artworkPosition.x * scaleFactor;
-      const drawY = printY + artworkPosition.y * scaleFactor;
-      rCtx.drawImage(artImg, 0, 0, artImg.naturalWidth, artImg.naturalHeight, drawX, drawY, artW, artH);
+      const drawX = printX + (printAreaPxW - artW) / 2 + pos.x * scaleFactor;
+      const drawY = printY + pos.y * scaleFactor;
+      rCtx.save();
+      rCtx.globalAlpha = opacity;
+      rCtx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, drawX, drawY, artW, artH);
+      rCtx.restore();
+    };
 
-      // Crop and export
+    // Finish rendering and trigger download
+    const finishDownload = () => {
       const bounds = getContentBounds(renderCanvas);
       const cropW = bounds.w, cropH = bounds.h;
       const text = `Shirt Size: ${realSize} | Artwork Size: W ${sizeArtW.toFixed(1)}" x H ${sizeArtH.toFixed(1)}"`;
@@ -496,7 +509,47 @@ const MSPCard = React.forwardRef(function MSPCard({
       link.href = dlCanvas.toDataURL('image/jpeg', 0.95);
       document.body.appendChild(link); link.click(); document.body.removeChild(link);
     };
-    artImg.src = artwork;
+
+    // Draw artwork(s) then export
+    if (multiLayerEnabled && layers && layers.length > 0) {
+      // Load all visible layer images, then draw them in order
+      const visibleLayers = layers.filter(l => l.visible && l.artwork);
+      if (visibleLayers.length === 0) { finishDownload(); return; }
+      let loaded = 0;
+      const loadedImages = [];
+      visibleLayers.forEach((layer, idx) => {
+        const img = new Image();
+        img.onload = () => {
+          loadedImages[idx] = { img, layer };
+          loaded++;
+          if (loaded === visibleLayers.length) {
+            // All loaded — draw in order
+            loadedImages.forEach(({ img: lImg, layer: l }) => {
+              drawOneHiRes(lImg, l.artworkDimensions, l.artworkPosition, l.opacity ?? 1);
+            });
+            finishDownload();
+          }
+        };
+        img.onerror = () => {
+          loaded++;
+          if (loaded === visibleLayers.length) {
+            loadedImages.filter(Boolean).forEach(({ img: lImg, layer: l }) => {
+              drawOneHiRes(lImg, l.artworkDimensions, l.artworkPosition, l.opacity ?? 1);
+            });
+            finishDownload();
+          }
+        };
+        img.src = layer.artwork;
+      });
+    } else {
+      // Single artwork mode (original behavior)
+      const artImg = new Image();
+      artImg.onload = () => {
+        drawOneHiRes(artImg, artworkDimensions, artworkPosition, 1);
+        finishDownload();
+      };
+      artImg.src = artwork;
+    }
   };
 
   return (
