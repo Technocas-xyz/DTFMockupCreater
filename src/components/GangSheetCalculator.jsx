@@ -23,19 +23,21 @@ function maxRectsPackCalc(items, sheetWidth, hGap, vGap) {
       if (item.w <= rect.w + 0.001 && item.h <= rect.h + 0.001) {
         const endY = rect.y + item.h;
         const shortSide = Math.min(rect.w - item.w, rect.h - item.h);
-        const score = endY * 10000 + rect.x * 10 + shortSide;
+        // Score: minimize endY first, then prefer tightest width fit (less wasted space beside),
+        // then leftmost position
+        const score = endY * 100000 + shortSide * 100 + rect.x;
         if (score < bestScore) { bestScore = score; bestRect = rect; bestRotated = false; }
       }
       // Rotated orientation
       if (Math.abs(item.w - item.h) > 0.01 && item.h <= rect.w + 0.001 && item.w <= rect.h + 0.001) {
         const endY = rect.y + item.w;
         const shortSide = Math.min(rect.w - item.h, rect.h - item.w);
-        const score = endY * 10000 + rect.x * 10 + shortSide;
+        const score = endY * 100000 + shortSide * 100 + rect.x;
         if (score < bestScore) { bestScore = score; bestRect = rect; bestRotated = true; }
       }
     }
 
-    if (!bestRect) continue; // Skip unfittable, try smaller items
+    if (!bestRect) continue;
 
     const pw = bestRotated ? item.h : item.w;
     const ph = bestRotated ? item.w : item.h;
@@ -68,7 +70,7 @@ function maxRectsPackCalc(items, sheetWidth, hGap, vGap) {
       }
       if (!contained) freeRects.push(a);
     }
-    if (freeRects.length > 500) { freeRects.sort((a, b) => (b.w * b.h) - (a.w * a.h)); freeRects = freeRects.slice(0, 250); }
+    if (freeRects.length > 600) { freeRects.sort((a, b) => (b.w * b.h) - (a.w * a.h)); freeRects = freeRects.slice(0, 300); }
   }
 
   let maxBottom = 0;
@@ -78,8 +80,23 @@ function maxRectsPackCalc(items, sheetWidth, hGap, vGap) {
 
 function calculateOptimalHeight(items, sheetWidth, hGap, vGap) {
   if (items.length === 0) return 0;
-  const best = packBestOf(items, sorted => maxRectsPackCalc(sorted, sheetWidth, hGap, vGap));
-  return best ? best.height : 0;
+
+  // Try multiple orientations: original, all-rotated, landscape-forced, portrait-forced
+  const orientations = [
+    items,
+    items.map(i => ({ w: i.h, h: i.w })),
+    items.map(i => i.h > i.w ? { w: i.h, h: i.w } : i),
+    items.map(i => i.w > i.h ? { w: i.h, h: i.w } : i),
+  ];
+
+  let bestHeight = Infinity;
+  for (const oriented of orientations) {
+    const result = packBestOf(oriented, sorted => maxRectsPackCalc(sorted, sheetWidth, hGap, vGap));
+    if (result && result.height > 0 && result.height < bestHeight) {
+      bestHeight = result.height;
+    }
+  }
+  return bestHeight === Infinity ? 0 : bestHeight;
 }
 
 function GangSheetCalculator() {
