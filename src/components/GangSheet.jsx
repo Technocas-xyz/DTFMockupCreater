@@ -24,6 +24,7 @@ const isUuid = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9
  * MaxRects packing algorithm.
  * Places items into a fixed-width sheet, returns placed items and final height.
  * Uses Best Area Fit scoring: lowest Y, then tightest fit.
+ * Aggressively prefers side-by-side placement to minimize total height.
  */
 function maxRectsPack(items, sheetWidth, hGap, vGap, margins, maxHeight, allowRotation = true) {
   const marg = margins || { top: 0, bottom: 0, left: 0, right: 0 };
@@ -43,11 +44,10 @@ function maxRectsPack(items, sheetWidth, hGap, vGap, margins, maxHeight, allowRo
     for (const rect of freeRects) {
       // Normal orientation: can it fit?
       if (item.w <= rect.w + 0.001 && item.h <= rect.h + 0.001) {
-        // Score: endY*10000 + x*10 + shortSideFit
-        // This prioritizes: lowest bottom edge > leftmost > tightest fit
+        // Score prioritizes: lowest bottom edge (minimize height) > leftmost (pack left) > tightest short side fit
         const endY = rect.y + item.h;
         const shortSide = Math.min(rect.w - item.w, rect.h - item.h);
-        const score = endY * 10000 + rect.x * 10 + shortSide;
+        const score = endY * 100000 + shortSide * 100 + rect.x;
         if (score < bestScore) {
           bestScore = score;
           bestRect = rect;
@@ -57,9 +57,9 @@ function maxRectsPack(items, sheetWidth, hGap, vGap, margins, maxHeight, allowRo
       // Rotated orientation (only if different and allowed)
       if (allowRotation && Math.abs(item.w - item.h) > 0.01) {
         if (item.h <= rect.w + 0.001 && item.w <= rect.h + 0.001) {
-          const endY = rect.y + item.w;
+          const endY = rect.y + item.w; // rotated: original width becomes height
           const shortSide = Math.min(rect.w - item.h, rect.h - item.w);
-          const score = endY * 10000 + rect.x * 10 + shortSide;
+          const score = endY * 100000 + shortSide * 100 + rect.x;
           if (score < bestScore) {
             bestScore = score;
             bestRect = rect;
@@ -127,9 +127,9 @@ function maxRectsPack(items, sheetWidth, hGap, vGap, margins, maxHeight, allowRo
       if (!contained) freeRects.push(a);
     }
     // Safety cap
-    if (freeRects.length > 400) {
+    if (freeRects.length > 600) {
       freeRects.sort((a, b) => (b.w * b.h) - (a.w * a.h));
-      freeRects = freeRects.slice(0, 200);
+      freeRects = freeRects.slice(0, 300);
     }
   }
 
@@ -146,11 +146,11 @@ function maxRectsPack(items, sheetWidth, hGap, vGap, margins, maxHeight, allowRo
 
 /**
  * Main layout engine. Runs MaxRects with multiple sort orders, keeps best result.
- * Both tightPack ON and OFF use real 2D packing — tightPack ON adds rotation.
+ * Tries original, pre-rotated, and landscape-forced orientations for maximum coverage.
+ * Always allows rotation for optimal side-by-side tight packing.
  */
 function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = false) {
   const marg = margins || { top: 0, bottom: 0, left: 0, right: 0 };
-  const allowRotation = true; // Always try rotation for optimal packing
 
   // Step 1: Expand quantities into individual placement items
   const items = [];
@@ -165,19 +165,22 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
 
   const enrichItems = (placedItems) => placedItems.map(item => ({ ...item, dataUrl: dataUrlMap[item.artworkId] }));
 
-  // Step 2: Try every sort order, pack into sheets, keep the best global result.
-  // The strategies are shared with the Calculator and the Optimizer so all three
-  // tools search the same space — see utils/packingStrategies.js.
+  // Step 2: Try every sort order with multiple orientations, keep the best.
   let bestLayout = null;
   let bestTotalHeight = Infinity;
   let bestStrategy = null;
 
   for (const strategy of ALL_STRATEGIES) {
-    // Run each strategy TWICE: once with original dimensions, once with all items pre-rotated.
-    // For pre-rotated items, disable per-item rotation so the packer respects the orientation.
+    // Run each strategy with FOUR orientation variants:
+    // 1. Original dims, rotation allowed (packer decides per item)
+    // 2. All items pre-rotated (swap w/h), no per-item rotation
+    // 3. Landscape-forced: items taller than wide get pre-rotated, rest stay
+    // 4. Portrait-forced: items wider than tall get pre-rotated, rest stay
     const orientations = [
-      { items: [...items], disableRotation: false },
-      { items: items.map(item => ({ ...item, w: item.h, h: item.w, preRotated: true })), disableRotation: true },
+      { items: [...items], disableRotation: false, label: 'normal' },
+      { items: items.map(item => ({ ...item, w: item.h, h: item.w, preRotated: true })), disableRotation: true, label: 'all-rotated' },
+      { items: items.map(item => item.h > item.w ? { ...item, w: item.h, h: item.w, preRotated: true } : item), disableRotation: false, label: 'landscape-forced' },
+      { items: items.map(item => item.w > item.h ? { ...item, w: item.h, h: item.w, preRotated: true } : item), disableRotation: false, label: 'portrait-forced' },
     ];
 
     for (const { items: orientedItems, disableRotation } of orientations) {
@@ -188,7 +191,6 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
       while (remaining.length > 0) {
         if (sheets.length >= 50) break;
 
-        // Key: pre-rotated pass uses allowRotation=false so items stay in rotated orientation
         const result = maxRectsPack(remaining, sheetWidth, hGap, vGap, marg, MAX_SHEET_HEIGHT, !disableRotation);
 
         if (result.placed.length === 0) {
@@ -203,11 +205,11 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
         // Mark pre-rotated items correctly
         const placedItems = result.placed.map(p => ({
           ...p,
-          rotated: p.preRotated ? true : p.rotated, // pre-rotated items are always rotated relative to original
+          rotated: p.preRotated ? !p.rotated : p.rotated,
         }));
         sheets.push({ items: placedItems, totalHeight: result.totalHeight });
 
-        // Remove placed from remaining — use artworkId count (copies are interchangeable)
+        // Remove placed from remaining
         const placedCounts = new Map();
         for (const p of result.placed) {
           placedCounts.set(p.artworkId, (placedCounts.get(p.artworkId) || 0) + 1);
@@ -247,8 +249,8 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
 // ─── COMPONENT ───────────────────────────────────────────────────────────────
 function GangSheet({ sharedArtwork, onRegisterExport }) {
   const [artworks, setArtworks] = useState([]);
-  const [hGap, setHGap] = useState(0.5);
-  const [vGap, setVGap] = useState(0.5);
+  const [hGap, setHGap] = useState(0.125);
+  const [vGap, setVGap] = useState(0.125);
   const [margins, setMargins] = useState({ top: 0, bottom: 0, left: 0, right: 0 });
   const [arrangement, setArrangement] = useState('auto');
   const [tightPack, setTightPack] = useState(true);
