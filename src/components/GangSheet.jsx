@@ -23,13 +23,20 @@ const isUuid = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9
 /**
  * MaxRects packing algorithm.
  * Places items into a fixed-width sheet, returns placed items and final height.
- * Uses Best Area Fit scoring: lowest Y, then tightest fit.
- * Aggressively prefers side-by-side placement to minimize total height.
+ * Scoring optimized for DTF: minimize total height by preferring orientations
+ * and placements that allow more items side-by-side in each row.
  */
 function maxRectsPack(items, sheetWidth, hGap, vGap, margins, maxHeight, allowRotation = true) {
   const marg = margins || { top: 0, bottom: 0, left: 0, right: 0 };
   const usableW = sheetWidth - marg.left - marg.right;
   const usableH = (maxHeight || 9999) - marg.top - marg.bottom;
+
+  // Find the narrowest item width — used to judge if remaining space can fit another item
+  let minItemW = Infinity;
+  for (const item of items) {
+    const narrower = Math.min(item.w, item.h);
+    if (narrower < minItemW) minItemW = narrower;
+  }
 
   // Initial free rectangle = entire usable area
   let freeRects = [{ x: marg.left, y: marg.top, w: usableW, h: usableH }];
@@ -44,10 +51,14 @@ function maxRectsPack(items, sheetWidth, hGap, vGap, margins, maxHeight, allowRo
     for (const rect of freeRects) {
       // Normal orientation: can it fit?
       if (item.w <= rect.w + 0.001 && item.h <= rect.h + 0.001) {
-        // Score prioritizes: lowest bottom edge (minimize height) > leftmost (pack left) > tightest short side fit
-        const endY = rect.y + item.h;
-        const shortSide = Math.min(rect.w - item.w, rect.h - item.h);
-        const score = endY * 100000 + shortSide * 100 + rect.x;
+        const pw = item.w;
+        const ph = item.h;
+        const endY = rect.y + ph;
+        const remainingW = rect.w - pw - hGap;
+        // Reward: can another item fit beside this one? If yes, prioritize this placement.
+        // "fitsAnother" = 0 if space remains for another item, 1 if not
+        const fitsAnother = remainingW >= minItemW ? 0 : 1;
+        const score = endY * 1000000 + fitsAnother * 500000 + rect.x * 10 + (rect.w - pw);
         if (score < bestScore) {
           bestScore = score;
           bestRect = rect;
@@ -57,9 +68,12 @@ function maxRectsPack(items, sheetWidth, hGap, vGap, margins, maxHeight, allowRo
       // Rotated orientation (only if different and allowed)
       if (allowRotation && Math.abs(item.w - item.h) > 0.01) {
         if (item.h <= rect.w + 0.001 && item.w <= rect.h + 0.001) {
-          const endY = rect.y + item.w; // rotated: original width becomes height
-          const shortSide = Math.min(rect.w - item.h, rect.h - item.w);
-          const score = endY * 100000 + shortSide * 100 + rect.x;
+          const pw = item.h; // rotated: height becomes width
+          const ph = item.w; // rotated: width becomes height
+          const endY = rect.y + ph;
+          const remainingW = rect.w - pw - hGap;
+          const fitsAnother = remainingW >= minItemW ? 0 : 1;
+          const score = endY * 1000000 + fitsAnother * 500000 + rect.x * 10 + (rect.w - pw);
           if (score < bestScore) {
             bestScore = score;
             bestRect = rect;

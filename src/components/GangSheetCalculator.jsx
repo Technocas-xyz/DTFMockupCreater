@@ -10,6 +10,13 @@ const COST_PER_FOOT = 5;
 function maxRectsPackCalc(items, sheetWidth, hGap, vGap) {
   if (items.length === 0) return 0;
 
+  // Find the narrowest item dimension — for judging side-by-side fit
+  let minItemW = Infinity;
+  for (const item of items) {
+    const narrower = Math.min(item.w, item.h);
+    if (narrower < minItemW) minItemW = narrower;
+  }
+
   let freeRects = [{ x: 0, y: 0, w: sheetWidth, h: 99999 }];
   const placed = [];
 
@@ -21,18 +28,20 @@ function maxRectsPackCalc(items, sheetWidth, hGap, vGap) {
     for (const rect of freeRects) {
       // Normal orientation
       if (item.w <= rect.w + 0.001 && item.h <= rect.h + 0.001) {
-        const endY = rect.y + item.h;
-        const shortSide = Math.min(rect.w - item.w, rect.h - item.h);
-        // Score: minimize endY first, then prefer tightest width fit (less wasted space beside),
-        // then leftmost position
-        const score = endY * 100000 + shortSide * 100 + rect.x;
+        const pw = item.w, ph = item.h;
+        const endY = rect.y + ph;
+        const remainingW = rect.w - pw - hGap;
+        const fitsAnother = remainingW >= minItemW ? 0 : 1;
+        const score = endY * 1000000 + fitsAnother * 500000 + rect.x * 10 + (rect.w - pw);
         if (score < bestScore) { bestScore = score; bestRect = rect; bestRotated = false; }
       }
       // Rotated orientation
       if (Math.abs(item.w - item.h) > 0.01 && item.h <= rect.w + 0.001 && item.w <= rect.h + 0.001) {
-        const endY = rect.y + item.w;
-        const shortSide = Math.min(rect.w - item.h, rect.h - item.w);
-        const score = endY * 100000 + shortSide * 100 + rect.x;
+        const pw = item.h, ph = item.w;
+        const endY = rect.y + ph;
+        const remainingW = rect.w - pw - hGap;
+        const fitsAnother = remainingW >= minItemW ? 0 : 1;
+        const score = endY * 1000000 + fitsAnother * 500000 + rect.x * 10 + (rect.w - pw);
         if (score < bestScore) { bestScore = score; bestRect = rect; bestRotated = true; }
       }
     }
