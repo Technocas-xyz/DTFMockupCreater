@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import './GangSheetCalculator.css';
-import { packBestOf } from '../utils/packingStrategies';
+import { packBestOf, ALL_STRATEGIES } from '../utils/packingStrategies';
 
 const SHEET_WIDTH = 22;
 const MAX_SHEET_HEIGHT = 108;
@@ -90,7 +90,7 @@ function maxRectsPackCalc(items, sheetWidth, hGap, vGap) {
 function calculateOptimalHeight(items, sheetWidth, hGap, vGap) {
   if (items.length === 0) return 0;
 
-  // Try multiple orientations: original, all-rotated, landscape-forced, portrait-forced
+  // Try multiple orientations: original, no-rotation original, all-rotated, landscape-forced, portrait-forced
   const orientations = [
     items,
     items.map(i => ({ w: i.h, h: i.w })),
@@ -100,7 +100,8 @@ function calculateOptimalHeight(items, sheetWidth, hGap, vGap) {
 
   let bestHeight = Infinity;
   for (const oriented of orientations) {
-    const result = packBestOf(oriented, sorted => maxRectsPackCalc(sorted, sheetWidth, hGap, vGap));
+    // Use ALL_STRATEGIES (10 sorts) instead of just SORT_STRATEGIES (8)
+    const result = packBestOf(oriented, sorted => maxRectsPackCalc(sorted, sheetWidth, hGap, vGap), ALL_STRATEGIES);
     if (result && result.height > 0 && result.height < bestHeight) {
       bestHeight = result.height;
     }
