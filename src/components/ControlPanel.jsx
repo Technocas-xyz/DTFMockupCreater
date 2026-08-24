@@ -38,6 +38,8 @@ function ControlPanel({
   scalingMode,
   onScalingModeChange,
   viewSide,
+  multiLayerEnabled,
+  activeLayerName,
 }) {
   const fileInputRef = useRef(null);
   const [selectedFit, setSelectedFit] = useState('Men');
@@ -261,6 +263,16 @@ function ControlPanel({
 
   return (
     <div className="control-panel">
+      {/* Active Layer Indicator */}
+      {multiLayerEnabled && activeLayerName && (
+        <div className="panel-layer-badge">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <rect x="7" y="7" width="10" height="10" rx="1" opacity="0.5" />
+          </svg>
+          <span>Editing: <strong>{activeLayerName}</strong></span>
+        </div>
+      )}
       {/* Upload Section */}
       <section className="panel-section">
         <h3 className="section-title">

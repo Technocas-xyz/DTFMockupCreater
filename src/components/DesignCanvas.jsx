@@ -27,6 +27,9 @@ function DesignCanvas({
   onPositionChange,
   customGarment,
   onRegisterExport,
+  multiLayerEnabled,
+  layers,
+  activeLayerId,
 }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
@@ -35,6 +38,8 @@ function DesignCanvas({
   const [artworkImage, setArtworkImage] = useState(null);
   const [tshirtImage, setTshirtImage] = useState(null);
   const [canvasZoom, setCanvasZoom] = useState(1);
+  // Cache of loaded images per layer (keyed by layer id)
+  const [layerImages, setLayerImages] = useState({});
 
   // Load artwork image
   useEffect(() => {
@@ -46,6 +51,38 @@ function DesignCanvas({
       setArtworkImage(null);
     }
   }, [artwork]);
+
+  // Load layer images (only in multi-layer mode)
+  useEffect(() => {
+    if (!multiLayerEnabled || !layers || layers.length === 0) return;
+    const newImages = {};
+    let pending = 0;
+    layers.forEach(layer => {
+      if (!layer.artwork) return;
+      // Reuse existing cached image if artwork hasn't changed
+      if (layerImages[layer.id] && layerImages[layer.id]._src === layer.artwork) {
+        newImages[layer.id] = layerImages[layer.id];
+        return;
+      }
+      pending++;
+      const img = new Image();
+      img.onload = () => {
+        img._src = layer.artwork;
+        newImages[layer.id] = img;
+        pending--;
+        if (pending === 0) setLayerImages(prev => ({ ...prev, ...newImages }));
+      };
+      img.src = layer.artwork;
+    });
+    if (pending === 0) {
+      // All images either cached or no artwork — sync state
+      setLayerImages(prev => {
+        const updated = {};
+        layers.forEach(l => { if (newImages[l.id]) updated[l.id] = newImages[l.id]; });
+        return updated;
+      });
+    }
+  }, [multiLayerEnabled, layers]);
 
   // Load t-shirt base image (use custom garment if selected)
   useEffect(() => {
@@ -184,41 +221,34 @@ function DesignCanvas({
     }
 
     // Draw artwork
-    if (artworkImage) {
-      ctx.save();
-      // Artwork bounding box from set dimensions
-      const boxW = printArea.artworkWidth * artworkScale;
-      const boxH = printArea.artworkHeight * artworkScale;
+    // Helper to draw a single artwork layer given its image, dimensions, and position
+    const drawOneArtwork = (img, dims, pos, isActive, layerOpacity = 1) => {
+      const pxPerInch = printArea.pxPerInch;
+      const boxW = dims.width * pxPerInch * artworkScale;
+      const boxH = dims.height * pxPerInch * artworkScale;
 
-      // Maintain image aspect ratio within the bounding box
-      const imgNatW = artworkImage.naturalWidth || artworkImage.width;
-      const imgNatH = artworkImage.naturalHeight || artworkImage.height;
+      const imgNatW = img.naturalWidth || img.width;
+      const imgNatH = img.naturalHeight || img.height;
       const imgAspect = imgNatW / imgNatH;
       const boxAspect = boxW / boxH;
 
       let artW, artH;
-      if (imgAspect > boxAspect) {
-        artW = boxW;
-        artH = boxW / imgAspect;
-      } else {
-        artH = boxH;
-        artW = boxH * imgAspect;
-      }
+      if (imgAspect > boxAspect) { artW = boxW; artH = boxW / imgAspect; }
+      else { artH = boxH; artW = boxH * imgAspect; }
 
-      // Center horizontally, align to TOP of print area vertically
-      const drawX = printArea.x + (printArea.width - artW) / 2 + artworkPosition.x * CANVAS_SCALE;
-      const drawY = printArea.y + artworkPosition.y * CANVAS_SCALE;
+      const drawX = printArea.x + (printArea.width - artW) / 2 + pos.x * CANVAS_SCALE;
+      const drawY = printArea.y + pos.y * CANVAS_SCALE;
 
-      // Clip to print area
+      ctx.save();
+      ctx.globalAlpha = layerOpacity;
       ctx.beginPath();
       ctx.rect(printArea.x - 2, printArea.y - 2, printArea.width + 4, printArea.height + 4);
       ctx.clip();
-
-      ctx.drawImage(artworkImage, drawX, drawY, artW, artH);
+      ctx.drawImage(img, drawX, drawY, artW, artH);
       ctx.restore();
 
-      // Selection handles
-      if (guides && !isDragging) {
+      // Selection handles and dimension labels only for the active layer
+      if (isActive && guides && !isDragging) {
         const handleSize = 8 * CANVAS_SCALE;
         ctx.strokeStyle = '#2563eb';
         ctx.lineWidth = 2 * CANVAS_SCALE;
@@ -239,59 +269,67 @@ function DesignCanvas({
         });
       }
 
-      // Dimension labels — show the set artwork dimensions
-      if (guides) {
-      ctx.strokeStyle = '#ef4444';
-      ctx.fillStyle = '#ef4444';
-      ctx.lineWidth = 1.5 * CANVAS_SCALE;
-      ctx.setLineDash([]);
+      if (isActive && guides) {
+        ctx.strokeStyle = '#ef4444';
+        ctx.fillStyle = '#ef4444';
+        ctx.lineWidth = 1.5 * CANVAS_SCALE;
+        ctx.setLineDash([]);
 
-      // Show exact dimensions from user input (not from pixel calculation)
-      const actualW = artworkDimensions.width.toFixed(2);
-      const actualH = artworkDimensions.height.toFixed(2);
+        const actualW = dims.width.toFixed(2);
+        const actualH = dims.height.toFixed(2);
 
-      // Width line above artwork
-      const dimY = drawY - 14;
-      ctx.beginPath();
-      ctx.moveTo(drawX, dimY);
-      ctx.lineTo(drawX + artW, dimY);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(drawX, dimY - 4);
-      ctx.lineTo(drawX, dimY + 4);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(drawX + artW, dimY - 4);
-      ctx.lineTo(drawX + artW, dimY + 4);
-      ctx.stroke();
-      ctx.font = `bold ${12 * CANVAS_SCALE}px Inter, sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.fillText(`${actualW}"`, drawX + artW / 2, dimY - 4 * CANVAS_SCALE);
+        const dimY = drawY - 14;
+        ctx.beginPath(); ctx.moveTo(drawX, dimY); ctx.lineTo(drawX + artW, dimY); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(drawX, dimY - 4); ctx.lineTo(drawX, dimY + 4); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(drawX + artW, dimY - 4); ctx.lineTo(drawX + artW, dimY + 4); ctx.stroke();
+        ctx.font = `bold ${12 * CANVAS_SCALE}px Inter, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText(`${actualW}"`, drawX + artW / 2, dimY - 4 * CANVAS_SCALE);
 
-      // Height line on right
-      const dimX = drawX + artW + 14;
-      ctx.beginPath();
-      ctx.moveTo(dimX, drawY);
-      ctx.lineTo(dimX, drawY + artH);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(dimX - 4, drawY);
-      ctx.lineTo(dimX + 4, drawY);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(dimX - 4, drawY + artH);
-      ctx.lineTo(dimX + 4, drawY + artH);
-      ctx.stroke();
-      ctx.save();
-      ctx.translate(dimX + 14, drawY + artH / 2);
-      ctx.rotate(-Math.PI / 2);
-      ctx.textAlign = 'center';
-      ctx.fillStyle = '#ef4444';
-      ctx.font = `bold ${12 * CANVAS_SCALE}px Inter, sans-serif`;
-      ctx.fillText(`${actualH}"`, 0, 0);
-      ctx.restore();
+        const dimX = drawX + artW + 14;
+        ctx.beginPath(); ctx.moveTo(dimX, drawY); ctx.lineTo(dimX, drawY + artH); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(dimX - 4, drawY); ctx.lineTo(dimX + 4, drawY); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(dimX - 4, drawY + artH); ctx.lineTo(dimX + 4, drawY + artH); ctx.stroke();
+        ctx.save();
+        ctx.translate(dimX + 14, drawY + artH / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#ef4444';
+        ctx.font = `bold ${12 * CANVAS_SCALE}px Inter, sans-serif`;
+        ctx.fillText(`${actualH}"`, 0, 0);
+        ctx.restore();
       }
 
+      // Draw a subtle border for non-active layers in multi-layer mode (guides only)
+      if (!isActive && guides && multiLayerEnabled) {
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.5)';
+        ctx.lineWidth = 1 * CANVAS_SCALE;
+        ctx.setLineDash([4 * CANVAS_SCALE, 3 * CANVAS_SCALE]);
+        ctx.strokeRect(drawX, drawY, artW, artH);
+        ctx.setLineDash([]);
+      }
+    };
+
+    if (multiLayerEnabled && layers && layers.length > 0) {
+      // Multi-layer mode: draw all visible layers in order
+      let hasVisibleArtwork = false;
+      layers.forEach(layer => {
+        if (!layer.visible) return;
+        const img = layerImages[layer.id];
+        if (!img) return;
+        hasVisibleArtwork = true;
+        const isActive = layer.id === activeLayerId;
+        drawOneArtwork(img, layer.artworkDimensions, layer.artworkPosition, isActive, layer.opacity ?? 1);
+      });
+      if (!hasVisibleArtwork && guides) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.font = `${14 * CANVAS_SCALE}px Inter, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText('Upload artwork to a layer', printArea.x + printArea.width / 2, printArea.y + printArea.height / 2);
+      }
+    } else if (artworkImage) {
+      // Single-layer mode (original behavior)
+      drawOneArtwork(artworkImage, artworkDimensions, artworkPosition, true, 1);
     } else if (guides) {
       // Placeholder text
       ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
@@ -367,7 +405,7 @@ function DesignCanvas({
       ctx.stroke();
     }
 
-  }, [artworkImage, tshirtImage, selectedSize, selectedColor, artworkDimensions, viewSide, artworkPosition, artworkScale, artworkAreaSettings, isDragging, customGarment, getPrintArea]);
+  }, [artworkImage, tshirtImage, selectedSize, selectedColor, artworkDimensions, viewSide, artworkPosition, artworkScale, artworkAreaSettings, isDragging, customGarment, getPrintArea, multiLayerEnabled, layers, activeLayerId, layerImages]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -380,7 +418,11 @@ function DesignCanvas({
   useEffect(() => {
     if (!onRegisterExport) return undefined;
     onRegisterExport(async () => {
-      if (!artworkImage) return null;
+      // Check if there's anything to export
+      const hasContent = multiLayerEnabled
+        ? (layers && layers.some(l => l.visible && layerImages[l.id]))
+        : !!artworkImage;
+      if (!hasContent) return null;
       const out = document.createElement('canvas');
       out.width = CANVAS_WIDTH;
       out.height = CANVAS_HEIGHT;
@@ -388,32 +430,47 @@ function DesignCanvas({
       return new Promise(resolve => out.toBlob(resolve, 'image/png'));
     });
     return () => onRegisterExport(null);
-  }, [onRegisterExport, drawScene, artworkImage]);
+  }, [onRegisterExport, drawScene, artworkImage, multiLayerEnabled, layers, layerImages]);
 
   // Mouse handlers for dragging artwork
   const handleMouseDown = (e) => {
-    if (!artworkImage) return;
+    // Determine which image and position to use for hit-testing
+    let img, dims, pos;
+    if (multiLayerEnabled && layers && activeLayerId) {
+      const activeLayer = layers.find(l => l.id === activeLayerId);
+      if (!activeLayer || !activeLayer.visible) return;
+      img = layerImages[activeLayerId];
+      dims = activeLayer.artworkDimensions;
+      pos = activeLayer.artworkPosition;
+    } else {
+      img = artworkImage;
+      dims = artworkDimensions;
+      pos = artworkPosition;
+    }
+    if (!img) return;
+
     const rect = canvasRef.current.getBoundingClientRect();
     const x = (e.clientX - rect.left) * (CANVAS_WIDTH / rect.width);
     const y = (e.clientY - rect.top) * (CANVAS_HEIGHT / rect.height);
 
     const printArea = getPrintArea();
-    const boxW = printArea.artworkWidth * artworkScale;
-    const boxH = printArea.artworkHeight * artworkScale;
-    const imgNatW = artworkImage.naturalWidth || artworkImage.width;
-    const imgNatH = artworkImage.naturalHeight || artworkImage.height;
+    const pxPerInch = printArea.pxPerInch;
+    const boxW = dims.width * pxPerInch * artworkScale;
+    const boxH = dims.height * pxPerInch * artworkScale;
+    const imgNatW = img.naturalWidth || img.width;
+    const imgNatH = img.naturalHeight || img.height;
     const imgAspect = imgNatW / imgNatH;
     const boxAspect = boxW / boxH;
     let artW, artH;
     if (imgAspect > boxAspect) { artW = boxW; artH = boxW / imgAspect; }
     else { artH = boxH; artW = boxH * imgAspect; }
 
-    const drawX = printArea.x + (printArea.width - artW) / 2 + artworkPosition.x * CANVAS_SCALE;
-    const drawY = printArea.y + artworkPosition.y * CANVAS_SCALE;
+    const drawX = printArea.x + (printArea.width - artW) / 2 + pos.x * CANVAS_SCALE;
+    const drawY = printArea.y + pos.y * CANVAS_SCALE;
 
     if (x >= drawX && x <= drawX + artW && y >= drawY && y <= drawY + artH) {
       setIsDragging(true);
-      setDragStart({ x: x - artworkPosition.x * CANVAS_SCALE, y: y - artworkPosition.y * CANVAS_SCALE });
+      setDragStart({ x: x - pos.x * CANVAS_SCALE, y: y - pos.y * CANVAS_SCALE });
     }
   };
 

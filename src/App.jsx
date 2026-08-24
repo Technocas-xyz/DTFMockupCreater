@@ -18,6 +18,7 @@ import MockupEngineV2 from './components/MockupEngineV2';
 import Vault from './components/Vault';
 import GangSheetCalculator from './components/GangSheetCalculator';
 import GangSheetOptimizer from './components/GangSheetOptimizer';
+import LayerPanel from './components/LayerPanel';
 import { TSHIRT_SIZES, TSHIRT_COLORS, SIZE_ORDER } from './constants/tshirtSizes';
 import { GARMENTS_API, SERVE_IMAGE_URL, detectApiBase, getGarmentsUrl, getServeImageUrl } from './utils/apiConfig';
 import './App.css';
@@ -56,6 +57,144 @@ function App() {
   const [studioFileName, setStudioFileName] = useState('artwork.png');
   const [studioSaving, setStudioSaving] = useState(false);
   const [studioMessage, setStudioMessage] = useState('');
+
+  // ─── MULTI-LAYER STATE ──────────────────────────────────────────────────────
+  // When multiLayerEnabled is false, the existing artwork/artworkDimensions/
+  // artworkPosition state drives everything as before (single-layer mode).
+  // When enabled, layers[] array takes over — each layer has its own artwork,
+  // dimensions, and position. The active layer's state is synced back to the
+  // original state variables so ControlPanel/DesignCanvas work without changes.
+  const [multiLayerEnabled, setMultiLayerEnabled] = useState(false);
+  const [layers, setLayers] = useState([]);
+  const [activeLayerId, setActiveLayerId] = useState(null);
+
+  const createLayer = useCallback((layerArtwork = null, layerDimensions = null, layerPosition = null, name = null) => {
+    const id = `layer-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    return {
+      id,
+      name: name || `Layer ${layers.length + 1}`,
+      artwork: layerArtwork,
+      artworkDimensions: layerDimensions || { width: 10.75, height: 10.75 },
+      artworkPosition: layerPosition || { x: 0, y: 0 },
+      lockProportion: true,
+      visible: true,
+      opacity: 1,
+    };
+  }, [layers.length]);
+
+  const enableMultiLayer = useCallback(() => {
+    if (multiLayerEnabled) return;
+    // Initialize with the current single artwork as layer 1
+    const firstLayer = {
+      id: `layer-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name: 'Layer 1',
+      artwork: artwork,
+      artworkDimensions: { ...artworkDimensions },
+      artworkPosition: { ...artworkPosition },
+      lockProportion: lockProportion,
+      visible: true,
+      opacity: 1,
+    };
+    setLayers([firstLayer]);
+    setActiveLayerId(firstLayer.id);
+    setMultiLayerEnabled(true);
+  }, [multiLayerEnabled, artwork, artworkDimensions, artworkPosition, lockProportion]);
+
+  const disableMultiLayer = useCallback(() => {
+    // Revert to single-layer: take the active layer's state back to the main state
+    if (layers.length > 0) {
+      const active = layers.find(l => l.id === activeLayerId) || layers[0];
+      setArtwork(active.artwork);
+      setArtworkDimensions(active.artworkDimensions);
+      setArtworkPosition(active.artworkPosition);
+      setLockProportion(active.lockProportion);
+    }
+    setMultiLayerEnabled(false);
+    setLayers([]);
+    setActiveLayerId(null);
+  }, [layers, activeLayerId]);
+
+  const addLayer = useCallback(() => {
+    const newLayer = createLayer();
+    setLayers(prev => [...prev, newLayer]);
+    setActiveLayerId(newLayer.id);
+    // Sync main state to the new (empty) layer
+    setArtwork(null);
+    setArtworkDimensions({ width: 10.75, height: 10.75 });
+    setArtworkPosition({ x: 0, y: 0 });
+    setLockProportion(true);
+  }, [createLayer]);
+
+  const removeLayer = useCallback((layerId) => {
+    setLayers(prev => {
+      const updated = prev.filter(l => l.id !== layerId);
+      if (updated.length === 0) {
+        // Last layer removed — disable multi-layer
+        setMultiLayerEnabled(false);
+        setActiveLayerId(null);
+        setArtwork(null);
+        setArtworkDimensions({ width: 10.75, height: 10.75 });
+        setArtworkPosition({ x: 0, y: 0 });
+        return [];
+      }
+      // If the removed layer was active, switch to the first remaining
+      if (layerId === activeLayerId) {
+        const newActive = updated[0];
+        setActiveLayerId(newActive.id);
+        setArtwork(newActive.artwork);
+        setArtworkDimensions(newActive.artworkDimensions);
+        setArtworkPosition(newActive.artworkPosition);
+        setLockProportion(newActive.lockProportion);
+      }
+      return updated;
+    });
+  }, [activeLayerId]);
+
+  const selectLayer = useCallback((layerId) => {
+    if (layerId === activeLayerId) return;
+    // Save current state into the current active layer before switching
+    setLayers(prev => prev.map(l =>
+      l.id === activeLayerId
+        ? { ...l, artwork, artworkDimensions, artworkPosition, lockProportion }
+        : l
+    ));
+    // Load the selected layer's state
+    const target = layers.find(l => l.id === layerId);
+    if (target) {
+      setActiveLayerId(layerId);
+      setArtwork(target.artwork);
+      setArtworkDimensions(target.artworkDimensions);
+      setArtworkPosition(target.artworkPosition);
+      setLockProportion(target.lockProportion);
+    }
+  }, [activeLayerId, artwork, artworkDimensions, artworkPosition, lockProportion, layers]);
+
+  const updateLayerVisibility = useCallback((layerId, visible) => {
+    setLayers(prev => prev.map(l => l.id === layerId ? { ...l, visible } : l));
+  }, []);
+
+  const updateLayerName = useCallback((layerId, name) => {
+    setLayers(prev => prev.map(l => l.id === layerId ? { ...l, name } : l));
+  }, []);
+
+  const reorderLayers = useCallback((fromIndex, toIndex) => {
+    setLayers(prev => {
+      const updated = [...prev];
+      const [moved] = updated.splice(fromIndex, 1);
+      updated.splice(toIndex, 0, moved);
+      return updated;
+    });
+  }, []);
+
+  // Keep the active layer in sync with main state changes (from ControlPanel interactions)
+  useEffect(() => {
+    if (!multiLayerEnabled || !activeLayerId) return;
+    setLayers(prev => prev.map(l =>
+      l.id === activeLayerId
+        ? { ...l, artwork, artworkDimensions, artworkPosition, lockProportion }
+        : l
+    ));
+  }, [artwork, artworkDimensions, artworkPosition, lockProportion, multiLayerEnabled, activeLayerId]);
 
   useEffect(() => {
     const handoff = new URLSearchParams(window.location.search).get('artwork');
@@ -164,6 +303,21 @@ function App() {
   useEffect(() => {
     let active = true;
     async function initializeAuth() {
+      // DEV BYPASS: Skip auth on localhost so the app is testable without the PHP backend
+      const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      if (isLocalDev) {
+        const devUser = {
+          id: 0,
+          username: 'dev',
+          email: 'dev@localhost',
+          full_name: 'Local Developer',
+          role: 'superadmin',
+          page_access: ['vault','bgremover','qa','orders','garments','gangsheet','gscalc','gsoptimize','contrast','ailab','users','mockupv2','batch','garment-types'],
+        };
+        if (active) { setAuthUser(devUser); setAuthToken('dev-token'); setAuthLoading(false); }
+        return;
+      }
+
       const token = localStorage.getItem('auth_token');
       const user = localStorage.getItem('auth_user');
       if (token && user) {
@@ -529,6 +683,9 @@ function App() {
                   onPositionChange={handlePositionChange}
                   customGarment={customGarment}
                   onRegisterExport={registerMockupCanvasExport}
+                  multiLayerEnabled={multiLayerEnabled}
+                  layers={layers}
+                  activeLayerId={activeLayerId}
                 />
                 {comparisonSizes.length > 0 && (
                   <MultiSizePreview
@@ -544,11 +701,27 @@ function App() {
                     scalingMode={scalingMode}
                     baseSize={selectedSize}
                     customGarment={customGarment}
+                    multiLayerEnabled={multiLayerEnabled}
+                    layers={layers}
+                    activeLayerId={activeLayerId}
                   />
                 )}
               </div>
             </div>
             <div className="controls-section">
+              <LayerPanel
+                multiLayerEnabled={multiLayerEnabled}
+                layers={layers}
+                activeLayerId={activeLayerId}
+                onEnableMultiLayer={enableMultiLayer}
+                onDisableMultiLayer={disableMultiLayer}
+                onAddLayer={addLayer}
+                onRemoveLayer={removeLayer}
+                onSelectLayer={selectLayer}
+                onToggleVisibility={updateLayerVisibility}
+                onRenameLayer={updateLayerName}
+                onReorderLayers={reorderLayers}
+              />
               <ControlPanel
                 selectedSize={selectedSize}
                 onSizeChange={setSelectedSize}
@@ -577,6 +750,8 @@ function App() {
                 scalingMode={scalingMode}
                 onScalingModeChange={setScalingMode}
                 viewSide={viewSide}
+                multiLayerEnabled={multiLayerEnabled}
+                activeLayerName={multiLayerEnabled && layers.find(l => l.id === activeLayerId)?.name}
               />
             </div>
           </div>
@@ -642,6 +817,9 @@ function App() {
                 onPositionChange={handlePositionChange}
                 customGarment={customGarment}
                 onRegisterExport={registerMockupCanvasExport}
+                multiLayerEnabled={multiLayerEnabled}
+                layers={layers}
+                activeLayerId={activeLayerId}
               />
               {comparisonSizes.length > 0 && (
                 <MultiSizePreview
@@ -657,6 +835,9 @@ function App() {
                   scalingMode={scalingMode}
                   baseSize={selectedSize}
                   customGarment={customGarment}
+                  multiLayerEnabled={multiLayerEnabled}
+                  layers={layers}
+                  activeLayerId={activeLayerId}
                 />
               )}
             </div>
@@ -697,6 +878,8 @@ function App() {
               scalingMode={scalingMode}
               onScalingModeChange={setScalingMode}
               viewSide={viewSide}
+              multiLayerEnabled={multiLayerEnabled}
+              activeLayerName={multiLayerEnabled && layers.find(l => l.id === activeLayerId)?.name}
             />
           </div>
         </div>

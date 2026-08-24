@@ -1,0 +1,242 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   LAYER PANEL — Multi-layer artwork management
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.layer-panel {
+  margin-top: 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border, #e2e8f0);
+  background: white;
+  overflow: hidden;
+}
+
+/* ─── Collapsed state: just the enable button ────────────────────────────── */
+.layer-panel--collapsed {
+  padding: 6px 10px;
+}
+
+.layer-panel__enable-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  width: 100%;
+  justify-content: center;
+}
+
+.layer-panel__enable-btn:hover {
+  border-color: #2563eb;
+  color: #2563eb;
+  background: #eff6ff;
+}
+
+/* ─── Expanded state ─────────────────────────────────────────────────────── */
+.layer-panel--expanded {
+  padding: 0;
+}
+
+.layer-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-bottom: 1px solid #f1f5f9;
+  background: #f8fafc;
+}
+
+.layer-panel__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  margin: 0;
+}
+
+.layer-panel__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.layer-panel__add-btn,
+.layer-panel__disable-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.layer-panel__add-btn {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.layer-panel__add-btn:hover {
+  background: #dbeafe;
+}
+
+.layer-panel__disable-btn {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.layer-panel__disable-btn:hover {
+  background: #fee2e2;
+}
+
+/* ─── Layer list ─────────────────────────────────────────────────────────── */
+.layer-panel__list {
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.layer-panel__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  transition: all 0.12s ease;
+  user-select: none;
+}
+
+.layer-panel__item:hover {
+  background: #f8fafc;
+}
+
+.layer-panel__item--active {
+  background: #eff6ff;
+  border-left-color: #2563eb;
+}
+
+.layer-panel__item--hidden {
+  opacity: 0.45;
+}
+
+.layer-panel__item--drag-over {
+  border-top: 2px solid #2563eb;
+}
+
+/* Drag handle */
+.layer-panel__drag-handle {
+  display: flex;
+  align-items: center;
+  cursor: grab;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.layer-panel__drag-handle:active {
+  cursor: grabbing;
+}
+
+/* Thumbnail */
+.layer-panel__thumb {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.layer-panel__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Name */
+.layer-panel__name {
+  flex: 1;
+  font-size: 12px;
+  color: #334155;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.layer-panel__item--active .layer-panel__name {
+  font-weight: 600;
+  color: #1e40af;
+}
+
+.layer-panel__name-input {
+  flex: 1;
+  font-size: 12px;
+  padding: 2px 4px;
+  border: 1px solid #2563eb;
+  border-radius: 3px;
+  outline: none;
+  min-width: 0;
+}
+
+/* Item actions */
+.layer-panel__item-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.layer-panel__vis-btn,
+.layer-panel__delete-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.layer-panel__vis-btn:hover {
+  background: #f1f5f9;
+  color: #334155;
+}
+
+.layer-panel__vis-btn--off {
+  color: #cbd5e1;
+}
+
+.layer-panel__delete-btn:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+/* Footer */
+.layer-panel__footer {
+  padding: 4px 10px 6px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.layer-panel__hint {
+  font-size: 10px;
+  color: #94a3b8;
+  margin: 0;
+}

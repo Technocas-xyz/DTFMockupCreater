@@ -40,6 +40,9 @@ function MultiSizePreview({
   scalingMode,
   baseSize,
   customGarment,
+  multiLayerEnabled,
+  layers,
+  activeLayerId,
 }) {
   const cardRefs = useRef({});
 
@@ -168,6 +171,8 @@ function MultiSizePreview({
             baseBodyWidth={baseBodyWidth}
             basePercentage={basePercentage}
             customGarment={customGarment}
+            multiLayerEnabled={multiLayerEnabled}
+            layers={layers}
             ref={(el) => { cardRefs.current[size] = el; }}
           />
         ))}
@@ -191,6 +196,8 @@ const MSPCard = React.forwardRef(function MSPCard({
   baseBodyWidth,
   basePercentage,
   customGarment,
+  multiLayerEnabled,
+  layers,
 }, ref) {
   const canvasRef = useRef(null);
   const [tshirtImg, setTshirtImg] = useState(null);
@@ -339,7 +346,8 @@ const MSPCard = React.forwardRef(function MSPCard({
     }
 
     // Draw artwork — SAME logic as DesignCanvas
-    if (artwork) {
+    // Helper to draw one artwork on this card's canvas
+    const drawOneArt = (artSrc, dims, pos, opacity = 1) => {
       const img = new Image();
       img.onload = () => {
         // Same pxPerInch as the shirt
@@ -351,9 +359,12 @@ const MSPCard = React.forwardRef(function MSPCard({
         const printX = tshirtX + (tshirtW - printAreaPxW) / 2;
         const printY = tshirtY + (artworkAreaSettings.topOffset * artPxPerInch);
 
-        // Artwork dimensions
-        const artworkPxW = sizeArtW * artPxPerInch;
-        const artworkPxH = sizeArtH * artPxPerInch;
+        // Artwork dimensions — scaled for this size
+        const scaledArtW = (sizeData.bodyWidth * activePercent) / 100;
+        const layerAspect = dims.height / dims.width;
+        const scaledArtH = scaledArtW * layerAspect;
+        const artworkPxW = scaledArtW * artPxPerInch;
+        const artworkPxH = scaledArtH * artPxPerInch;
 
         // Maintain aspect ratio — exact same as DesignCanvas
         const imgNatW = img.naturalWidth;
@@ -365,22 +376,33 @@ const MSPCard = React.forwardRef(function MSPCard({
         else { artH = artworkPxH; artW = artworkPxH * imgAR; }
 
         // Center horizontally, align to TOP of print area vertically
-        const drawX = printX + (printAreaPxW - artW) / 2 + artworkPosition.x;
-        const drawY = printY + artworkPosition.y;
+        const drawX = printX + (printAreaPxW - artW) / 2 + pos.x;
+        const drawY = printY + pos.y;
 
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
         // Clip artwork to shirt area so it doesn't overflow
         ctx.save();
+        ctx.globalAlpha = opacity;
         ctx.beginPath();
         ctx.rect(tshirtX, tshirtY, tshirtW, tshirtH);
         ctx.clip();
         ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, drawX, drawY, artW, artH);
         ctx.restore();
       };
-      img.src = artwork;
+      img.src = artSrc;
+    };
+
+    if (multiLayerEnabled && layers && layers.length > 0) {
+      // Multi-layer mode: draw all visible layers
+      layers.forEach(layer => {
+        if (!layer.visible || !layer.artwork) return;
+        drawOneArt(layer.artwork, layer.artworkDimensions, layer.artworkPosition, layer.opacity ?? 1);
+      });
+    } else if (artwork) {
+      drawOneArt(artwork, artworkDimensions, artworkPosition, 1);
     }
-  }, [artwork, size, selectedColor, artworkDimensions, artworkPosition, artworkScale, artworkAreaSettings, viewSide, tshirtImg, isCustomGarment, sizeArtW, sizeArtH]);
+  }, [artwork, size, selectedColor, artworkDimensions, artworkPosition, artworkScale, artworkAreaSettings, viewSide, tshirtImg, isCustomGarment, sizeArtW, sizeArtH, multiLayerEnabled, layers]);
 
   // Download single card — magenta background crop detection (works for white shirts)
   // ─── DOWNLOAD SINGLE CARD: Render fresh at high-res from original source ──────
