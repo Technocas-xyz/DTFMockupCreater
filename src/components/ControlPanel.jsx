@@ -186,25 +186,36 @@ function ControlPanel({
   // Sizes depend on fit selection
   const availableSizes = selectedFit === 'Kids' ? KIDS_SIZES : ADULT_SIZES;
 
-  // Auto-select garment when category, size, or view side changes
+  // Does a garment match the currently selected fit (Men/Women/Unisex/Kids)?
+  // Unisex ('all'/'unisex') garments always match. Kids matches by gender or a kids size.
+  const matchesFit = (g) => {
+    if (selectedFit === 'All') return true;
+    const gFit = (g.gender || g.fit || 'Men').toLowerCase();
+    const selFit = selectedFit.toLowerCase();
+    if (selFit === 'kids') return gFit === 'kids' || KIDS_SIZES.includes(g.size);
+    return gFit === selFit || gFit === 'all' || gFit === 'unisex';
+  };
+
+  // Auto-select garment when fit, category, size, or view side changes.
+  // Fit (Men/Women) is matched first so a "Men + Tank Top" selection never
+  // lands on a ladies' tank top just because it appears first in the library.
   useEffect(() => {
     if (!garmentLibrary || garmentLibrary.length === 0) return;
     const side = viewSide || 'front';
-    // Find matching garment from library for this category + size + side
-    const match = garmentLibrary.find(g => g.type === selectedCategory && g.size === selectedSize && (g.side || 'front') === side);
-    if (match) {
-      onGarmentChange(match.id);
-    } else {
-      // Try same category+size any side
-      const fallback = garmentLibrary.find(g => g.type === selectedCategory && g.size === selectedSize);
-      if (fallback) { onGarmentChange(fallback.id); }
-      else {
-        // Try any garment of this category
-        const any = garmentLibrary.find(g => g.type === selectedCategory);
-        onGarmentChange(any ? any.id : null);
-      }
-    }
-  }, [selectedCategory, selectedSize, garmentLibrary, viewSide]);
+
+    // Preferred: exact fit + category + size + side
+    let match = garmentLibrary.find(g => matchesFit(g) && g.type === selectedCategory && g.size === selectedSize && (g.side || 'front') === side);
+    // Then: exact fit + category + size, any side
+    if (!match) match = garmentLibrary.find(g => matchesFit(g) && g.type === selectedCategory && g.size === selectedSize);
+    // Then: exact fit + category, any size/side
+    if (!match) match = garmentLibrary.find(g => matchesFit(g) && g.type === selectedCategory);
+    // Fallbacks that ignore fit (only when no fit-matching garment exists at all)
+    if (!match) match = garmentLibrary.find(g => g.type === selectedCategory && g.size === selectedSize && (g.side || 'front') === side);
+    if (!match) match = garmentLibrary.find(g => g.type === selectedCategory && g.size === selectedSize);
+    if (!match) match = garmentLibrary.find(g => g.type === selectedCategory);
+
+    onGarmentChange(match ? match.id : null);
+  }, [selectedFit, selectedCategory, selectedSize, garmentLibrary, viewSide]);
 
   const handleWidthChange = (newWidth) => {
     const w = parseFloat(newWidth) || 0;
