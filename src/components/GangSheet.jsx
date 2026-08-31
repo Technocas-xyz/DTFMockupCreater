@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import './GangSheet.css';
 import { detectApiBase } from '../utils/apiConfig';
 import { authFetch, apiError } from '../utils/authFetch';
-import { ALL_STRATEGIES } from '../utils/packingStrategies';
+import { packSheets } from '../utils/packingStrategies';
 
 const SHEET_WIDTH_INCHES = 22;
 const MAX_SHEET_HEIGHT = 108;
@@ -15,87 +15,10 @@ const COST_PER_FOOT = 5;
 const isUuid = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''));
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 2D RECTANGLE PACKING ENGINE (MaxRects)
-// Objective: Minimize sheet height → minimize material waste.
-// Rotation is handled EXTERNALLY (items pre-rotated before entering packer).
-// The packer places items exactly at their given w × h — no per-item rotation.
+// LAYOUT — uses the shared packing engine (utils/packingStrategies.js)
+// so the Gang Sheet and the Calculator ALWAYS produce identical results.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/**
- * MaxRects packer. Items are placed at exactly their given w × h.
- * Score: lowest endY first (minimizes height), then leftmost x (fills rows left→right).
- */
-function maxRectsPack(items, sheetWidth, hGap, vGap, margins, maxHeight) {
-  const marg = margins || { top: 0, bottom: 0, left: 0, right: 0 };
-  const usableW = sheetWidth - marg.left - marg.right;
-  const usableH = (maxHeight || 9999) - marg.top - marg.bottom;
-
-  let freeRects = [{ x: marg.left, y: marg.top, w: usableW, h: usableH }];
-  const placed = [];
-
-  for (const item of items) {
-    let bestScore = Infinity;
-    let bestRect = null;
-
-    for (const rect of freeRects) {
-      if (item.w <= rect.w + 0.001 && item.h <= rect.h + 0.001) {
-        const endY = rect.y + item.h;
-        const score = endY * 10000 + rect.x;
-        if (score < bestScore) { bestScore = score; bestRect = rect; }
-      }
-    }
-
-    if (!bestRect) continue;
-
-    const px = bestRect.x;
-    const py = bestRect.y;
-    placed.push({ ...item, x: px, y: py });
-
-    const occW = item.w + hGap;
-    const occH = item.h + vGap;
-
-    const newFree = [];
-    for (const fr of freeRects) {
-      if (px >= fr.x + fr.w || px + occW <= fr.x || py >= fr.y + fr.h || py + occH <= fr.y) {
-        newFree.push(fr); continue;
-      }
-      if (px + occW < fr.x + fr.w) newFree.push({ x: px + occW, y: fr.y, w: fr.x + fr.w - px - occW, h: fr.h });
-      if (px > fr.x) newFree.push({ x: fr.x, y: fr.y, w: px - fr.x, h: fr.h });
-      if (py + occH < fr.y + fr.h) newFree.push({ x: fr.x, y: py + occH, w: fr.w, h: fr.y + fr.h - py - occH });
-      if (py > fr.y) newFree.push({ x: fr.x, y: fr.y, w: fr.w, h: py - fr.y });
-    }
-
-    freeRects = [];
-    for (let i = 0; i < newFree.length; i++) {
-      const a = newFree[i];
-      if (a.w < 0.1 || a.h < 0.1) continue;
-      let contained = false;
-      for (let j = 0; j < newFree.length; j++) {
-        if (i === j) continue;
-        const b = newFree[j];
-        if (a.x >= b.x - 0.001 && a.y >= b.y - 0.001 &&
-            a.x + a.w <= b.x + b.w + 0.001 && a.y + a.h <= b.y + b.h + 0.001) {
-          contained = true; break;
-        }
-      }
-      if (!contained) freeRects.push(a);
-    }
-    if (freeRects.length > 600) {
-      freeRects.sort((a, b) => (b.w * b.h) - (a.w * a.h));
-      freeRects = freeRects.slice(0, 300);
-    }
-  }
-
-  let maxBottom = marg.top;
-  for (const p of placed) { if (p.y + p.h > maxBottom) maxBottom = p.y + p.h; }
-  return { placed, totalHeight: maxBottom + marg.bottom };
-}
-
-/**
- * Layout engine. Tries every sort strategy × 2 orientations (original + rotated).
- * Picks the combination that produces the shortest total height.
- * Rotation is clean: items are pre-rotated BEFORE entering the packer.
- */
 function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = false) {
   const marg = margins || { top: 0, bottom: 0, left: 0, right: 0 };
 
@@ -111,53 +34,13 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
 
   const enrichItems = (placedItems) => placedItems.map(item => ({ ...item, dataUrl: dataUrlMap[item.artworkId] }));
 
-  // Two orientations: original dimensions and all-rotated (w↔h swap)
-  const orientationSets = [
-    { items: items.map(i => ({ ...i, rotated: false })), label: 'original' },
-    { items: items.map(i => ({ ...i, w: i.h, h: i.w, rotated: true })), label: 'rotated' },
-  ];
+  const result = packSheets(items, sheetWidth, hGap, vGap, marg, MAX_SHEET_HEIGHT);
 
-  let bestLayout = null;
-  let bestTotalHeight = Infinity;
-  let bestStrategy = null;
-
-  for (const strategy of ALL_STRATEGIES) {
-    for (const { items: orientedItems } of orientationSets) {
-      const sortedItems = [...orientedItems].sort(strategy.compare);
-      const sheets = [];
-      let remaining = [...sortedItems];
-
-      while (remaining.length > 0) {
-        if (sheets.length >= 50) break;
-        const result = maxRectsPack(remaining, sheetWidth, hGap, vGap, marg, MAX_SHEET_HEIGHT);
-
-        if (result.placed.length === 0) {
-          const forced = remaining.shift();
-          sheets.push({ items: [{ ...forced, x: marg.left, y: marg.top }], totalHeight: forced.h + marg.top + marg.bottom });
-          continue;
-        }
-
-        sheets.push({ items: result.placed, totalHeight: result.totalHeight });
-
-        const placedCounts = new Map();
-        for (const p of result.placed) placedCounts.set(p.artworkId, (placedCounts.get(p.artworkId) || 0) + 1);
-        const nextRemaining = [];
-        for (const item of remaining) {
-          const count = placedCounts.get(item.artworkId) || 0;
-          if (count > 0) placedCounts.set(item.artworkId, count - 1);
-          else nextRemaining.push(item);
-        }
-        remaining = nextRemaining;
-      }
-
-      const totalH = sheets.reduce((sum, s) => sum + s.totalHeight, 0);
-      if (totalH < bestTotalHeight) { bestTotalHeight = totalH; bestLayout = sheets; bestStrategy = strategy; }
-    }
-  }
-
-  if (!bestLayout || bestLayout.length === 0) return { sheets: [{ items: [], totalHeight: 0 }], totalSheets: 1 };
-
-  return { sheets: bestLayout.map(s => ({ ...s, items: enrichItems(s.items) })), totalSheets: bestLayout.length, strategy: bestStrategy };
+  return {
+    sheets: result.sheets.map(s => ({ ...s, items: enrichItems(s.items) })),
+    totalSheets: result.totalSheets,
+    strategy: result.strategy,
+  };
 }
 
 // ─── COMPONENT ───────────────────────────────────────────────────────────────

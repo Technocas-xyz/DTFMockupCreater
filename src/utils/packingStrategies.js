@@ -102,3 +102,140 @@ export function packBestOf(items, measure, strategies = SORT_STRATEGIES) {
   }
   return best;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SHARED MAXRECTS PACKING ENGINE
+// Used by BOTH GangSheet and GangSheetCalculator so their results always match.
+//
+// Rotation is handled EXTERNALLY: items are pre-rotated (w↔h swapped) before
+// entering the packer. The packer places items exactly at their given w × h —
+// no per-item rotation decision inside. This eliminates scoring ambiguity.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * MaxRects packer. Places items at exactly their given w × h.
+ * Score: lowest endY first (minimizes height), then leftmost x.
+ * Returns { placed, totalHeight }.
+ */
+export function maxRectsPack(items, sheetWidth, hGap, vGap, margins, maxHeight) {
+  const marg = margins || { top: 0, bottom: 0, left: 0, right: 0 };
+  const usableW = sheetWidth - marg.left - marg.right;
+  const usableH = (maxHeight || 9999) - marg.top - marg.bottom;
+
+  let freeRects = [{ x: marg.left, y: marg.top, w: usableW, h: usableH }];
+  const placed = [];
+  const placedIndices = [];
+
+  for (let idx = 0; idx < items.length; idx++) {
+    const item = items[idx];
+    let bestScore = Infinity;
+    let bestRect = null;
+
+    for (const rect of freeRects) {
+      if (item.w <= rect.w + 0.001 && item.h <= rect.h + 0.001) {
+        const endY = rect.y + item.h;
+        const score = endY * 10000 + rect.x;
+        if (score < bestScore) { bestScore = score; bestRect = rect; }
+      }
+    }
+
+    if (!bestRect) continue;
+
+    const px = bestRect.x;
+    const py = bestRect.y;
+    placed.push({ ...item, x: px, y: py });
+    placedIndices.push(idx);
+
+    const occW = item.w + hGap;
+    const occH = item.h + vGap;
+
+    const newFree = [];
+    for (const fr of freeRects) {
+      if (px >= fr.x + fr.w || px + occW <= fr.x || py >= fr.y + fr.h || py + occH <= fr.y) {
+        newFree.push(fr); continue;
+      }
+      if (px + occW < fr.x + fr.w) newFree.push({ x: px + occW, y: fr.y, w: fr.x + fr.w - px - occW, h: fr.h });
+      if (px > fr.x) newFree.push({ x: fr.x, y: fr.y, w: px - fr.x, h: fr.h });
+      if (py + occH < fr.y + fr.h) newFree.push({ x: fr.x, y: py + occH, w: fr.w, h: fr.y + fr.h - py - occH });
+      if (py > fr.y) newFree.push({ x: fr.x, y: fr.y, w: fr.w, h: py - fr.y });
+    }
+
+    freeRects = [];
+    for (let i = 0; i < newFree.length; i++) {
+      const a = newFree[i];
+      if (a.w < 0.1 || a.h < 0.1) continue;
+      let contained = false;
+      for (let j = 0; j < newFree.length; j++) {
+        if (i === j) continue;
+        const b = newFree[j];
+        if (a.x >= b.x - 0.001 && a.y >= b.y - 0.001 &&
+            a.x + a.w <= b.x + b.w + 0.001 && a.y + a.h <= b.y + b.h + 0.001) {
+          contained = true; break;
+        }
+      }
+      if (!contained) freeRects.push(a);
+    }
+    if (freeRects.length > 600) {
+      freeRects.sort((a, b) => (b.w * b.h) - (a.w * a.h));
+      freeRects = freeRects.slice(0, 300);
+    }
+  }
+
+  let maxBottom = marg.top;
+  for (const p of placed) { if (p.y + p.h > maxBottom) maxBottom = p.y + p.h; }
+  return { placed, placedIndices, totalHeight: maxBottom + marg.bottom };
+}
+
+/**
+ * Full multi-sheet layout engine. Tries every sort strategy × 2 orientations
+ * (original + all-rotated) and keeps the combination with the shortest total height.
+ *
+ * `items` — array of { w, h, ...anyOtherFields } already expanded by quantity.
+ * Returns { sheets: [{ items:[...placed], totalHeight }], totalSheets, strategy }.
+ * Each placed item carries a `rotated` flag and its final x/y/w/h.
+ */
+export function packSheets(items, sheetWidth, hGap, vGap, margins, maxHeight, maxSheets = 50) {
+  const marg = margins || { top: 0, bottom: 0, left: 0, right: 0 };
+  if (!items || items.length === 0) return { sheets: [{ items: [], totalHeight: 0 }], totalSheets: 1, strategy: null };
+
+  const orientationSets = [
+    { items: items.map(i => ({ ...i, rotated: false })) },
+    { items: items.map(i => ({ ...i, w: i.h, h: i.w, rotated: true })) },
+  ];
+
+  let bestLayout = null;
+  let bestTotalHeight = Infinity;
+  let bestStrategy = null;
+
+  for (const strategy of ALL_STRATEGIES) {
+    for (const { items: orientedItems } of orientationSets) {
+      const sortedItems = [...orientedItems].sort(strategy.compare);
+      const sheets = [];
+      let remaining = [...sortedItems];
+
+      while (remaining.length > 0) {
+        if (sheets.length >= maxSheets) break;
+        const result = maxRectsPack(remaining, sheetWidth, hGap, vGap, marg, maxHeight);
+
+        if (result.placed.length === 0) {
+          const forced = remaining.shift();
+          sheets.push({ items: [{ ...forced, x: marg.left, y: marg.top }], totalHeight: forced.h + marg.top + marg.bottom });
+          continue;
+        }
+
+        sheets.push({ items: result.placed, totalHeight: result.totalHeight });
+
+        // Remove placed items from remaining by their index
+        const placedIdxSet = new Set(result.placedIndices);
+        remaining = remaining.filter((_, i) => !placedIdxSet.has(i));
+      }
+
+      const totalH = sheets.reduce((sum, s) => sum + s.totalHeight, 0);
+      if (totalH < bestTotalHeight) { bestTotalHeight = totalH; bestLayout = sheets; bestStrategy = strategy; }
+    }
+  }
+
+  if (!bestLayout || bestLayout.length === 0) return { sheets: [{ items: [], totalHeight: 0 }], totalSheets: 1, strategy: null };
+
+  return { sheets: bestLayout, totalSheets: bestLayout.length, strategy: bestStrategy };
+}
