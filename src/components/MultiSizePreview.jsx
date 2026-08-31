@@ -227,37 +227,58 @@ const MSPCard = React.forwardRef(function MSPCard({
     size,
   }));
 
-  // Load garment image — use customGarment (from type selection) if available
+  // Load garment image. When a garment is selected (customGarment), every size
+  // card must show the SAME garment type + fit — just at this card's size if a
+  // matching image exists, otherwise the selected garment's own image. This
+  // keeps a "Men Tank Top" comparison showing men's tanks across all sizes
+  // instead of falling back to a generic tank shape.
   useEffect(() => {
-    // Priority 1: Use the customGarment passed from parent (matches selected type like Hoodie)
-    if (customGarment && customGarment.dataUrl) {
+    let cancelled = false;
+    const applyImage = (src, custom) => {
       const img = new Image();
-      img.onload = () => { setTshirtImg(img); setIsCustomGarment(true); };
-      img.src = customGarment.dataUrl;
-      return;
+      img.onload = () => { if (!cancelled) { setTshirtImg(img); setIsCustomGarment(custom); } };
+      img.onerror = () => {
+        if (cancelled) return;
+        setIsCustomGarment(false);
+        const side = viewSide === 'front' ? 'front' : 'back';
+        const fb = new Image();
+        fb.onload = () => { if (!cancelled) setTshirtImg(fb); };
+        fb.onerror = () => { if (!cancelled) setTshirtImg(null); };
+        fb.src = `/tshirts/white-${side}1.png`;
+      };
+      img.src = src;
+    };
+
+    if (customGarment && customGarment.dataUrl) {
+      // Try to find the same type + fit + THIS card's size + side in the library,
+      // so each size card shows its own correctly-sized garment image.
+      const custType = customGarment.type;
+      const custFit = (customGarment.gender || customGarment.fit || '').toLowerCase();
+      const sameKindThisSize = garmentLibrary && garmentLibrary.find((g) =>
+        g.type === custType &&
+        (custFit ? (g.gender || g.fit || '').toLowerCase() === custFit : true) &&
+        g.size === realSize &&
+        (g.side || 'front') === viewSide &&
+        g.dataUrl
+      );
+      // Use the size-specific match, or fall back to the selected garment's image.
+      applyImage((sameKindThisSize && sameKindThisSize.dataUrl) || customGarment.dataUrl, true);
+      return () => { cancelled = true; };
     }
-    // Priority 2: Find a tagged garment for this exact size + side in library
+
+    // No garment selected — plain size+side match, then default tshirt vector.
     const taggedGarment = garmentLibrary && garmentLibrary.find(
-      (g) => g.size === realSize && (g.side || 'front') === viewSide
+      (g) => g.size === realSize && (g.side || 'front') === viewSide && g.dataUrl
     );
     if (taggedGarment && taggedGarment.dataUrl) {
-      const img = new Image();
-      img.onload = () => { setTshirtImg(img); setIsCustomGarment(true); };
-      img.src = taggedGarment.dataUrl;
+      applyImage(taggedGarment.dataUrl, true);
     } else {
       setIsCustomGarment(false);
       const side = viewSide === 'front' ? 'front' : 'back';
-      const img = new Image();
-      img.onload = () => setTshirtImg(img);
-      img.onerror = () => {
-        const fallback = new Image();
-        fallback.onload = () => setTshirtImg(fallback);
-        fallback.onerror = () => setTshirtImg(null);
-        fallback.src = `/tshirts/white-${side}1.png`;
-      };
-      img.src = `/tshirts/white-${side}1.png`;
+      applyImage(`/tshirts/white-${side}1.png`, false);
     }
-  }, [viewSide, selectedColor, size, garmentLibrary, customGarment]);
+    return () => { cancelled = true; };
+  }, [viewSide, selectedColor, size, realSize, garmentLibrary, customGarment]);
 
   // Draw canvas
   useEffect(() => {
