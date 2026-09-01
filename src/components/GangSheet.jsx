@@ -1107,7 +1107,7 @@ function GangSheet({ sharedArtwork, onRegisterExport }) {
             {layoutData.strategy && (
               <div className="gs-stat-row">
                 <label>Packing</label>
-                <span title={`${layoutData.strategy.note} — shortest of ${ALL_STRATEGIES.length} sort orders tried`}>
+                <span title={`${layoutData.strategy.note} — shortest sort order tried across both orientations`}>
                   {layoutData.strategy.name}
                 </span>
               </div>
