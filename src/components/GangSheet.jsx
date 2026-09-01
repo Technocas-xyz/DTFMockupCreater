@@ -207,7 +207,7 @@ function GangSheet({ sharedArtwork, onRegisterExport }) {
       if (selectedOrder?.id) {
         const payload = {
           order_id: selectedOrder.id, total_height: totalHeight, total_sheets: layoutData.totalSheets,
-          total_quantity: totalItemCount, estimated_price: (Math.ceil(totalHeight) / 12) * COST_PER_FOOT,
+          total_quantity: totalItemCount, estimated_price: Math.ceil(totalHeight / 12) * COST_PER_FOOT,
           settings: { hGap, vGap, margins, arrangement, tightPack, showCutLines, includeHeader, headerTopMargin },
           artworks: artworks.map(a => ({ orderItemId:a.orderItemId,artworkId:a.artworkId,artworkNo:a.artworkNo,filename:a.filename,widthInches:a.widthInches,heightInches:a.heightInches,repetitions:a.repetitions })),
           layout: {
@@ -1120,7 +1120,7 @@ function GangSheet({ sharedArtwork, onRegisterExport }) {
               <div className="gs-cost-title">💰 Cost Estimate</div>
               <div className="gs-cost-row">
                 <span>Total sheet length</span>
-                <span>{Math.ceil(totalHeight)}" ({(Math.ceil(totalHeight) / 12).toFixed(2)} ft)</span>
+                <span>{Math.ceil(totalHeight)}" ({(totalHeight / 12).toFixed(2)} ft → billed {Math.ceil(totalHeight / 12)} ft)</span>
               </div>
               <div className="gs-cost-row">
                 <span>Rate</span>
@@ -1129,7 +1129,7 @@ function GangSheet({ sharedArtwork, onRegisterExport }) {
               <div className="gs-cost-divider" />
               <div className="gs-cost-row gs-cost-total">
                 <span>Total</span>
-                <span>${((Math.ceil(totalHeight) / 12) * COST_PER_FOOT).toFixed(2)} USD</span>
+                <span>${(Math.ceil(totalHeight / 12) * COST_PER_FOOT).toFixed(2)} USD</span>
               </div>
             </div>
           )}

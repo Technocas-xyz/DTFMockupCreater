@@ -51,7 +51,9 @@ function GangSheetCalculator() {
     const totalHeight = calculateOptimalHeight(items, SHEET_WIDTH, hGap, vGap);
     const sheets = Math.ceil(totalHeight / MAX_SHEET_HEIGHT);
     const totalFeet = totalHeight / 12;
-    const cost = totalFeet * COST_PER_FOOT;
+    // Billing is per whole foot, rounded UP: 0.9 ft → 1 ft → $5, 1.1 ft → 2 ft → $10.
+    const billedFeet = Math.ceil(totalFeet);
+    const cost = billedFeet * COST_PER_FOOT;
     const totalArea = SHEET_WIDTH * totalHeight;
     const artworkArea = items.reduce((s, i) => s + i.w * i.h, 0);
     const utilization = totalArea > 0 ? (artworkArea / totalArea * 100) : 0;
@@ -60,6 +62,7 @@ function GangSheetCalculator() {
       totalItems: items.length,
       totalHeight: totalHeight.toFixed(1),
       totalFeet: totalFeet.toFixed(2),
+      billedFeet,
       sheets,
       cost: cost.toFixed(2),
       utilization: utilization.toFixed(1),
