@@ -19,8 +19,8 @@ function calculateOptimalHeight(items, sheetWidth, hGap, vGap) {
 
 function GangSheetCalculator() {
   const [artworks, setArtworks] = useState([{ id: 1, width: 10.75, height: 10.75, qty: 1 }]);
-  const [hGap, setHGap] = useState(0.125);
-  const [vGap, setVGap] = useState(0.125);
+  const [hGap, setHGap] = useState(0.5);
+  const [vGap, setVGap] = useState(0.5);
   const nextId = useState(2);
 
   const addArtwork = () => {

@@ -46,8 +46,8 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
 // ─── COMPONENT ───────────────────────────────────────────────────────────────
 function GangSheet({ sharedArtwork, onRegisterExport }) {
   const [artworks, setArtworks] = useState([]);
-  const [hGap, setHGap] = useState(0.125);
-  const [vGap, setVGap] = useState(0.125);
+  const [hGap, setHGap] = useState(0.5);
+  const [vGap, setVGap] = useState(0.5);
   const [margins, setMargins] = useState({ top: 0, bottom: 0, left: 0, right: 0 });
   const [arrangement, setArrangement] = useState('auto');
   const [tightPack, setTightPack] = useState(true);
