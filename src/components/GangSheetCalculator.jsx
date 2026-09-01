@@ -32,17 +32,23 @@ function GangSheetCalculator() {
   };
 
   const updateArtwork = (id, field, value) => {
-    setArtworks(prev => prev.map(a => a.id === id ? { ...a, [field]: parseFloat(value) || 0 } : a));
+    // Keep the raw string while typing so the field can be cleared and retyped
+    // (coercing to a number here would snap an empty field back to 0). Values
+    // are parsed to numbers in the calculation below.
+    setArtworks(prev => prev.map(a => a.id === id ? { ...a, [field]: value } : a));
   };
 
   // Calculate using same packing algorithm
   const result = useMemo(() => {
-    // Expand artworks into items
+    // Expand artworks into items — parse the (possibly string) inputs to numbers.
     const items = [];
     for (const art of artworks) {
-      if (art.width <= 0 || art.height <= 0 || art.qty <= 0) continue;
-      for (let i = 0; i < art.qty; i++) {
-        items.push({ w: art.width, h: art.height });
+      const w = parseFloat(art.width) || 0;
+      const h = parseFloat(art.height) || 0;
+      const qty = parseInt(art.qty, 10) || 0;
+      if (w <= 0 || h <= 0 || qty <= 0) continue;
+      for (let i = 0; i < qty; i++) {
+        items.push({ w, h });
       }
     }
     if (items.length === 0) return null;
@@ -70,7 +76,7 @@ function GangSheetCalculator() {
     };
   }, [artworks, hGap, vGap]);
 
-  const totalQty = artworks.reduce((s, a) => s + (a.qty || 0), 0);
+  const totalQty = artworks.reduce((s, a) => s + (parseInt(a.qty, 10) || 0), 0);
 
   return (
     <div className="gsc-page">
@@ -98,7 +104,7 @@ function GangSheetCalculator() {
                   <td><input type="number" step="0.1" min="0.5" max="21" value={art.width} onChange={e => updateArtwork(art.id, 'width', e.target.value)} /></td>
                   <td><input type="number" step="0.1" min="0.5" max="108" value={art.height} onChange={e => updateArtwork(art.id, 'height', e.target.value)} /></td>
                   <td><input type="number" step="1" min="1" value={art.qty} onChange={e => updateArtwork(art.id, 'qty', e.target.value)} /></td>
-                  <td className="gsc-area">{(art.width * art.height).toFixed(1)} sq"</td>
+                  <td className="gsc-area">{((parseFloat(art.width) || 0) * (parseFloat(art.height) || 0)).toFixed(1)} sq"</td>
                   <td>{artworks.length > 1 && <button className="gsc-btn-remove" onClick={() => removeArtwork(art.id)}>×</button>}</td>
                 </tr>
               ))}
