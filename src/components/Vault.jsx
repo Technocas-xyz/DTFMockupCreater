@@ -225,7 +225,11 @@ function Vault({ onOpenAsset }) {
       if (!listRes.ok) throw new Error(`Vault unavailable (${listRes.status})`);
       const listPayload = await listRes.json();
       const data = listPayload.data || {};
-      setRows(data.rows || []);
+      // Hide "OUT" (Sent) files from the grid — these are finished files already
+      // sent to production and just clutter the pre-order vault view.
+      const allRows = data.rows || [];
+      const visibleRows = allRows.filter(r => (r.lifecycle_code || '').toUpperCase() !== 'OUT');
+      setRows(visibleRows);
       setTotal(data.total || 0);
       if (facetRes.ok) {
         const facetPayload = await facetRes.json();
@@ -432,7 +436,7 @@ function Vault({ onOpenAsset }) {
         />
         <select className="vault-select" value={lifecycle} onChange={(e) => { setLifecycle(e.target.value); setPage(1); }}>
           <option value="">All stages</option>
-          {facets.lifecycles.filter(item => item.key !== '—').map(item => (
+          {facets.lifecycles.filter(item => item.key !== '—' && item.key.toUpperCase() !== 'OUT').map(item => (
             <option key={item.key} value={item.key}>
               {(LIFECYCLE[item.key]?.label) || item.key} ({item.files})
             </option>
