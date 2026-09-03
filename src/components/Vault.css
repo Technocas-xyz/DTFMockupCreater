@@ -110,6 +110,9 @@
 .vault-btn:disabled { opacity: .5; cursor: not-allowed; }
 .vault-btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
 .vault-btn-primary:hover:not(:disabled) { background: var(--primary-hover); border-color: var(--primary-hover); }
+/* Sending files to Task Management is not a studio tool — it reads as its own action. */
+.vault-btn-task { background: #0f766e; color: #fff; border-color: #0f766e; }
+.vault-btn-task:hover:not(:disabled) { background: #115e56; border-color: #115e56; }
 .vault-btn-ghost { background: transparent; color: var(--text-secondary); }
 
 

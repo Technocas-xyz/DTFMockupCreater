@@ -16,6 +16,7 @@ import GarmentTypes from './components/GarmentTypes';
 import BatchProcessor from './components/BatchProcessor';
 import MockupEngineV2 from './components/MockupEngineV2';
 import Vault from './components/Vault';
+import TaskManager from './components/TaskManager';
 import GangSheetCalculator from './components/GangSheetCalculator';
 import GangSheetOptimizer from './components/GangSheetOptimizer';
 import LayerPanel from './components/LayerPanel';
@@ -28,6 +29,10 @@ function App() {
   const [authUser, setAuthUser] = useState(null);
   const [authToken, setAuthToken] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  // True once the server (not the cache) has confirmed who this is and what they
+  // may open. The landing redirect waits for it, so a stale cached page list
+  // cannot bounce someone off the page they were meant to start on.
+  const [authVerified, setAuthVerified] = useState(false);
 
   // ─── APP STATE (must be declared before any early returns — React hooks rule) ──
   // The vault is where a job starts — pick the customer's file first, then take
@@ -57,6 +62,11 @@ function App() {
   const [studioFileName, setStudioFileName] = useState('artwork.png');
   const [studioSaving, setStudioSaving] = useState(false);
   const [studioMessage, setStudioMessage] = useState('');
+
+  // Vault selection on its way to a new task, and the artwork a task is
+  // currently checking back out of the vault into the editor.
+  const [pendingTaskArtworks, setPendingTaskArtworks] = useState(null);
+  const [openingTaskArtwork, setOpeningTaskArtwork] = useState('');
 
   // ─── MULTI-LAYER STATE ──────────────────────────────────────────────────────
   // When multiLayerEnabled is false, the existing artwork/artworkDimensions/
@@ -318,13 +328,41 @@ function App() {
         return;
       }
 
+      // The cached user paints the app immediately, but it is only a cache: page
+      // access and role are granted on the server and used to change, so every
+      // load re-reads them. Without this an administrator's grant never reached
+      // anyone who was already signed in — their browser kept the old page list
+      // until the session expired.
       const token = localStorage.getItem('auth_token');
-      const user = localStorage.getItem('auth_user');
-      if (token && user) {
+      const cached = localStorage.getItem('auth_user');
+      if (token) {
+        let painted = false;
+        if (cached) {
+          try {
+            if (active) { setAuthUser(JSON.parse(cached)); setAuthToken(token); setAuthLoading(false); painted = true; }
+          } catch (e) { localStorage.removeItem('auth_user'); }
+        }
         try {
-          if (active) { setAuthUser(JSON.parse(user)); setAuthToken(token); setAuthLoading(false); }
-          return;
-        } catch (e) { localStorage.removeItem('auth_token'); localStorage.removeItem('auth_user'); }
+          const apiBase = await detectApiBase();
+          const res = await fetch(`${apiBase}/auth.php?action=validate`, { headers: { Authorization: `Bearer ${token}` } });
+          if (res.ok) {
+            const data = await res.json();
+            localStorage.setItem('auth_user', JSON.stringify(data.user));
+            if (active) { setAuthUser(data.user); setAuthToken(token); setAuthVerified(true); }
+            return;
+          }
+          if (res.status !== 401) {
+            // The server is unhappy for some other reason — a cached session is
+            // better than throwing the person back to a login screen.
+            if (painted) return;
+          } else {
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('auth_user');
+            if (active) { setAuthUser(null); setAuthToken(null); }
+          }
+        } catch (e) {
+          if (painted) return; // offline: keep working with what we have
+        }
       }
       try {
         const apiBase = await detectApiBase();
@@ -339,7 +377,7 @@ function App() {
         const data = await res.json();
         localStorage.setItem('auth_token', data.token);
         localStorage.setItem('auth_user', JSON.stringify(data.user));
-        if (active) { setAuthUser(data.user); setAuthToken(data.token); }
+        if (active) { setAuthUser(data.user); setAuthToken(data.token); setAuthVerified(true); }
       } catch {
         if (window.location.hostname.endsWith('.decoinkssuite.com')) {
           const rd = `${window.location.origin}${window.location.pathname}${window.location.search}`;
@@ -355,6 +393,7 @@ function App() {
   const handleLogin = (user, token) => {
     setAuthUser(user);
     setAuthToken(token);
+    setAuthVerified(true);
   };
 
   const handleLogout = () => {
@@ -370,6 +409,7 @@ function App() {
     localStorage.removeItem('auth_user');
     setAuthUser(null);
     setAuthToken(null);
+    setAuthVerified(false);
   };
 
   // Check page access
@@ -379,6 +419,18 @@ function App() {
     const access = authUser.page_access || [];
     return access.includes(page);
   };
+
+  // The app opens on the Vault, but not everyone has it — a designer who only has
+  // the editor and the task list used to land on "You don't have access to this
+  // page" with a perfectly usable sidebar beside it. Follow the sidebar's own
+  // order and open the first page this person is allowed to see.
+  const PAGE_ORDER = ['tasks', 'vault', 'bgremover', 'mockupv2', 'gangsheet', 'garments', 'batch', 'gscalc', 'gsoptimize', 'qa', 'contrast', 'ailab', 'orders', 'garment-types', 'users'];
+  useEffect(() => {
+    if (!authUser || !authVerified || hasPageAccess(currentPage)) return;
+    const landing = PAGE_ORDER.find(hasPageAccess);
+    if (landing) setCurrentPage(landing);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authUser, authVerified, currentPage]);
 
   // Load garment library from server API (shared for all users), fallback to localStorage
   const loadGarmentLibrary = async () => {
@@ -566,6 +618,52 @@ function App() {
     setCurrentPage(target);
   };
 
+  // Vault → Task Manager. The files stay selected as vault assets: previews and
+  // the payload are built on the task page, so a big selection does not block
+  // the grid the person is still working in.
+  // Stable identity: the task page uses this in an effect, and a new function on
+  // every App render would re-run that effect mid-preparation.
+  const clearPendingTaskArtworks = useCallback(() => setPendingTaskArtworks(null), []);
+
+  const sendVaultSelectionToTasks = (assets) => {
+    if (!assets?.length) return;
+    setPendingTaskArtworks(assets);
+    setCurrentPage('tasks');
+  };
+
+  // The other direction: an artwork attached to a task, opened into the editor.
+  // Only the vault asset id was stored, so the file is checked out here exactly
+  // as the Vault page does it — which is what gives the editor a save token.
+  const openTaskArtwork = async (artwork) => {
+    if (!artwork?.assetId || openingTaskArtwork) return;
+    setOpeningTaskArtwork(artwork.assetId);
+    try {
+      const apiBase = await detectApiBase();
+      const handoffRes = await fetch(`${apiBase}/central-artwork.php?action=handoff&id=${encodeURIComponent(artwork.assetId)}`);
+      const handoff = await handoffRes.json();
+      if (!handoffRes.ok || !handoff.data?.token) throw new Error(handoff.message || 'Could not check out this artwork');
+      const contentRes = await fetch(`${apiBase}/central-artwork.php?action=content&token=${encodeURIComponent(handoff.data.token)}`);
+      if (!contentRes.ok) throw new Error('Artwork content could not be downloaded');
+      const blob = await contentRes.blob();
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('Artwork could not be read'));
+        reader.readAsDataURL(blob);
+      });
+      openVaultAsset('bgremover', dataUrl, {
+        id: artwork.assetId,
+        file_name: handoff.data.file_name || artwork.fileName,
+        entity_name: artwork.customerName || null,
+        studio_token: handoff.data.token,
+      });
+    } catch (error) {
+      setStudioMessage(error.message || 'This artwork could not be opened');
+    } finally {
+      setOpeningTaskArtwork('');
+    }
+  };
+
   const sendToBGRemover = (imageDataUrl) => {
     setSharedArtwork({ dataUrl: imageDataUrl, filename: 'artwork.png' });
     setCurrentPage('bgremover');
@@ -584,7 +682,18 @@ function App() {
     }
 
     if (currentPage === 'vault') {
-      return <Vault onOpenAsset={openVaultAsset} />;
+      return <Vault onOpenAsset={openVaultAsset} onSendToTasks={sendVaultSelectionToTasks} />;
+    }
+
+    if (currentPage === 'tasks') {
+      return (
+        <TaskManager
+          pendingArtworks={pendingTaskArtworks}
+          onPendingArtworksHandled={clearPendingTaskArtworks}
+          onOpenArtwork={openTaskArtwork}
+          openingArtwork={openingTaskArtwork}
+        />
+      );
     }
 
     if (currentPage === 'contrast') {

@@ -157,7 +157,7 @@ function VaultCard({ asset, apiBase, selected, onSelect }) {
   );
 }
 
-function Vault({ onOpenAsset }) {
+function Vault({ onOpenAsset, onSendToTasks }) {
   const [apiBase, setApiBase] = useState(null);
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
@@ -175,7 +175,13 @@ function Vault({ onOpenAsset }) {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(1);
-  const [selected, setSelected] = useState(null);
+  // A studio tool opens one file, but a task is often a whole set — so the grid
+  // keeps a selection and the action bar offers the tools only when it holds
+  // exactly one file.
+  const [selection, setSelection] = useState([]);
+  const selected = selection.length === 1 ? selection[0] : null;
+  const toggleSelected = (asset) =>
+    setSelection(prev => (prev.some(a => a.id === asset.id) ? prev.filter(a => a.id !== asset.id) : [...prev, asset]));
 
   // Upload state
   const [showUpload, setShowUpload] = useState(false);
@@ -318,7 +324,7 @@ function Vault({ onOpenAsset }) {
   };
 
   const selectRoot = (next) => {
-    setRoot(next); setCustomer(''); setFolder(''); setSelected(null); setPage(1);
+    setRoot(next); setCustomer(''); setFolder(''); setSelection([]); setPage(1);
   };
 
   const resetFilters = () => {
@@ -488,8 +494,8 @@ function Vault({ onOpenAsset }) {
                 key={asset.id}
                 asset={asset}
                 apiBase={apiBase}
-                selected={selected?.id === asset.id}
-                onSelect={(next) => { setSelected(prev => (prev?.id === next.id ? null : next)); setStatus(''); }}
+                selected={selection.some(a => a.id === asset.id)}
+                onSelect={(next) => { toggleSelected(next); setStatus(''); }}
               />
             ))}
           </div>
@@ -505,18 +511,28 @@ function Vault({ onOpenAsset }) {
         </>
       )}
 
-      {selected && (
+      {selection.length > 0 && (
         <div className="vault-actionbar">
           <div className="vault-actionbar-file">
-            <strong title={selected.file_name}>{selected.file_name}</strong>
-            <span>
-              {selected.entity_name || 'Unlinked'} · {selected.folder}
-              {selected.artwork_code ? ` · ${selected.artwork_code}` : ''}
-              {` · ${formatDate(selected.source_modified_at)}`}
-            </span>
+            {selected ? (
+              <>
+                <strong title={selected.file_name}>{selected.file_name}</strong>
+                <span>
+                  {selected.entity_name || 'Unlinked'} · {selected.folder}
+                  {selected.artwork_code ? ` · ${selected.artwork_code}` : ''}
+                  {` · ${formatDate(selected.source_modified_at)}`}
+                </span>
+              </>
+            ) : (
+              <>
+                <strong>{selection.length} files selected</strong>
+                <span>{selection.slice(0, 3).map(a => a.file_name).join(', ')}{selection.length > 3 ? ` +${selection.length - 3} more` : ''}</span>
+              </>
+            )}
           </div>
           <div className="vault-actionbar-actions">
-            {TARGETS.map(target => (
+            {/* The studio tools work on one file; the task hand-off takes the set. */}
+            {selected && TARGETS.map(target => (
               <button
                 key={target.page}
                 type="button"
@@ -527,10 +543,20 @@ function Vault({ onOpenAsset }) {
                 {opening === target.page ? 'Opening…' : target.label}
               </button>
             ))}
-            <button type="button" className="vault-btn" onClick={() => download(selected)}>Download</button>
-            <button type="button" className="vault-btn vault-btn-ghost" onClick={() => { setSelected(null); setStatus(''); }}>Close</button>
+            {onSendToTasks && (
+              <button
+                type="button"
+                className="vault-btn vault-btn-task"
+                onClick={() => { onSendToTasks(selection); setSelection([]); setStatus(''); }}
+              >
+                Send to Task Management{selection.length > 1 ? ` (${selection.length})` : ''}
+              </button>
+            )}
+            {selected && <button type="button" className="vault-btn" onClick={() => download(selected)}>Download</button>}
+            <button type="button" className="vault-btn vault-btn-ghost" onClick={() => { setSelection([]); setStatus(''); }}>Clear</button>
           </div>
           {status && <div className="vault-actionbar-status">{status}</div>}
+          {!selected && <div className="vault-actionbar-status">Pick a single file to open it in a studio tool.</div>}
         </div>
       )}
 
