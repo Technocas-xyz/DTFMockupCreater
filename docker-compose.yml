@@ -7,6 +7,9 @@ services:
       - garment-data:/var/www/html/api/garment-data
     environment:
       - DB_SCHEMA=dtf
+      # Required so api/auth.php?action=sso can validate the X-DECOINKS-SSO-SECRET
+      # header injected by the Authentik proxy. Loaded from ./.env (gitignored).
+      - SSO_SHARED_SECRET=${SSO_SHARED_SECRET:?set SSO_SHARED_SECRET in DTFMockupCreater/.env}
     env_file:
       - /root/decoinks/backend/.env
     networks:
