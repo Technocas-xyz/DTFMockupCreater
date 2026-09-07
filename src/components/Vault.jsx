@@ -24,7 +24,17 @@ const TARGETS = [
   { page: 'contrast', label: 'Contrast' },
 ];
 
+// The upload type picks the Nextcloud sub-folder the file lands in:
+//   REF / SRC → references   ·   WRK → Artworks   ·   FNL / FNLA → final_files
+//
+// A design keeps one identity — AW-<CLIENT>-<NNNN> — and only its type suffix
+// changes as it moves SRC → WRK → FNL. So these downstream types must be told
+// which design they belong to; they inherit its code instead of taking a new
+// number. REF and SRC start a design, so they never ask.
+const ATTACH_TYPES = new Set(['WRK', 'FNL', 'FNLA']);
+
 const UPLOAD_LIFECYCLES = [
+  { code: 'REF', label: 'Reference' },
   { code: 'SRC', label: 'Source (Original)' },
   { code: 'WRK', label: 'Working File' },
   { code: 'FNL', label: 'Final' },
@@ -185,12 +195,19 @@ function Vault({ onOpenAsset, onSendToTasks }) {
 
   // Upload state
   const [showUpload, setShowUpload] = useState(false);
-  const [uploadFile, setUploadFile] = useState(null);
-  const [uploadPreview, setUploadPreview] = useState(null);
-  const [uploadLifecycle, setUploadLifecycle] = useState('WRK');
+  // One or many files can be queued for a single customer + type.
+  const [uploadFiles, setUploadFiles] = useState([]); // [{ file, preview }]
+  const [uploadLifecycle, setUploadLifecycle] = useState('SRC');
   const [uploading, setUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState('');
   const uploadInputRef = useRef(null);
+  // "Which design is this?" — the source a WRK/FNL/FNLA upload attaches to.
+  const [pieces, setPieces] = useState([]);
+  const [piecesLoading, setPiecesLoading] = useState(false);
+  const [attachTo, setAttachTo] = useState('');
+  const [pieceSearch, setPieceSearch] = useState('');
+  const needsAttach = ATTACH_TYPES.has(uploadLifecycle);
+  const attachedPiece = pieces.find(p => p.id === attachTo) || null;
 
   const revisionRef = useRef('');
   const inFlight = useRef(false);
@@ -307,6 +324,46 @@ function Vault({ onOpenAsset, onSendToTasks }) {
     }
   };
 
+  const [trashing, setTrashing] = useState(false);
+
+  // Move the whole selection to the Nextcloud Trash bin. The file leaves Leads
+  // 2.0 and the vault at once, so it is a confirmed, deliberate action.
+  const trashSelection = async () => {
+    if (!apiBase || !selection.length || trashing) return;
+    const count = selection.length;
+    const ok = window.confirm(
+      `Move ${count} file${count === 1 ? '' : 's'} to Trash?\n\n` +
+      `They will be removed from the Vault and from Leads 2.0, and filed in ` +
+      `Nextcloud under Trash/<customer>/<month>. This can be undone from Nextcloud.`
+    );
+    if (!ok) return;
+    setTrashing(true);
+    setStatus(`Moving ${count} file${count === 1 ? '' : 's'} to Trash…`);
+    setError('');
+    try {
+      const res = await fetch(`${apiBase}/central-artwork.php?action=trash`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: selection.map(a => a.id) }),
+      });
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload.message || payload.detail || 'Files could not be moved to Trash');
+      const data = payload.data || {};
+      if (data.failed_count) {
+        setError(`${data.failed_count} file${data.failed_count === 1 ? '' : 's'} could not be moved to Trash`);
+      }
+      setStatus(payload.message || `${data.trashed_count || count} moved to Trash`);
+      setSelection([]);
+      load(false);
+      window.setTimeout(() => setStatus(''), 4000);
+    } catch (err) {
+      setError(err.message || 'Files could not be moved to Trash');
+      setStatus('');
+    } finally {
+      setTrashing(false);
+    }
+  };
+
   const download = async (asset) => {
     if (!apiBase) return;
     try {
@@ -331,57 +388,104 @@ function Vault({ onOpenAsset, onSendToTasks }) {
     setRoot(''); setCustomer(''); setFolder(''); setLifecycle(''); setSearch(''); setDebouncedSearch(''); setPage(1);
   };
 
-  // Upload handlers
-  const handleUploadFileChange = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploadFile(file);
-    if (file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onload = (ev) => setUploadPreview(ev.target.result);
-      reader.readAsDataURL(file);
-    } else {
-      setUploadPreview(null);
-    }
+  // Load the customer's designs whenever an attaching type is picked. A design
+  // chosen for one customer must not survive a switch to another, so the
+  // selection is cleared with the list.
+  useEffect(() => {
+    setAttachTo('');
+    setPieceSearch('');
+    if (!showUpload || !needsAttach || !customer || !apiBase) { setPieces([]); return undefined; }
+    let active = true;
+    setPiecesLoading(true);
+    fetch(`${apiBase}/central-artwork.php?action=pieces&entity_key=${encodeURIComponent(customer)}`, { cache: 'no-store' })
+      .then(res => res.json())
+      .then(payload => { if (active) setPieces(payload.data?.rows || []); })
+      .catch(() => { if (active) setPieces([]); })
+      .finally(() => { if (active) setPiecesLoading(false); });
+    return () => { active = false; };
+  }, [showUpload, needsAttach, customer, apiBase]);
+
+  const matchingPieces = useMemo(() => {
+    const needle = pieceSearch.trim().toLowerCase();
+    if (!needle) return pieces;
+    return pieces.filter(p => `${p.artwork_code} ${p.file_name}`.toLowerCase().includes(needle));
+  }, [pieces, pieceSearch]);
+
+  // What the file will actually be called once saved — shown before uploading so
+  // the naming is never a surprise.
+  const plannedName = useMemo(() => {
+    const ext = (uploadFiles[0]?.file.name.split('.').pop() || 'png').toLowerCase();
+    if (needsAttach) return attachedPiece ? `${attachedPiece.artwork_code}-${uploadLifecycle}.${ext}` : null;
+    return `AW-<code>-<next number>-${uploadLifecycle}.${ext}`;
+  }, [needsAttach, attachedPiece, uploadLifecycle, uploadFiles]);
+
+  // Upload handlers — queue any number of files; images get a thumbnail preview.
+  const addUploadFiles = (fileList) => {
+    const incoming = Array.from(fileList || []);
+    if (!incoming.length) return;
+    incoming.forEach((file) => {
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (ev) => setUploadFiles(prev => prev.map(item => item.file === file ? { ...item, preview: ev.target.result } : item));
+        reader.readAsDataURL(file);
+      }
+    });
+    setUploadFiles(prev => [...prev, ...incoming.map(file => ({ file, preview: null }))]);
   };
 
+  const handleUploadFileChange = (e) => {
+    addUploadFiles(e.target.files);
+    e.target.value = ''; // allow re-picking the same file after removing it
+  };
+
+  const removeUploadFile = (index) => setUploadFiles(prev => prev.filter((_, i) => i !== index));
+
   const handleUpload = async () => {
-    if (!uploadFile || !apiBase) return;
+    if (!uploadFiles.length || !apiBase) return;
     if (!customer) { setUploadMessage('Please select a customer first'); return; }
+    if (needsAttach && !attachTo) { setUploadMessage('Pick the source this file belongs to'); return; }
     setUploading(true);
     setUploadMessage('');
-    try {
-      const formData = new FormData();
-      formData.append('file', uploadFile);
-      formData.append('entity_key', customer);
-      if (folder) formData.append('folder', folder);
-      formData.append('lifecycle_code', uploadLifecycle);
-
-      const res = await fetch(`${apiBase}/central-artwork.php?action=upload`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token') || ''}`,
-        },
-        body: formData,
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || data.error || 'Upload failed');
-      setUploadMessage('File uploaded successfully!');
-      setUploadFile(null);
-      setUploadPreview(null);
-      // Refresh the vault
-      setTimeout(() => { load(false); setShowUpload(false); setUploadMessage(''); }, 1500);
-    } catch (err) {
-      setUploadMessage(err.message || 'Upload failed');
+    let ok = 0;
+    const failures = [];
+    for (const { file } of uploadFiles) {
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('entity_key', customer);
+        formData.append('lifecycle_code', uploadLifecycle);
+        if (needsAttach && attachTo) formData.append('attach_to', attachTo);
+        const res = await fetch(`${apiBase}/central-artwork.php?action=upload`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token') || ''}` },
+          body: formData,
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || data.detail || data.error || 'Upload failed');
+        ok += 1;
+      } catch (err) {
+        failures.push(`${file.name}: ${err.message || 'failed'}`);
+      }
+    }
+    if (failures.length) {
+      setUploadMessage(`${ok} uploaded, ${failures.length} failed — ${failures[0]}`);
+    } else {
+      setUploadMessage(`${ok} file${ok === 1 ? '' : 's'} uploaded to Nextcloud!`);
+      setUploadFiles([]);
+    }
+    load(false);
+    if (!failures.length) {
+      setTimeout(() => { setShowUpload(false); setUploadMessage(''); }, 1500);
     }
     setUploading(false);
   };
 
   const closeUploadModal = () => {
     setShowUpload(false);
-    setUploadFile(null);
-    setUploadPreview(null);
+    setUploadFiles([]);
     setUploadMessage('');
+    setAttachTo('');
+    setPieceSearch('');
   };
 
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -553,6 +657,14 @@ function Vault({ onOpenAsset, onSendToTasks }) {
               </button>
             )}
             {selected && <button type="button" className="vault-btn" onClick={() => download(selected)}>Download</button>}
+            <button
+              type="button"
+              className="vault-btn vault-btn-danger"
+              disabled={trashing}
+              onClick={trashSelection}
+            >
+              {trashing ? 'Moving…' : `🗑 Trash${selection.length > 1 ? ` (${selection.length})` : ''}`}
+            </button>
             <button type="button" className="vault-btn vault-btn-ghost" onClick={() => { setSelection([]); setStatus(''); }}>Clear</button>
           </div>
           {status && <div className="vault-actionbar-status">{status}</div>}
@@ -603,43 +715,108 @@ function Vault({ onOpenAsset, onSendToTasks }) {
                 </div>
               </div>
 
-              {/* File Drop Zone */}
+              {/* Which design this file belongs to. A working/final file is a new
+                  stage of an existing design, so it inherits that design's code
+                  and only its suffix changes. */}
+              {needsAttach && (
+                <div className="vault-upload-field">
+                  <label>
+                    Which design is this {UPLOAD_LIFECYCLES.find(l => l.code === uploadLifecycle)?.label.toLowerCase()} for?
+                    <span className="vault-upload-required"> required</span>
+                  </label>
+                  {!customer ? (
+                    <div className="vault-attach-empty">Select a customer first.</div>
+                  ) : piecesLoading ? (
+                    <div className="vault-attach-empty">Loading designs…</div>
+                  ) : !pieces.length ? (
+                    <div className="vault-attach-empty">This customer has no coded design yet — upload its source (SRC) first.</div>
+                  ) : (
+                    <>
+                      <input
+                        className="vault-picker-search vault-attach-search"
+                        placeholder={`Search ${pieces.length} designs…`}
+                        value={pieceSearch}
+                        onChange={(e) => setPieceSearch(e.target.value)}
+                      />
+                      <div className="vault-attach-list">
+                        {matchingPieces.map(piece => (
+                          <button
+                            key={piece.id}
+                            type="button"
+                            className={`vault-attach-row ${attachTo === piece.id ? 'active' : ''}`}
+                            onClick={() => setAttachTo(piece.id)}
+                          >
+                            <img
+                              className="vault-attach-thumb"
+                              alt=""
+                              loading="lazy"
+                              src={`${apiBase}/central-artwork.php?action=thumb&id=${encodeURIComponent(piece.id)}&w=80&h=80&v=${encodeURIComponent(piece.preview_key || '')}`}
+                              onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }}
+                            />
+                            <span className="vault-attach-info">
+                              <span className="vault-attach-code">{piece.artwork_code}</span>
+                              <span className="vault-attach-file">{piece.file_name}</span>
+                            </span>
+                            {piece.lifecycle_code && (
+                              <span className={`vault-life vault-life-${LIFECYCLE[piece.lifecycle_code]?.tone || 'src'}`}>{piece.lifecycle_code}</span>
+                            )}
+                          </button>
+                        ))}
+                        {!matchingPieces.length && <div className="vault-attach-empty">No design matches “{pieceSearch}”</div>}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* File Drop Zone — accepts one or many files */}
               <div
-                className={`vault-upload-dropzone ${uploadFile ? 'has-file' : ''}`}
+                className={`vault-upload-dropzone ${uploadFiles.length ? 'has-file' : ''}`}
                 onClick={() => uploadInputRef.current?.click()}
                 onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) { setUploadFile(f); if (f.type.startsWith('image/')) { const r = new FileReader(); r.onload = (ev) => setUploadPreview(ev.target.result); r.readAsDataURL(f); } } }}
+                onDrop={(e) => { e.preventDefault(); addUploadFiles(e.dataTransfer.files); }}
               >
-                {uploadPreview ? (
-                  <div className="vault-upload-preview">
-                    <img src={uploadPreview} alt="Preview" />
-                    <span>{uploadFile.name}</span>
-                    <span className="vault-upload-size">{fileSize(uploadFile.size)}</span>
-                  </div>
-                ) : uploadFile ? (
-                  <div className="vault-upload-preview">
-                    <span className="vault-upload-file-icon">📄</span>
-                    <span>{uploadFile.name}</span>
-                    <span className="vault-upload-size">{fileSize(uploadFile.size)}</span>
+                {uploadFiles.length ? (
+                  <div className="vault-upload-list" onClick={(e) => e.stopPropagation()}>
+                    {uploadFiles.map((item, i) => (
+                      <div className="vault-upload-list-row" key={`${item.file.name}-${i}`}>
+                        {item.preview
+                          ? <img src={item.preview} alt="" className="vault-upload-list-thumb" />
+                          : <span className="vault-upload-file-icon">📄</span>}
+                        <span className="vault-upload-list-name" title={item.file.name}>{item.file.name}</span>
+                        <span className="vault-upload-size">{fileSize(item.file.size)}</span>
+                        <button type="button" className="vault-upload-list-remove" onClick={() => removeUploadFile(i)}>×</button>
+                      </div>
+                    ))}
+                    <div className="vault-upload-list-add">+ Add more files</div>
                   </div>
                 ) : (
                   <div className="vault-upload-placeholder">
                     <span className="vault-upload-icon">↑</span>
-                    <span>Drop file here or click to browse</span>
-                    <span className="vault-upload-hint">PNG, JPG, PDF, AI — any artwork file</span>
+                    <span>Drop files here or click to browse</span>
+                    <span className="vault-upload-hint">PNG, JPG, PDF — one or many at once</span>
                   </div>
                 )}
                 <input
                   ref={uploadInputRef}
                   type="file"
+                  multiple
                   accept="image/*,.pdf,.ai,.eps,.svg"
                   style={{ display: 'none' }}
                   onChange={handleUploadFileChange}
                 />
               </div>
 
+              {/* Exactly what the saved file will be called, before it is sent. */}
+              {uploadFiles.length > 0 && plannedName && (
+                <div className="vault-upload-plan">
+                  Will save as <strong>{plannedName}</strong>
+                  {uploadFiles.length > 1 && <span> (then …02, …03 for the rest)</span>}
+                </div>
+              )}
+
               {uploadMessage && (
-                <div className={`vault-upload-message ${uploadMessage.includes('success') ? 'success' : 'error'}`}>
+                <div className={`vault-upload-message ${uploadMessage.includes('upload') && !uploadMessage.includes('failed') ? 'success' : 'error'}`}>
                   {uploadMessage}
                 </div>
               )}
@@ -649,9 +826,9 @@ function Vault({ onOpenAsset, onSendToTasks }) {
               <button
                 className="vault-btn vault-btn-primary"
                 onClick={handleUpload}
-                disabled={!uploadFile || !customer || uploading}
+                disabled={!uploadFiles.length || !customer || uploading || (needsAttach && !attachTo)}
               >
-                {uploading ? 'Uploading...' : 'Upload to Vault'}
+                {uploading ? 'Uploading…' : `Upload to Vault${uploadFiles.length > 1 ? ` (${uploadFiles.length})` : ''}`}
               </button>
             </div>
           </div>
