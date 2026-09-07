@@ -110,7 +110,12 @@
 .vault-btn:disabled { opacity: .5; cursor: not-allowed; }
 .vault-btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
 .vault-btn-primary:hover:not(:disabled) { background: var(--primary-hover); border-color: var(--primary-hover); }
+/* Sending files to Task Management is not a studio tool — it reads as its own action. */
+.vault-btn-task { background: #0f766e; color: #fff; border-color: #0f766e; }
+.vault-btn-task:hover:not(:disabled) { background: #115e56; border-color: #115e56; }
 .vault-btn-ghost { background: transparent; color: var(--text-secondary); }
+.vault-btn-danger { background: #fff; color: #b91c1c; border-color: #fca5a5; }
+.vault-btn-danger:hover:not(:disabled) { background: #b91c1c; color: #fff; border-color: #b91c1c; }
 
 
 /* ── Header actions ──────────────────────────────────────────────────────── */
@@ -294,6 +299,31 @@
 .vault-upload-preview span { font-size: 12px; font-weight: 500; color: #1e293b; }
 .vault-upload-size { font-size: 11px; color: #64748b; }
 .vault-upload-file-icon { font-size: 32px; }
+
+/* "Which design is this?" source picker */
+.vault-upload-required { font-size: 10.5px; font-weight: 600; color: #b91c1c; text-transform: uppercase; letter-spacing: .04em; margin-left: 6px; }
+.vault-attach-search { width: 100%; margin-bottom: 6px; }
+.vault-attach-list { max-height: 210px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--border); border-radius: 8px; padding: 6px; background: #fafbfc; }
+.vault-attach-row { display: flex; align-items: center; gap: 9px; padding: 6px 8px; border: 1px solid transparent; border-radius: 7px; background: #fff; cursor: pointer; text-align: left; width: 100%; }
+.vault-attach-row:hover { border-color: var(--border); }
+.vault-attach-row.active { border-color: var(--primary); background: #eff6ff; }
+.vault-attach-thumb { width: 38px; height: 38px; object-fit: cover; border-radius: 5px; background: #f1f5f9; flex-shrink: 0; }
+.vault-attach-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.vault-attach-code { font-size: 12px; font-weight: 600; color: #1e293b; }
+.vault-attach-file { font-size: 11px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vault-attach-empty { font-size: 12px; color: #64748b; padding: 10px; background: #fafbfc; border: 1px solid var(--border); border-radius: 8px; }
+.vault-upload-plan { font-size: 12px; color: #334155; background: #f0f7ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 9px 12px; }
+.vault-upload-plan strong { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+
+/* Multi-file queue inside the dropzone */
+.vault-upload-list { width: 100%; display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow-y: auto; }
+.vault-upload-list-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: #fff; border: 1px solid var(--border); border-radius: 7px; }
+.vault-upload-list-thumb { width: 34px; height: 34px; object-fit: cover; border-radius: 5px; flex-shrink: 0; }
+.vault-upload-list-row .vault-upload-file-icon { font-size: 22px; width: 34px; text-align: center; flex-shrink: 0; }
+.vault-upload-list-name { flex: 1; min-width: 0; font-size: 12px; font-weight: 500; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vault-upload-list-remove { border: none; background: transparent; color: #94a3b8; font-size: 18px; line-height: 1; cursor: pointer; padding: 0 4px; flex-shrink: 0; }
+.vault-upload-list-remove:hover { color: #b91c1c; }
+.vault-upload-list-add { text-align: center; font-size: 11.5px; color: var(--primary); padding: 4px; cursor: pointer; }
 
 .vault-upload-message {
   padding: 10px 14px;

@@ -44,7 +44,7 @@ if ($method === 'POST') {
     $password = $input['password'] ?? '';
     $fullName = trim($input['full_name'] ?? '');
     $role = $input['role'] ?? 'viewer';
-    $pageAccess = $input['page_access'] ?? ['bgremover', 'orders'];
+    $pageAccess = $input['page_access'] ?? ['tasks', 'bgremover', 'orders'];
 
     if (empty($username) || empty($email) || empty($password)) {
         http_response_code(400);

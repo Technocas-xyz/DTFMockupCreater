@@ -114,10 +114,14 @@ if ($action === 'facets')   proxyVaultGet($backend, '/artworks/studio/vault/face
 if ($action === 'revision') proxyVaultGet($backend, '/artworks/studio/vault/revision');
 if ($action === 'thumb')    proxyVaultGet($backend, '/artworks/studio/thumb', ['v'], true);
 if ($action === 'handoff')  proxyVaultGet($backend, '/artworks/studio/handoff');
+if ($action === 'pieces')   proxyVaultGet($backend, '/artworks/studio/vault/pieces'); // designs an upload can attach to
 
 // ── Upload to vault (new file) ──────────────────────────────────────────────
-// Saves directly to the Nextcloud-synced artwork directory. The vault's live
-// revision watcher picks up the new file within seconds.
+// Forwards the file to PrintShop, which writes it into the selected customer's
+// Nextcloud folder — the type (REF/SRC → references, WRK → Artworks, FNL/FNLA →
+// final_files) picks the sub-folder — names it to the AW-<CLIENT>-<NNNN>-<TYPE>
+// standard and indexes it. The old build saved to a local disk that never
+// reached Nextcloud; everything real now happens server-side over WebDAV.
 if ($action === 'upload') {
     header('Content-Type: application/json');
     header('Cache-Control: private, no-store');
@@ -132,80 +136,89 @@ if ($action === 'upload') {
         jsonError(400, 'Customer (entity_key) is required');
     }
 
-    $entityKey = preg_replace('/[^a-zA-Z0-9_\-]/', '', $_POST['entity_key']);
-    $folder = preg_replace('/[^a-zA-Z0-9_\- ]/', '', $_POST['folder'] ?? 'Artworks');
-    $lifecycleCode = preg_replace('/[^A-Z]/', '', strtoupper($_POST['lifecycle_code'] ?? 'WRK'));
-    $originalName = $_FILES['file']['name'];
-    $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION)) ?: 'png';
+    // entity_key is the vault's own key ("c:<uuid>", "l:<uuid>", "p:<root>/<folder>"),
+    // so its colon and slash must survive — only strip control characters.
+    $entityKey = preg_replace('/[\x00-\x1F]/', '', $_POST['entity_key']);
+    $lifecycleCode = preg_replace('/[^A-Z]/', '', strtoupper($_POST['lifecycle_code'] ?? 'SRC'));
+    // Which design this file belongs to. WRK/FNL/FNLA inherit that design's
+    // AW-<CLIENT>-<NNNN> code so only the type suffix changes.
+    $attachTo = preg_replace('/[^a-zA-Z0-9\-]/', '', $_POST['attach_to'] ?? '');
 
-    // Artwork storage root — configurable via env, defaults to a local directory
-    $storageRoot = rtrim(getenv('ARTWORK_STORAGE_PATH') ?: (__DIR__ . '/vault-uploads'), '/');
-
-    // Build path: /storage_root/entity_key/folder/
-    $targetDir = $storageRoot . '/' . $entityKey . '/' . $folder;
-    if (!is_dir($targetDir)) {
-        if (!mkdir($targetDir, 0755, true)) {
-            jsonError(500, 'Could not create target directory');
-        }
-    }
-
-    // Generate file name following convention: AW-ENTITY-NNNN-LIFECYCLE.ext
-    // Find next sequence number for this entity
-    $existing = glob($targetDir . '/AW-' . $entityKey . '-*');
-    $maxSeq = 0;
-    foreach ($existing as $f) {
-        if (preg_match('/AW-' . preg_quote($entityKey) . '-(\d+)/', basename($f), $m)) {
-            $maxSeq = max($maxSeq, (int)$m[1]);
-        }
-    }
-    $seq = str_pad($maxSeq + 1, 4, '0', STR_PAD_LEFT);
-    $newFileName = "AW-{$entityKey}-{$seq}-{$lifecycleCode}.{$ext}";
-    $targetPath = $targetDir . '/' . $newFileName;
-
-    // Move uploaded file
-    if (!move_uploaded_file($_FILES['file']['tmp_name'], $targetPath)) {
-        jsonError(500, 'Failed to save file');
-    }
-
-    // Also try to notify PrintShop backend about the new file (non-blocking)
-    $notifyPayload = json_encode([
-        'entity_key' => $entityKey,
-        'folder' => $folder,
-        'file_name' => $newFileName,
-        'lifecycle_code' => $lifecycleCode,
-        'file_size' => filesize($targetPath),
-        'source' => 'design-studio-upload',
-    ]);
-
-    // Non-blocking notification to PrintShop (best effort)
     try {
         $vaultToken = createVaultToken();
-        $ch = curl_init($backend . '/artworks/studio/notify-upload');
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_POST => true,
-            CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Authorization: Bearer ' . $vaultToken],
-            CURLOPT_POSTFIELDS => $notifyPayload,
-            CURLOPT_TIMEOUT => 5,
-            CURLOPT_CONNECTTIMEOUT => 3,
-        ]);
-        curl_exec($ch);
-        curl_close($ch);
-    } catch (Exception $e) {
-        // Notification is best-effort; file is already saved
+    } catch (RuntimeException $e) {
+        jsonError(500, $e->getMessage());
     }
 
-    echo json_encode([
-        'success' => true,
-        'data' => [
-            'file_name' => $newFileName,
-            'folder' => $folder,
+    $ch = curl_init($backend . '/artworks/studio/vault/upload');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => [
+            'token' => $vaultToken,
             'entity_key' => $entityKey,
             'lifecycle_code' => $lifecycleCode,
-            'file_size' => filesize($targetPath),
+            'attach_to' => $attachTo,
+            'file' => new CURLFile(
+                $_FILES['file']['tmp_name'],
+                $_FILES['file']['type'] ?: 'application/octet-stream',
+                $_FILES['file']['name'] ?: 'artwork'
+            ),
         ],
-        'message' => 'File uploaded successfully',
+        CURLOPT_CONNECTTIMEOUT => 10,
+        CURLOPT_TIMEOUT => 120,
     ]);
+    $body = curl_exec($ch);
+    $status = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+    $error = curl_error($ch);
+    curl_close($ch);
+
+    if ($body === false) {
+        jsonError(502, 'PrintShop artwork service is unavailable', $error);
+    }
+    http_response_code($status ?: 502);
+    echo $body;
+    exit;
+}
+
+// ── Move selection to Trash ─────────────────────────────────────────────────
+// The vault's multi-select trash. Mints a vault-scope token (same scope the grid
+// reads with) and forwards the selected asset ids to PrintShop, which MOVEs each
+// file out of Leads 2.0/PO into the Nextcloud Trash bin and drops its index row.
+if ($action === 'trash') {
+    header('Content-Type: application/json');
+    header('Cache-Control: private, no-store');
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        jsonError(405, 'POST required');
+    }
+    $input = json_decode(file_get_contents('php://input'), true);
+    $ids = is_array($input['ids'] ?? null) ? $input['ids'] : [];
+    if (!$ids) {
+        jsonError(400, 'No files were selected to trash');
+    }
+    try {
+        $vaultToken = createVaultToken();
+    } catch (RuntimeException $e) {
+        jsonError(500, $e->getMessage());
+    }
+    $ch = curl_init($backend . '/artworks/studio/vault/trash');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+        CURLOPT_POSTFIELDS => json_encode(['token' => $vaultToken, 'ids' => array_values($ids)]),
+        CURLOPT_CONNECTTIMEOUT => 10,
+        CURLOPT_TIMEOUT => 120,
+    ]);
+    $body = curl_exec($ch);
+    $status = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+    $error = curl_error($ch);
+    curl_close($ch);
+    if ($body === false) {
+        jsonError(502, 'PrintShop artwork service is unavailable', $error);
+    }
+    http_response_code($status ?: 502);
+    echo $body;
     exit;
 }
 

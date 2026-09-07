@@ -35,9 +35,9 @@ if ($method === 'POST' && $action === 'sso') {
     $stmt->execute([$username, $email]);
     $user = $stmt->fetch();
     if (!$user) {
-        $allPages = json_encode(['vault','bgremover','qa','orders','garments','gangsheet','gscalc','gsoptimize','contrast','ailab','users','mockupv2']);
+        $allPages = json_encode(['tasks','vault','bgremover','qa','orders','garments','gangsheet','gscalc','gsoptimize','contrast','ailab','users','mockupv2']);
         $db->prepare("INSERT INTO users (username, email, password_hash, full_name, role, page_access) VALUES (?, ?, ?, ?, ?, ?)")
-           ->execute([$username, $email, password_hash(bin2hex(random_bytes(48)), PASSWORD_BCRYPT), $name, $isAdmin ? 'superadmin' : 'viewer', $isAdmin ? $allPages : json_encode(['bgremover','orders'])]);
+           ->execute([$username, $email, password_hash(bin2hex(random_bytes(48)), PASSWORD_BCRYPT), $name, $isAdmin ? 'superadmin' : 'viewer', $isAdmin ? $allPages : json_encode(['tasks','bgremover','orders'])]);
         $stmt->execute([$username, $email]);
         $user = $stmt->fetch();
     }
