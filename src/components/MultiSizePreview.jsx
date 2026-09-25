@@ -354,24 +354,11 @@ const MSPCard = React.forwardRef(function MSPCard({
         // Same pxPerInch as the shirt
         const artPxPerInch = pxPerInch;
 
-        // Print area. A custom garment (tank top, hoodie, …) carries its own
-        // print-area mapping, because the fixed T-shirt offset of 7" — measured
-        // from the top of the body — lands in the collar of a shorter garment
-        // like a tank top. Fall back to the shared T-shirt settings only when a
-        // garment has no mapping of its own.
-        const taggedG = isCustomGarment
-          ? (customGarment?.bodyMapping ? customGarment
-             : (garmentLibrary && garmentLibrary.find(g => g.size === realSize && (g.side || 'front') === viewSide)))
-          : null;
-        const mapping = taggedG?.bodyMapping;
-        const areaWidth = mapping?.widthInches ?? artworkAreaSettings.width;
-        const areaHeight = mapping?.heightInches ?? artworkAreaSettings.height;
-        const areaTopOffset = mapping?.topOffsetInches ?? artworkAreaSettings.topOffset;
-
-        const printAreaPxW = areaWidth * artPxPerInch;
-        const printAreaPxH = areaHeight * artPxPerInch;
+        // Print area — exact same as DesignCanvas
+        const printAreaPxW = artworkAreaSettings.width * artPxPerInch;
+        const printAreaPxH = artworkAreaSettings.height * artPxPerInch;
         const printX = tshirtX + (tshirtW - printAreaPxW) / 2;
-        const printY = tshirtY + (areaTopOffset * artPxPerInch);
+        const printY = tshirtY + (artworkAreaSettings.topOffset * artPxPerInch);
 
         // Artwork dimensions
         const artworkPxW = sizeArtW * artPxPerInch;
@@ -462,20 +449,10 @@ const MSPCard = React.forwardRef(function MSPCard({
     const artImg = new Image();
     artImg.onload = () => {
       const artPxPerInch = pxPerInch;
-      // Match the preview: a custom garment uses its own print-area mapping so
-      // the export lands the artwork in the same place the card shows it.
-      const taggedG = isCustomGarment
-        ? (customGarment?.bodyMapping ? customGarment
-           : (garmentLibrary && garmentLibrary.find(g => g.size === realSize && (g.side || 'front') === viewSide)))
-        : null;
-      const mapping = taggedG?.bodyMapping;
-      const areaWidth = mapping?.widthInches ?? artworkAreaSettings.width;
-      const areaHeight = mapping?.heightInches ?? artworkAreaSettings.height;
-      const areaTopOffset = mapping?.topOffsetInches ?? artworkAreaSettings.topOffset;
-      const printAreaPxW = areaWidth * artPxPerInch;
-      const printAreaPxH = areaHeight * artPxPerInch;
+      const printAreaPxW = artworkAreaSettings.width * artPxPerInch;
+      const printAreaPxH = artworkAreaSettings.height * artPxPerInch;
       const printX = tshirtX + (tshirtW - printAreaPxW) / 2;
-      const printY = tshirtY + (areaTopOffset * artPxPerInch);
+      const printY = tshirtY + (artworkAreaSettings.topOffset * artPxPerInch);
       const artworkPxW = sizeArtW * artPxPerInch;
       const artworkPxH = sizeArtH * artPxPerInch;
       const imgAR = artImg.naturalWidth / artImg.naturalHeight;
