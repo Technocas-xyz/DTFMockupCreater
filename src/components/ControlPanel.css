@@ -566,6 +566,36 @@
 }
 
 /* Artwork Area Settings */
+.area-preset-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.area-preset-btn {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.area-preset-btn:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.area-preset-btn.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
+}
+
 .area-settings-grid {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;

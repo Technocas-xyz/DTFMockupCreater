@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { TSHIRT_SIZES } from '../constants/tshirtSizes';
 import { drawRecoloredGarment } from '../utils/garmentTintEngine';
+import { customGarmentLayout } from '../utils/garmentLayout';
 import './DesignCanvas.css';
 
 // Canvas dimensions (pixels) — 4x for sharp artwork preview
@@ -107,25 +108,15 @@ function DesignCanvas({
     let pxPerInchW, pxPerInchH, pxPerInch, tshirtW, tshirtH, tshirtX, tshirtY;
 
     if (customGarment && tshirtImage) {
-      // Custom garment: scale based on stored shirt dimensions using a fixed reference
-      // This ensures different sizes appear at proportionally different visual sizes
-      const garmentBodyWidth = customGarment.bodyMapping?.shirtWidthInches || bodyWidth;
-      const garmentBodyHeight = customGarment.bodyMapping?.shirtHeightInches || bodyLength;
-
-      // Use the same reference scale as default t-shirts (based on 5XL = largest)
-      const maxBodyWidth = 32;
-      const maxBodyHeight = 35;
-      const maxTshirtW = CANVAS_WIDTH * 0.52;
-      const maxTshirtH = CANVAS_HEIGHT * 0.68;
-      const refPxPerInchW = maxTshirtW / maxBodyWidth;
-      const refPxPerInchH = maxTshirtH / maxBodyHeight;
-      pxPerInch = Math.min(refPxPerInchW, refPxPerInchH);
-
-      // Draw garment at its actual proportional size on canvas
-      tshirtW = garmentBodyWidth * pxPerInch;
-      tshirtH = garmentBodyHeight * pxPerInch;
-      tshirtX = (CANVAS_WIDTH - tshirtW) / 2;
-      tshirtY = (CANVAS_HEIGHT - tshirtH) / 2;
+      // Custom garment: width from saved inches, height from the image's own
+      // aspect ratio — never stretched.
+      ({ pxPerInch, tshirtW, tshirtH, tshirtX, tshirtY } = customGarmentLayout({
+        imgW: tshirtImage.naturalWidth || tshirtImage.width,
+        imgH: tshirtImage.naturalHeight || tshirtImage.height,
+        shirtWidthInches: customGarment.bodyMapping?.shirtWidthInches || bodyWidth,
+        canvasW: CANVAS_WIDTH,
+        canvasH: CANVAS_HEIGHT,
+      }));
       pxPerInchW = pxPerInch;
       pxPerInchH = pxPerInch;
     } else {
@@ -148,8 +139,10 @@ function DesignCanvas({
     const printAreaPxW = artworkAreaSettings.width * pxPerInch;
     const printAreaPxH = artworkAreaSettings.height * pxPerInch;
 
-    // Centered horizontally, positioned by top offset
-    const printX = tshirtX + (tshirtW - printAreaPxW) / 2;
+    // Centered horizontally (+ optional side offset), positioned by top offset
+    // sideOffset is inches; offsetX is preview px (same units as the X Offset slider)
+    const sideOffsetPx = (artworkAreaSettings.sideOffset || 0) * pxPerInch + (artworkAreaSettings.offsetX || 0) * CANVAS_SCALE;
+    const printX = tshirtX + (tshirtW - printAreaPxW) / 2 + sideOffsetPx;
     const printY = tshirtY + (artworkAreaSettings.topOffset * pxPerInch);
 
     // Artwork at fixed physical size

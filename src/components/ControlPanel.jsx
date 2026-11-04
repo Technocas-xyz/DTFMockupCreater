@@ -6,6 +6,11 @@ import './ControlPanel.css';
 const GARMENT_TYPES_FILTER = ['T-Shirt', 'Hoodie', 'Women T-Shirt', 'Sweatshirt', 'Long Sleeve T-Shirt', 'Tank Top', 'Shorts', 'Bob Marley', 'Other'];
 
 const GARMENT_FITS = ['All', 'Men', 'Women', 'Unisex', 'Kids'];
+
+// Left-chest placement for T-shirts and hoodies. offsetX is in preview px,
+// the same units as the X Offset slider.
+const CHEST_PRESET = { width: 6, height: 6, topOffset: 7, sideOffset: 0, offsetX: 50, preset: 'chest' };
+const CHEST_CATEGORIES = /t-?shirt|hoodie/i;
 const KIDS_SIZES = ['2T', '3T', '4T', '5T', 'YS', 'YM', 'YL', 'YXL'];
 const ADULT_SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL'];
 
@@ -27,6 +32,7 @@ function ControlPanel({
   onReset,
   artworkAreaSettings,
   onArtworkAreaSettingsChange,
+  defaultArtworkArea = { width: 18, height: 24, topOffset: 7, sideOffset: 0 },
   selectedMockupSizes,
   onMockupSizeToggle,
   onGenerateMockups,
@@ -238,10 +244,9 @@ function ControlPanel({
   };
 
   // Auto-fit artwork to fill available print area proportionally
-  const handleAutoFit = () => {
-    const availableW = artworkAreaSettings.width;
-    const availableH = artworkAreaSettings.height;
-
+  // Proportionally fit the artwork inside a given print area (defaults to the
+  // current artwork area settings). Keeps aspect ratio when proportions are locked.
+  const fitArtworkToArea = (availableW = artworkAreaSettings.width, availableH = artworkAreaSettings.height) => {
     if (lockProportion) {
       // Fit within available area maintaining current aspect ratio
       const fitByWidth = { width: availableW, height: availableW / aspectRatio };
@@ -256,6 +261,27 @@ function ControlPanel({
       onDimensionsChange({ width: parseFloat(availableW.toFixed(2)), height: parseFloat(availableH.toFixed(2)) });
     }
   };
+
+  const handleAutoFit = () => fitArtworkToArea();
+
+  // Apply a placement preset: update the print area, reset position, then
+  // proportionally refit the artwork into the preset's area.
+  const handleAreaPreset = (preset) => {
+    onArtworkAreaSettingsChange({ ...artworkAreaSettings, ...preset });
+    onPositionChange({ x: 0, y: 0 });
+    fitArtworkToArea(preset.width, preset.height);
+  };
+
+  // Chest preset is offered for T-shirts and hoodies only
+  const chestAvailable = CHEST_CATEGORIES.test(selectedCategory || '');
+  const isChestActive = artworkAreaSettings.preset === 'chest';
+
+  // Switching to a category without a chest preset drops back to Default
+  useEffect(() => {
+    if (!chestAvailable && isChestActive) {
+      handleAreaPreset({ ...defaultArtworkArea, sideOffset: 0, offsetX: 0, preset: null });
+    }
+  }, [chestAvailable]);
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -602,6 +628,30 @@ function ControlPanel({
           <span className="step-number">7</span>
           Artwork Area
         </h3>
+
+        {/* Placement presets */}
+        <div className="area-preset-row">
+          <button
+            type="button"
+            className={`area-preset-btn ${!isChestActive ? 'active' : ''}`}
+            onClick={() => handleAreaPreset({ ...defaultArtworkArea, sideOffset: 0, offsetX: 0, preset: null })}
+          >
+            Default
+          </button>
+          {chestAvailable && (
+            <button
+              type="button"
+              className={`area-preset-btn ${isChestActive ? 'active' : ''}`}
+              onClick={() => handleAreaPreset(CHEST_PRESET)}
+            >
+              Chest
+            </button>
+          )}
+        </div>
+        {chestAvailable && (
+          <p className="section-hint">Chest: 6" × 6" print area, 7" from top, moved 50px to the right.</p>
+        )}
+
         <div className="area-settings-grid">
           <div className="area-setting-field">
             <label>Width</label>
@@ -654,8 +704,25 @@ function ControlPanel({
               <span className="unit">in</span>
             </div>
           </div>
+          <div className="area-setting-field">
+            <label>Side Offset</label>
+            <div className="input-with-unit">
+              <input
+                type="number"
+                min="-15"
+                max="15"
+                step="0.25"
+                value={artworkAreaSettings.sideOffset || 0}
+                onChange={(e) => onArtworkAreaSettingsChange({
+                  ...artworkAreaSettings,
+                  sideOffset: parseFloat(e.target.value) || 0
+                })}
+              />
+              <span className="unit">in</span>
+            </div>
+          </div>
         </div>
-        <p className="area-info">Fixed print area: {artworkAreaSettings.width}" × {artworkAreaSettings.height}" starting {artworkAreaSettings.topOffset}" from top</p>
+        <p className="area-info">Fixed print area: {artworkAreaSettings.width}" × {artworkAreaSettings.height}" starting {artworkAreaSettings.topOffset}" from top{(artworkAreaSettings.sideOffset || 0) !== 0 ? `, ${Math.abs(artworkAreaSettings.sideOffset)}" ${artworkAreaSettings.sideOffset > 0 ? 'right' : 'left'} of center` : ''}{(artworkAreaSettings.offsetX || 0) !== 0 ? `, moved ${Math.abs(artworkAreaSettings.offsetX)}px ${artworkAreaSettings.offsetX > 0 ? 'right' : 'left'}` : ''}</p>
       </section>
 
       {/* Color Selection */}

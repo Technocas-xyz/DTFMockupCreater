@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import Sidebar from './components/Sidebar';
 import Login from './components/Login';
 import DesignCanvas from './components/DesignCanvas';
@@ -48,7 +48,7 @@ function App() {
   const [viewSide, setViewSide] = useState('front');
   const [artworkPosition, setArtworkPosition] = useState({ x: 0, y: 0 });
   const artworkScale = 1;
-  const [artworkAreaSettings, setArtworkAreaSettings] = useState({ width: 18, height: 24, topOffset: 7 });
+  const [artworkAreaSettings, setArtworkAreaSettings] = useState({ width: 18, height: 24, topOffset: 7, sideOffset: 0, offsetX: 0, preset: null });
   const [selectedMockupSizes, setSelectedMockupSizes] = useState(
     SIZE_ORDER.reduce((acc, size) => ({ ...acc, [size]: false }), {})
   );
@@ -485,53 +485,83 @@ function App() {
   // Garment selection is handled by ControlPanel's useEffect (type+size matching)
   // handleGarmentChange is called from ControlPanel when type/size changes
 
+  // Print area saved for the selected garment in Garment Manager (inches).
+  // Falls back to the standard 18" x 24" area at 7" when there is no garment
+  // or nothing was saved for it.
+  const defaultArtworkArea = useMemo(() => {
+    const bm = customGarment?.bodyMapping;
+    return {
+      width: bm?.widthInches > 0 ? bm.widthInches : 18,
+      height: bm?.heightInches > 0 ? bm.heightInches : 24,
+      topOffset: bm && bm.topOffsetInches >= 0 ? bm.topOffsetInches : 7,
+      sideOffset: 0,
+      offsetX: 0,
+      preset: null,
+    };
+  }, [customGarment]);
+
+  // Proportionally fit artwork dimensions inside a print area (inches).
+  const fitDimsToArea = (dims, area) => {
+    if (!dims || !(dims.width > 0) || !(dims.height > 0)) return dims;
+    const aspect = dims.width / dims.height;
+    if (area.width / area.height > aspect) {
+      return { width: parseFloat((area.height * aspect).toFixed(2)), height: parseFloat(area.height.toFixed(2)) };
+    }
+    return { width: parseFloat(area.width.toFixed(2)), height: parseFloat((area.width / aspect).toFixed(2)) };
+  };
+
+  // When the garment changes, load its saved print area and auto-fit the
+  // artwork into it. A chest placement (shifted off-center) is kept so
+  // switching sizes doesn't undo the preset.
+  useEffect(() => {
+    const keepChest = artworkAreaSettings.preset === 'chest';
+    const nextArea = keepChest ? artworkAreaSettings : defaultArtworkArea;
+    if (!keepChest) setArtworkAreaSettings(nextArea);
+    if (artwork) {
+      setArtworkDimensions(prev => fitDimsToArea(prev, nextArea));
+      setArtworkPosition({ x: 0, y: 0 });
+    }
+  }, [defaultArtworkArea]);
+
+  // Every new artwork starts fresh: the print area goes back to the
+  // garment's saved (centered) area, the position resets to center, and the
+  // artwork is sized from its 300 DPI physical size, then kept inside the area.
+  const applyNewArtworkSizing = (dataUrl) => {
+    const area = defaultArtworkArea;
+    setArtworkAreaSettings(area);
+    setArtworkPosition({ x: 0, y: 0 });
+
+    const img = new Image();
+    img.onload = () => {
+      const DPI = 300;
+      const imgAspect = img.naturalWidth / img.naturalHeight;
+      let w = img.naturalWidth / DPI;
+      let h = img.naturalHeight / DPI;
+
+      // Small artwork: scale the longer side up to 10.75"
+      const MIN_SIZE = 10.75;
+      if (w < MIN_SIZE && h < MIN_SIZE) {
+        if (imgAspect >= 1) { w = MIN_SIZE; h = MIN_SIZE / imgAspect; }
+        else { h = MIN_SIZE; w = MIN_SIZE * imgAspect; }
+      }
+
+      // Never larger than the print area (proportional)
+      const f = Math.min(1, area.width / w, area.height / h);
+      setArtworkDimensions({
+        width: parseFloat((w * f).toFixed(2)),
+        height: parseFloat((h * f).toFixed(2)),
+      });
+    };
+    img.src = dataUrl;
+  };
+
   const handleArtworkUpload = (file) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       setArtwork(e.target.result);
       setArtworkFile(file);
 
-      // Auto-set artwork dimensions based on actual image DPI size
-      const img = new Image();
-      img.onload = () => {
-        const DPI = 300;
-        // Calculate actual physical size at 300 DPI
-        let actualW = parseFloat((img.naturalWidth / DPI).toFixed(2));
-        let actualH = parseFloat((img.naturalHeight / DPI).toFixed(2));
-        const imgAspect = img.naturalWidth / img.naturalHeight;
-        const maxW = artworkAreaSettings.width;
-        const maxH = artworkAreaSettings.height;
-
-        // Only scale down if the actual size exceeds the print area
-        if (actualW <= maxW && actualH <= maxH) {
-          // If both dimensions are smaller than 10.75", scale up the larger one to 10.75"
-          const MIN_SIZE = 10.75;
-          if (actualW < MIN_SIZE && actualH < MIN_SIZE) {
-            if (imgAspect >= 1) {
-              // wider — set width to 10.75
-              actualW = MIN_SIZE;
-              actualH = parseFloat((MIN_SIZE / imgAspect).toFixed(2));
-            } else {
-              // taller — set height to 10.75
-              actualH = MIN_SIZE;
-              actualW = parseFloat((MIN_SIZE * imgAspect).toFixed(2));
-            }
-          }
-          setArtworkDimensions({ width: actualW, height: actualH });
-        } else {
-          // Too large — scale down to fit within print area maintaining aspect ratio
-          let newW, newH;
-          if (imgAspect > maxW / maxH) {
-            newW = maxW;
-            newH = parseFloat((maxW / imgAspect).toFixed(2));
-          } else {
-            newH = maxH;
-            newW = parseFloat((maxH * imgAspect).toFixed(2));
-          }
-          setArtworkDimensions({ width: newW, height: newH });
-        }
-      };
-      img.src = e.target.result;
+      applyNewArtworkSizing(e.target.result);
     };
     reader.readAsDataURL(file);
   };
@@ -555,42 +585,7 @@ function App() {
     // Also load into the design canvas artwork
     setArtwork(imageDataUrl);
 
-    // Auto-set dimensions from image at 300 DPI (same as handleArtworkUpload)
-    const img = new Image();
-    img.onload = () => {
-      const DPI = 300;
-      let actualW = parseFloat((img.naturalWidth / DPI).toFixed(2));
-      let actualH = parseFloat((img.naturalHeight / DPI).toFixed(2));
-      const imgAspect = img.naturalWidth / img.naturalHeight;
-      const maxW = artworkAreaSettings.width;
-      const maxH = artworkAreaSettings.height;
-
-      if (actualW <= maxW && actualH <= maxH) {
-        // If both dimensions are smaller than 10.75", scale up the larger one to 10.75"
-        const MIN_SIZE = 10.75;
-        if (actualW < MIN_SIZE && actualH < MIN_SIZE) {
-          if (imgAspect >= 1) {
-            actualW = MIN_SIZE;
-            actualH = parseFloat((MIN_SIZE / imgAspect).toFixed(2));
-          } else {
-            actualH = MIN_SIZE;
-            actualW = parseFloat((MIN_SIZE * imgAspect).toFixed(2));
-          }
-        }
-        setArtworkDimensions({ width: actualW, height: actualH });
-      } else {
-        let newW, newH;
-        if (imgAspect > maxW / maxH) {
-          newW = maxW;
-          newH = parseFloat((maxW / imgAspect).toFixed(2));
-        } else {
-          newH = maxH;
-          newW = parseFloat((maxH * imgAspect).toFixed(2));
-        }
-        setArtworkDimensions({ width: newW, height: newH });
-      }
-    };
-    img.src = imageDataUrl;
+    applyNewArtworkSizing(imageDataUrl);
 
     setCurrentPage('mockupv2');
   };
@@ -848,6 +843,7 @@ function App() {
                 onReset={resetPosition}
                 artworkAreaSettings={artworkAreaSettings}
                 onArtworkAreaSettingsChange={setArtworkAreaSettings}
+                defaultArtworkArea={defaultArtworkArea}
                 selectedMockupSizes={selectedMockupSizes}
                 onMockupSizeToggle={(size) => setSelectedMockupSizes((prev) => ({ ...prev, [size]: !prev[size] }))}
                 onGenerateMockups={() => setShowMockups(true)}
@@ -876,6 +872,8 @@ function App() {
               viewSide={viewSide}
               garmentLibrary={garmentLibrary}
               onRegisterExport={registerMockupHiResExport}
+              selectedGarment={customGarment}
+              defaultArtworkArea={defaultArtworkArea}
             />
           )}
         </>
@@ -970,6 +968,7 @@ function App() {
               onReset={resetPosition}
               artworkAreaSettings={artworkAreaSettings}
               onArtworkAreaSettingsChange={setArtworkAreaSettings}
+              defaultArtworkArea={defaultArtworkArea}
               selectedMockupSizes={selectedMockupSizes}
               onMockupSizeToggle={(size) =>
                 setSelectedMockupSizes((prev) => ({ ...prev, [size]: !prev[size] }))
@@ -1005,6 +1004,8 @@ function App() {
             viewSide={viewSide}
             garmentLibrary={garmentLibrary}
             onRegisterExport={registerMockupHiResExport}
+            selectedGarment={customGarment}
+            defaultArtworkArea={defaultArtworkArea}
           />
         )}
       </>

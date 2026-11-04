@@ -2,6 +2,48 @@ import React, { useRef, useEffect, useState } from 'react';
 import { TSHIRT_SIZES, SIZE_ORDER } from '../constants/tshirtSizes';
 import './MockupPreview.css';
 
+const sameArea = (a, b) =>
+  !!a && !!b &&
+  a.width === b.width && a.height === b.height &&
+  a.topOffset === b.topOffset && (a.sideOffset || 0) === (b.sideOffset || 0) &&
+  (a.offsetX || 0) === (b.offsetX || 0) && (a.preset || null) === (b.preset || null);
+
+const fitOf = (g) => (g?.gender || g?.fit || '').toLowerCase();
+
+// Resolve everything that differs per size in a multi-size mockup:
+//  - garment: same type + fit as the selected garment, in this size/side
+//  - area:    that garment's saved print area, unless the user changed the
+//             area (chest preset / manual edit), in which case theirs applies
+//  - dims:    artwork keeps its set size, shrunk proportionally only if it
+//             would not fit inside this size's print area
+function resolveSizeSetup({ size, viewSide, garmentLibrary, selectedGarment, artworkAreaSettings, defaultArtworkArea, artworkDimensions, artworkScale = 1 }) {
+  const side = viewSide || 'front';
+  const lib = garmentLibrary || [];
+  const onSide = (g) => g.size === size && (g.side || 'front') === side;
+
+  let garment = null;
+  if (selectedGarment) {
+    garment =
+      lib.find(g => onSide(g) && g.type === selectedGarment.type && fitOf(g) === fitOf(selectedGarment)) ||
+      lib.find(g => onSide(g) && g.type === selectedGarment.type) ||
+      null;
+  }
+  if (!garment) garment = lib.find(onSide) || null;
+
+  const bm = garment?.bodyMapping;
+  const userChangedArea = defaultArtworkArea && !sameArea(artworkAreaSettings, defaultArtworkArea);
+  const area = (!userChangedArea && bm?.widthInches > 0 && bm?.heightInches > 0)
+    ? { width: bm.widthInches, height: bm.heightInches, topOffset: bm.topOffsetInches >= 0 ? bm.topOffsetInches : artworkAreaSettings.topOffset, sideOffset: 0, offsetX: 0 }
+    : artworkAreaSettings;
+
+  const w = artworkDimensions.width * artworkScale;
+  const h = artworkDimensions.height * artworkScale;
+  const f = w > 0 && h > 0 ? Math.min(1, area.width / w, area.height / h) : 1;
+  const dims = { width: artworkDimensions.width * f, height: artworkDimensions.height * f };
+
+  return { garment, area, dims };
+}
+
 function MockupPreview({
   artwork,
   selectedColor,
@@ -13,9 +55,16 @@ function MockupPreview({
   viewSide,
   garmentLibrary,
   onRegisterExport,
+  selectedGarment,
+  defaultArtworkArea,
 }) {
   const activeSizes = SIZE_ORDER.filter((size) => selectedMockupSizes[size]);
   const mockupRefs = useRef({});
+
+  const sizeSetup = (size) => resolveSizeSetup({
+    size, viewSide, garmentLibrary, selectedGarment,
+    artworkAreaSettings, defaultArtworkArea, artworkDimensions, artworkScale,
+  });
 
   // Render a high-resolution mockup for download
   const renderHighRes = (size, showAnnotations = true) => {
@@ -33,8 +82,9 @@ function MockupPreview({
     ctx.fillRect(0, 0, W, H);
 
     return new Promise((resolve) => {
-      // Check if there's a tagged garment for this size AND side in the library
-      const taggedGarment = garmentLibrary && garmentLibrary.find(g => g.size === size && (g.side || 'front') === viewSide);
+      // Per-size garment, print area and artwork size. These intentionally
+      // shadow the props of the same name for the rest of this render.
+      const { garment: taggedGarment, area: artworkAreaSettings, dims: artworkDimensions } = sizeSetup(size);
 
       const side = viewSide === 'front' ? 'front' : 'back';
       const colorName = selectedColor.name.toLowerCase().replace(/\s+/g, '-');
@@ -177,7 +227,7 @@ function MockupPreview({
 
           const printW = artworkAreaSettings.width * artPxPerInch;
           const printH = artworkAreaSettings.height * artPxPerInch;
-          const printX = tshirtX + (tshirtW - printW) / 2;
+          const printX = tshirtX + (tshirtW - printW) / 2 + (artworkAreaSettings.sideOffset || 0) * artPxPerInch + (artworkAreaSettings.offsetX || 0) * (W / 700);
           const printY = tshirtY + (artworkAreaSettings.topOffset * artPxPerInch);
 
           // Calculate the target area where artwork should fit
@@ -567,8 +617,9 @@ function MockupPreview({
     const textLineH = 40;
     
     // Text
-    const artWidthInches = (artworkDimensions.width * artworkScale).toFixed(1);
-    const artHeightInches = (artworkDimensions.height * artworkScale).toFixed(1);
+    const sizeDims = sizeSetup(size).dims;
+    const artWidthInches = (sizeDims.width * artworkScale).toFixed(1);
+    const artHeightInches = (sizeDims.height * artworkScale).toFixed(1);
     const text = `Shirt Size: ${size} | Artwork Size: W ${artWidthInches}" x H ${artHeightInches}"`;
     const measureCtx = document.createElement('canvas').getContext('2d');
     measureCtx.font = 'bold 32px Inter, sans-serif';
@@ -611,7 +662,7 @@ function MockupPreview({
       return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
     });
     return () => onRegisterExport(null);
-  }, [onRegisterExport, artwork, activeSizes.join(','), selectedColor, viewSide, artworkDimensions, artworkPosition, artworkScale, artworkAreaSettings]);
+  }, [onRegisterExport, artwork, activeSizes.join(','), selectedColor, viewSide, artworkDimensions, artworkPosition, artworkScale, artworkAreaSettings, selectedGarment, defaultArtworkArea, garmentLibrary]);
 
   // Download a single mockup with dimensions
   const downloadSingle = async (size) => {
@@ -799,22 +850,25 @@ function MockupPreview({
         </p>
       </div>
       <div className="mockup-grid">
-        {activeSizes.map((size) => (
-          <MockupCard
-            key={size}
-            size={size}
-            artwork={artwork}
-            color={selectedColor}
-            artworkDimensions={artworkDimensions}
-            artworkPosition={artworkPosition}
-            artworkScale={artworkScale}
-            artworkAreaSettings={artworkAreaSettings}
-            viewSide={viewSide}
-            canvasRef={(el) => { mockupRefs.current[size] = el; }}
-            onDownload={() => downloadSingle(size)}
-            garmentLibrary={garmentLibrary}
-          />
-        ))}
+        {activeSizes.map((size) => {
+          const setup = sizeSetup(size);
+          return (
+            <MockupCard
+              key={size}
+              size={size}
+              artwork={artwork}
+              color={selectedColor}
+              artworkDimensions={setup.dims}
+              artworkPosition={artworkPosition}
+              artworkScale={artworkScale}
+              artworkAreaSettings={setup.area}
+              viewSide={viewSide}
+              canvasRef={(el) => { mockupRefs.current[size] = el; }}
+              onDownload={() => downloadSingle(size)}
+              garment={setup.garment}
+            />
+          );
+        })}
       </div>
       <div className="mockup-actions">
         <button className="btn-download" onClick={downloadAll}>
@@ -841,7 +895,8 @@ function MockupPreview({
   );
 }
 
-function MockupCard({ size, artwork, color, artworkDimensions, artworkPosition, artworkScale, artworkAreaSettings, viewSide, canvasRef, onDownload, garmentLibrary }) {
+// garment: the per-size garment already resolved by the parent (or null)
+function MockupCard({ size, artwork, color, artworkDimensions, artworkPosition, artworkScale, artworkAreaSettings, viewSide, canvasRef, onDownload, garment }) {
   const localCanvasRef = useRef(null);
   const [tshirtImg, setTshirtImg] = useState(null);
 
@@ -854,11 +909,10 @@ function MockupCard({ size, artwork, color, artworkDimensions, artworkPosition, 
   // Load t-shirt image — use tagged garment if available
   const [isCustomGarment, setIsCustomGarment] = useState(false);
   useEffect(() => {
-    const taggedGarment = garmentLibrary && garmentLibrary.find(g => g.size === size && (g.side || 'front') === viewSide);
-    if (taggedGarment && taggedGarment.dataUrl) {
+    if (garment && garment.dataUrl) {
       const img = new Image();
       img.onload = () => { setTshirtImg(img); setIsCustomGarment(true); };
-      img.src = taggedGarment.dataUrl;
+      img.src = garment.dataUrl;
     } else {
       setIsCustomGarment(false);
       const side = viewSide === 'front' ? 'front' : 'back';
@@ -873,7 +927,7 @@ function MockupCard({ size, artwork, color, artworkDimensions, artworkPosition, 
       };
       img.src = `/tshirts/${colorName}-${side}.png`;
     }
-  }, [viewSide, color, size, garmentLibrary]);
+  }, [viewSide, color, size, garment?.id, garment?.dataUrl]);
 
   useEffect(() => {
     const canvas = localCanvasRef.current;
@@ -965,8 +1019,7 @@ function MockupCard({ size, artwork, color, artworkDimensions, artworkPosition, 
         // Use garment's own body width for custom garments
         let pxPerInch;
         if (isCustomGarment) {
-          const taggedGarment = garmentLibrary && garmentLibrary.find(g => g.size === size && (g.side || 'front') === viewSide);
-          const garmentBodyWidth = taggedGarment?.bodyMapping?.shirtWidthInches || sizeData.bodyWidth;
+          const garmentBodyWidth = garment?.bodyMapping?.shirtWidthInches || sizeData.bodyWidth;
           pxPerInch = tshirtW / garmentBodyWidth;
         } else {
           pxPerInch = tshirtW / sizeData.bodyWidth;
@@ -977,7 +1030,7 @@ function MockupCard({ size, artwork, color, artworkDimensions, artworkPosition, 
         // Fixed print area from settings
         const printW = artworkAreaSettings.width * pxPerInchW;
         const printH = artworkAreaSettings.height * pxPerInchH;
-        const printX = tshirtX + (tshirtW - printW) / 2;
+        const printX = tshirtX + (tshirtW - printW) / 2 + (artworkAreaSettings.sideOffset || 0) * pxPerInchW + (artworkAreaSettings.offsetX || 0) * (W / 700);
         const printY = tshirtY + (artworkAreaSettings.topOffset * pxPerInchH);
 
         // Artwork with aspect ratio preserved within bounding box

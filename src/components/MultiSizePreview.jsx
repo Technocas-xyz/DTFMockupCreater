@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { TSHIRT_SIZES, SIZE_ORDER } from '../constants/tshirtSizes';
 import { drawRecoloredGarment } from '../utils/garmentTintEngine';
+import { customGarmentLayout } from '../utils/garmentLayout';
 import './MultiSizePreview.css';
 
 // ─── CROP UTILITY: Find non-white/non-transparent content bounds ──────────────
@@ -299,21 +300,14 @@ const MSPCard = React.forwardRef(function MSPCard({
 
       if (isCustomGarment) {
         const taggedG = garmentLibrary && garmentLibrary.find(g => g.size === realSize && (g.side || 'front') === viewSide);
-        const garmentBodyWidth = taggedG?.bodyMapping?.shirtWidthInches || sizeData.bodyWidth;
-        const garmentBodyHeight = taggedG?.bodyMapping?.shirtHeightInches || sizeData.bodyLength;
-
-        const maxBodyWidth = 32;
-        const maxBodyHeight = 35;
-        const maxTshirtW = W * 0.52;
-        const maxTshirtH = H * 0.68;
-        const refPxPerInchW = maxTshirtW / maxBodyWidth;
-        const refPxPerInchH = maxTshirtH / maxBodyHeight;
-        pxPerInch = Math.min(refPxPerInchW, refPxPerInchH);
-
-        tshirtW = garmentBodyWidth * pxPerInch;
-        tshirtH = garmentBodyHeight * pxPerInch;
-        tshirtX = (W - tshirtW) / 2;
-        tshirtY = (H - tshirtH) / 2;
+        // Width from saved inches, height from the image aspect — never stretched
+        ({ pxPerInch, tshirtW, tshirtH, tshirtX, tshirtY } = customGarmentLayout({
+          imgW: tshirtImg.naturalWidth || tshirtImg.width,
+          imgH: tshirtImg.naturalHeight || tshirtImg.height,
+          shirtWidthInches: taggedG?.bodyMapping?.shirtWidthInches || sizeData.bodyWidth,
+          canvasW: W,
+          canvasH: H,
+        }));
       } else {
         // Default t-shirt: EXACT DesignCanvas formula
         const maxBodyWidth = 32;
@@ -377,7 +371,7 @@ const MSPCard = React.forwardRef(function MSPCard({
         // Print area — exact same as DesignCanvas
         const printAreaPxW = artworkAreaSettings.width * artPxPerInch;
         const printAreaPxH = artworkAreaSettings.height * artPxPerInch;
-        const printX = tshirtX + (tshirtW - printAreaPxW) / 2;
+        const printX = tshirtX + (tshirtW - printAreaPxW) / 2 + (artworkAreaSettings.sideOffset || 0) * artPxPerInch + (artworkAreaSettings.offsetX || 0);
         const printY = tshirtY + (artworkAreaSettings.topOffset * artPxPerInch);
 
         // Artwork dimensions — scaled for this size
@@ -456,12 +450,14 @@ const MSPCard = React.forwardRef(function MSPCard({
 
     if (isCustomGarment) {
       const taggedG = garmentLibrary && garmentLibrary.find(g => g.size === realSize && (g.side || 'front') === viewSide);
-      const garmentBodyWidth = taggedG?.bodyMapping?.shirtWidthInches || sizeData.bodyWidth;
-      const garmentBodyHeight = taggedG?.bodyMapping?.shirtHeightInches || sizeData.bodyLength;
-      tshirtW = garmentBodyWidth * pxPerInch;
-      tshirtH = garmentBodyHeight * pxPerInch;
-      tshirtX = (RW - tshirtW) / 2;
-      tshirtY = (RH - tshirtH) / 2;
+      // Width from saved inches, height from the image aspect — never stretched
+      ({ pxPerInch, tshirtW, tshirtH, tshirtX, tshirtY } = customGarmentLayout({
+        imgW: garmentImg.naturalWidth || garmentImg.width,
+        imgH: garmentImg.naturalHeight || garmentImg.height,
+        shirtWidthInches: taggedG?.bodyMapping?.shirtWidthInches || sizeData.bodyWidth,
+        canvasW: RW,
+        canvasH: RH,
+      }));
     } else {
       tshirtW = sizeData.bodyWidth * pxPerInchW;
       tshirtH = sizeData.bodyLength * pxPerInchH;
@@ -480,7 +476,7 @@ const MSPCard = React.forwardRef(function MSPCard({
       const artPxPerInch = pxPerInch;
       const printAreaPxW = artworkAreaSettings.width * artPxPerInch;
       const printAreaPxH = artworkAreaSettings.height * artPxPerInch;
-      const printX = tshirtX + (tshirtW - printAreaPxW) / 2;
+      const printX = tshirtX + (tshirtW - printAreaPxW) / 2 + (artworkAreaSettings.sideOffset || 0) * artPxPerInch + (artworkAreaSettings.offsetX || 0) * (RW / 700);
       const printY = tshirtY + (artworkAreaSettings.topOffset * artPxPerInch);
 
       // Scale artwork dimensions for this size
