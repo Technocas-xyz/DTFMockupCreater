@@ -488,8 +488,16 @@ function App() {
   // Print area saved for the selected garment in Garment Manager (inches).
   // Falls back to the standard 18" x 24" area at 7" when there is no garment
   // or nothing was saved for it.
+  // Always resolve the selected garment from the LIVE library by id, never from
+  // the possibly-stale customGarment snapshot. After an edit in Garment Manager
+  // the library reloads with fresh bodyMapping; reading it here by id means the
+  // Mockup/Design Preview picks up the new print area (width/height/top offset).
+  const liveGarment = (customGarment && garmentLibrary.find(g => g.id === customGarment.id)) || customGarment;
+  const liveBm = liveGarment?.bodyMapping;
+  const liveBmKey = liveBm ? `${liveBm.widthInches}|${liveBm.heightInches}|${liveBm.topOffsetInches}` : '';
+
   const defaultArtworkArea = useMemo(() => {
-    const bm = customGarment?.bodyMapping;
+    const bm = liveBm;
     return {
       width: bm?.widthInches > 0 ? bm.widthInches : 18,
       height: bm?.heightInches > 0 ? bm.heightInches : 24,
@@ -498,7 +506,8 @@ function App() {
       offsetX: 0,
       preset: null,
     };
-  }, [customGarment]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveBmKey]);
 
   // Proportionally fit artwork dimensions inside a print area (inches).
   const fitDimsToArea = (dims, area) => {
@@ -785,7 +794,7 @@ function App() {
                   artworkScale={artworkScale}
                   artworkAreaSettings={artworkAreaSettings}
                   onPositionChange={handlePositionChange}
-                  customGarment={customGarment}
+                  customGarment={liveGarment}
                   onRegisterExport={registerMockupCanvasExport}
                   multiLayerEnabled={multiLayerEnabled}
                   layers={layers}
@@ -804,7 +813,7 @@ function App() {
                     garmentLibrary={garmentLibrary}
                     scalingMode={scalingMode}
                     baseSize={selectedSize}
-                    customGarment={customGarment}
+                    customGarment={liveGarment}
                     multiLayerEnabled={multiLayerEnabled}
                     layers={layers}
                     activeLayerId={activeLayerId}
@@ -872,7 +881,7 @@ function App() {
               viewSide={viewSide}
               garmentLibrary={garmentLibrary}
               onRegisterExport={registerMockupHiResExport}
-              selectedGarment={customGarment}
+              selectedGarment={liveGarment}
               defaultArtworkArea={defaultArtworkArea}
             />
           )}
@@ -922,7 +931,7 @@ function App() {
                 artworkScale={artworkScale}
                 artworkAreaSettings={artworkAreaSettings}
                 onPositionChange={handlePositionChange}
-                customGarment={customGarment}
+                customGarment={liveGarment}
                 onRegisterExport={registerMockupCanvasExport}
                 multiLayerEnabled={multiLayerEnabled}
                 layers={layers}
@@ -941,7 +950,7 @@ function App() {
                   garmentLibrary={garmentLibrary}
                   scalingMode={scalingMode}
                   baseSize={selectedSize}
-                  customGarment={customGarment}
+                  customGarment={liveGarment}
                   multiLayerEnabled={multiLayerEnabled}
                   layers={layers}
                   activeLayerId={activeLayerId}
@@ -1004,7 +1013,7 @@ function App() {
             viewSide={viewSide}
             garmentLibrary={garmentLibrary}
             onRegisterExport={registerMockupHiResExport}
-            selectedGarment={customGarment}
+            selectedGarment={liveGarment}
             defaultArtworkArea={defaultArtworkArea}
           />
         )}
