@@ -6,6 +6,11 @@ import './ControlPanel.css';
 const GARMENT_TYPES_FILTER = ['T-Shirt', 'Hoodie', 'Women T-Shirt', 'Sweatshirt', 'Long Sleeve T-Shirt', 'Tank Top', 'Shorts', 'Bob Marley', 'Other'];
 
 const GARMENT_FITS = ['All', 'Men', 'Women', 'Unisex', 'Kids'];
+
+// Left-chest placement for T-shirts and hoodies. offsetX is in preview px,
+// the same units as the X Offset slider.
+const CHEST_PRESET = { width: 6, height: 6, topOffset: 7, sideOffset: 0, offsetX: 50, preset: 'chest' };
+const CHEST_CATEGORIES = /t-?shirt|hoodie/i;
 const KIDS_SIZES = ['2T', '3T', '4T', '5T', 'YS', 'YM', 'YL', 'YXL'];
 const ADULT_SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL'];
 
@@ -27,6 +32,7 @@ function ControlPanel({
   onReset,
   artworkAreaSettings,
   onArtworkAreaSettingsChange,
+  defaultArtworkArea = { width: 18, height: 24, topOffset: 7, sideOffset: 0 },
   selectedMockupSizes,
   onMockupSizeToggle,
   onGenerateMockups,
@@ -38,6 +44,8 @@ function ControlPanel({
   scalingMode,
   onScalingModeChange,
   viewSide,
+  multiLayerEnabled,
+  activeLayerName,
 }) {
   const fileInputRef = useRef(null);
   const [selectedFit, setSelectedFit] = useState('Men');
@@ -184,25 +192,36 @@ function ControlPanel({
   // Sizes depend on fit selection
   const availableSizes = selectedFit === 'Kids' ? KIDS_SIZES : ADULT_SIZES;
 
-  // Auto-select garment when category, size, or view side changes
+  // Does a garment match the currently selected fit (Men/Women/Unisex/Kids)?
+  // Unisex ('all'/'unisex') garments always match. Kids matches by gender or a kids size.
+  const matchesFit = (g) => {
+    if (selectedFit === 'All') return true;
+    const gFit = (g.gender || g.fit || 'Men').toLowerCase();
+    const selFit = selectedFit.toLowerCase();
+    if (selFit === 'kids') return gFit === 'kids' || KIDS_SIZES.includes(g.size);
+    return gFit === selFit || gFit === 'all' || gFit === 'unisex';
+  };
+
+  // Auto-select garment when fit, category, size, or view side changes.
+  // Fit (Men/Women) is matched first so a "Men + Tank Top" selection never
+  // lands on a ladies' tank top just because it appears first in the library.
   useEffect(() => {
     if (!garmentLibrary || garmentLibrary.length === 0) return;
     const side = viewSide || 'front';
-    // Find matching garment from library for this category + size + side
-    const match = garmentLibrary.find(g => g.type === selectedCategory && g.size === selectedSize && (g.side || 'front') === side);
-    if (match) {
-      onGarmentChange(match.id);
-    } else {
-      // Try same category+size any side
-      const fallback = garmentLibrary.find(g => g.type === selectedCategory && g.size === selectedSize);
-      if (fallback) { onGarmentChange(fallback.id); }
-      else {
-        // Try any garment of this category
-        const any = garmentLibrary.find(g => g.type === selectedCategory);
-        onGarmentChange(any ? any.id : null);
-      }
-    }
-  }, [selectedCategory, selectedSize, garmentLibrary, viewSide]);
+
+    // Preferred: exact fit + category + size + side
+    let match = garmentLibrary.find(g => matchesFit(g) && g.type === selectedCategory && g.size === selectedSize && (g.side || 'front') === side);
+    // Then: exact fit + category + size, any side
+    if (!match) match = garmentLibrary.find(g => matchesFit(g) && g.type === selectedCategory && g.size === selectedSize);
+    // Then: exact fit + category, any size/side
+    if (!match) match = garmentLibrary.find(g => matchesFit(g) && g.type === selectedCategory);
+    // Fallbacks that ignore fit (only when no fit-matching garment exists at all)
+    if (!match) match = garmentLibrary.find(g => g.type === selectedCategory && g.size === selectedSize && (g.side || 'front') === side);
+    if (!match) match = garmentLibrary.find(g => g.type === selectedCategory && g.size === selectedSize);
+    if (!match) match = garmentLibrary.find(g => g.type === selectedCategory);
+
+    onGarmentChange(match ? match.id : null);
+  }, [selectedFit, selectedCategory, selectedSize, garmentLibrary, viewSide]);
 
   const handleWidthChange = (newWidth) => {
     const w = parseFloat(newWidth) || 0;
@@ -225,10 +244,9 @@ function ControlPanel({
   };
 
   // Auto-fit artwork to fill available print area proportionally
-  const handleAutoFit = () => {
-    const availableW = artworkAreaSettings.width;
-    const availableH = artworkAreaSettings.height;
-
+  // Proportionally fit the artwork inside a given print area (defaults to the
+  // current artwork area settings). Keeps aspect ratio when proportions are locked.
+  const fitArtworkToArea = (availableW = artworkAreaSettings.width, availableH = artworkAreaSettings.height) => {
     if (lockProportion) {
       // Fit within available area maintaining current aspect ratio
       const fitByWidth = { width: availableW, height: availableW / aspectRatio };
@@ -243,6 +261,27 @@ function ControlPanel({
       onDimensionsChange({ width: parseFloat(availableW.toFixed(2)), height: parseFloat(availableH.toFixed(2)) });
     }
   };
+
+  const handleAutoFit = () => fitArtworkToArea();
+
+  // Apply a placement preset: update the print area, reset position, then
+  // proportionally refit the artwork into the preset's area.
+  const handleAreaPreset = (preset) => {
+    onArtworkAreaSettingsChange({ ...artworkAreaSettings, ...preset });
+    onPositionChange({ x: 0, y: 0 });
+    fitArtworkToArea(preset.width, preset.height);
+  };
+
+  // Chest preset is offered for T-shirts and hoodies only
+  const chestAvailable = CHEST_CATEGORIES.test(selectedCategory || '');
+  const isChestActive = artworkAreaSettings.preset === 'chest';
+
+  // Switching to a category without a chest preset drops back to Default
+  useEffect(() => {
+    if (!chestAvailable && isChestActive) {
+      handleAreaPreset({ ...defaultArtworkArea, sideOffset: 0, offsetX: 0, preset: null });
+    }
+  }, [chestAvailable]);
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -261,6 +300,16 @@ function ControlPanel({
 
   return (
     <div className="control-panel">
+      {/* Active Layer Indicator */}
+      {multiLayerEnabled && activeLayerName && (
+        <div className="panel-layer-badge">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <rect x="7" y="7" width="10" height="10" rx="1" opacity="0.5" />
+          </svg>
+          <span>Editing: <strong>{activeLayerName}</strong></span>
+        </div>
+      )}
       {/* Upload Section */}
       <section className="panel-section">
         <h3 className="section-title">
@@ -579,6 +628,30 @@ function ControlPanel({
           <span className="step-number">7</span>
           Artwork Area
         </h3>
+
+        {/* Placement presets */}
+        <div className="area-preset-row">
+          <button
+            type="button"
+            className={`area-preset-btn ${!isChestActive ? 'active' : ''}`}
+            onClick={() => handleAreaPreset({ ...defaultArtworkArea, sideOffset: 0, offsetX: 0, preset: null })}
+          >
+            Default
+          </button>
+          {chestAvailable && (
+            <button
+              type="button"
+              className={`area-preset-btn ${isChestActive ? 'active' : ''}`}
+              onClick={() => handleAreaPreset(CHEST_PRESET)}
+            >
+              Chest
+            </button>
+          )}
+        </div>
+        {chestAvailable && (
+          <p className="section-hint">Chest: 6" × 6" print area, 7" from top, moved 50px to the right.</p>
+        )}
+
         <div className="area-settings-grid">
           <div className="area-setting-field">
             <label>Width</label>
@@ -631,8 +704,25 @@ function ControlPanel({
               <span className="unit">in</span>
             </div>
           </div>
+          <div className="area-setting-field">
+            <label>Side Offset</label>
+            <div className="input-with-unit">
+              <input
+                type="number"
+                min="-15"
+                max="15"
+                step="0.25"
+                value={artworkAreaSettings.sideOffset || 0}
+                onChange={(e) => onArtworkAreaSettingsChange({
+                  ...artworkAreaSettings,
+                  sideOffset: parseFloat(e.target.value) || 0
+                })}
+              />
+              <span className="unit">in</span>
+            </div>
+          </div>
         </div>
-        <p className="area-info">Fixed print area: {artworkAreaSettings.width}" × {artworkAreaSettings.height}" starting {artworkAreaSettings.topOffset}" from top</p>
+        <p className="area-info">Fixed print area: {artworkAreaSettings.width}" × {artworkAreaSettings.height}" starting {artworkAreaSettings.topOffset}" from top{(artworkAreaSettings.sideOffset || 0) !== 0 ? `, ${Math.abs(artworkAreaSettings.sideOffset)}" ${artworkAreaSettings.sideOffset > 0 ? 'right' : 'left'} of center` : ''}{(artworkAreaSettings.offsetX || 0) !== 0 ? `, moved ${Math.abs(artworkAreaSettings.offsetX)}px ${artworkAreaSettings.offsetX > 0 ? 'right' : 'left'}` : ''}</p>
       </section>
 
       {/* Color Selection */}

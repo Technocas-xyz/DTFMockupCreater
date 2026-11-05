@@ -14,6 +14,7 @@ const ALL_PAGES = [
   { id: 'qa', label: 'QA Analysis' },
   { id: 'contrast', label: 'Contrast Checker' },
   { id: 'ailab', label: 'AI Artwork Lab' },
+  { id: 'tasks', label: 'Task Manager' },
   { id: 'users', label: 'User Management' },
 ];
 
@@ -24,7 +25,7 @@ function UserManagement({ authUser }) {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editUser, setEditUser] = useState(null);
-  const [formData, setFormData] = useState({ username: '', email: '', password: '', full_name: '', role: 'viewer', page_access: ['bgremover', 'orders'] });
+  const [formData, setFormData] = useState({ username: '', email: '', password: '', full_name: '', role: 'viewer', page_access: ['tasks', 'bgremover', 'orders'] });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -61,7 +62,7 @@ function UserManagement({ authUser }) {
       if (!res.ok) { setError(data.error || 'Operation failed'); return; }
       setSuccess(isEdit ? 'User updated successfully' : 'User created successfully');
       setShowForm(false); setEditUser(null);
-      setFormData({ username: '', email: '', password: '', full_name: '', role: 'viewer', page_access: ['bgremover', 'orders'] });
+      setFormData({ username: '', email: '', password: '', full_name: '', role: 'viewer', page_access: ['tasks', 'bgremover', 'orders'] });
       loadUsers();
     } catch (e) { setError('Connection failed'); }
   };
@@ -107,7 +108,7 @@ function UserManagement({ authUser }) {
           <h1 className="um-title">User Management</h1>
           <p className="um-subtitle">{users.length} users registered</p>
         </div>
-        <button className="um-btn um-btn-primary" onClick={() => { setShowForm(true); setEditUser(null); setFormData({ username:'', email:'', password:'', full_name:'', role:'viewer', page_access:['bgremover','orders'] }); setError(''); setSuccess(''); }}>
+        <button className="um-btn um-btn-primary" onClick={() => { setShowForm(true); setEditUser(null); setFormData({ username:'', email:'', password:'', full_name:'', role:'viewer', page_access:['tasks','bgremover','orders'] }); setError(''); setSuccess(''); }}>
           + Create User
         </button>
       </header>

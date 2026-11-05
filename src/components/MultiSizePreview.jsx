@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { TSHIRT_SIZES, SIZE_ORDER } from '../constants/tshirtSizes';
 import { drawRecoloredGarment } from '../utils/garmentTintEngine';
+import { customGarmentLayout } from '../utils/garmentLayout';
 import './MultiSizePreview.css';
 
 // ─── CROP UTILITY: Find non-white/non-transparent content bounds ──────────────
@@ -40,6 +41,9 @@ function MultiSizePreview({
   scalingMode,
   baseSize,
   customGarment,
+  multiLayerEnabled,
+  layers,
+  activeLayerId,
 }) {
   const cardRefs = useRef({});
 
@@ -168,6 +172,8 @@ function MultiSizePreview({
             baseBodyWidth={baseBodyWidth}
             basePercentage={basePercentage}
             customGarment={customGarment}
+            multiLayerEnabled={multiLayerEnabled}
+            layers={layers}
             ref={(el) => { cardRefs.current[size] = el; }}
           />
         ))}
@@ -191,6 +197,8 @@ const MSPCard = React.forwardRef(function MSPCard({
   baseBodyWidth,
   basePercentage,
   customGarment,
+  multiLayerEnabled,
+  layers,
 }, ref) {
   const canvasRef = useRef(null);
   const [tshirtImg, setTshirtImg] = useState(null);
@@ -220,37 +228,58 @@ const MSPCard = React.forwardRef(function MSPCard({
     size,
   }));
 
-  // Load garment image — use customGarment (from type selection) if available
+  // Load garment image. When a garment is selected (customGarment), every size
+  // card must show the SAME garment type + fit — just at this card's size if a
+  // matching image exists, otherwise the selected garment's own image. This
+  // keeps a "Men Tank Top" comparison showing men's tanks across all sizes
+  // instead of falling back to a generic tank shape.
   useEffect(() => {
-    // Priority 1: Use the customGarment passed from parent (matches selected type like Hoodie)
-    if (customGarment && customGarment.dataUrl) {
+    let cancelled = false;
+    const applyImage = (src, custom) => {
       const img = new Image();
-      img.onload = () => { setTshirtImg(img); setIsCustomGarment(true); };
-      img.src = customGarment.dataUrl;
-      return;
+      img.onload = () => { if (!cancelled) { setTshirtImg(img); setIsCustomGarment(custom); } };
+      img.onerror = () => {
+        if (cancelled) return;
+        setIsCustomGarment(false);
+        const side = viewSide === 'front' ? 'front' : 'back';
+        const fb = new Image();
+        fb.onload = () => { if (!cancelled) setTshirtImg(fb); };
+        fb.onerror = () => { if (!cancelled) setTshirtImg(null); };
+        fb.src = `/tshirts/white-${side}1.png`;
+      };
+      img.src = src;
+    };
+
+    if (customGarment && customGarment.dataUrl) {
+      // Try to find the same type + fit + THIS card's size + side in the library,
+      // so each size card shows its own correctly-sized garment image.
+      const custType = customGarment.type;
+      const custFit = (customGarment.gender || customGarment.fit || '').toLowerCase();
+      const sameKindThisSize = garmentLibrary && garmentLibrary.find((g) =>
+        g.type === custType &&
+        (custFit ? (g.gender || g.fit || '').toLowerCase() === custFit : true) &&
+        g.size === realSize &&
+        (g.side || 'front') === viewSide &&
+        g.dataUrl
+      );
+      // Use the size-specific match, or fall back to the selected garment's image.
+      applyImage((sameKindThisSize && sameKindThisSize.dataUrl) || customGarment.dataUrl, true);
+      return () => { cancelled = true; };
     }
-    // Priority 2: Find a tagged garment for this exact size + side in library
+
+    // No garment selected — plain size+side match, then default tshirt vector.
     const taggedGarment = garmentLibrary && garmentLibrary.find(
-      (g) => g.size === realSize && (g.side || 'front') === viewSide
+      (g) => g.size === realSize && (g.side || 'front') === viewSide && g.dataUrl
     );
     if (taggedGarment && taggedGarment.dataUrl) {
-      const img = new Image();
-      img.onload = () => { setTshirtImg(img); setIsCustomGarment(true); };
-      img.src = taggedGarment.dataUrl;
+      applyImage(taggedGarment.dataUrl, true);
     } else {
       setIsCustomGarment(false);
       const side = viewSide === 'front' ? 'front' : 'back';
-      const img = new Image();
-      img.onload = () => setTshirtImg(img);
-      img.onerror = () => {
-        const fallback = new Image();
-        fallback.onload = () => setTshirtImg(fallback);
-        fallback.onerror = () => setTshirtImg(null);
-        fallback.src = `/tshirts/white-${side}1.png`;
-      };
-      img.src = `/tshirts/white-${side}1.png`;
+      applyImage(`/tshirts/white-${side}1.png`, false);
     }
-  }, [viewSide, selectedColor, size, garmentLibrary, customGarment]);
+    return () => { cancelled = true; };
+  }, [viewSide, selectedColor, size, realSize, garmentLibrary, customGarment]);
 
   // Draw canvas
   useEffect(() => {
@@ -271,21 +300,14 @@ const MSPCard = React.forwardRef(function MSPCard({
 
       if (isCustomGarment) {
         const taggedG = garmentLibrary && garmentLibrary.find(g => g.size === realSize && (g.side || 'front') === viewSide);
-        const garmentBodyWidth = taggedG?.bodyMapping?.shirtWidthInches || sizeData.bodyWidth;
-        const garmentBodyHeight = taggedG?.bodyMapping?.shirtHeightInches || sizeData.bodyLength;
-
-        const maxBodyWidth = 32;
-        const maxBodyHeight = 35;
-        const maxTshirtW = W * 0.52;
-        const maxTshirtH = H * 0.68;
-        const refPxPerInchW = maxTshirtW / maxBodyWidth;
-        const refPxPerInchH = maxTshirtH / maxBodyHeight;
-        pxPerInch = Math.min(refPxPerInchW, refPxPerInchH);
-
-        tshirtW = garmentBodyWidth * pxPerInch;
-        tshirtH = garmentBodyHeight * pxPerInch;
-        tshirtX = (W - tshirtW) / 2;
-        tshirtY = (H - tshirtH) / 2;
+        // Width from saved inches, height from the image aspect — never stretched
+        ({ pxPerInch, tshirtW, tshirtH, tshirtX, tshirtY } = customGarmentLayout({
+          imgW: tshirtImg.naturalWidth || tshirtImg.width,
+          imgH: tshirtImg.naturalHeight || tshirtImg.height,
+          shirtWidthInches: taggedG?.bodyMapping?.shirtWidthInches || sizeData.bodyWidth,
+          canvasW: W,
+          canvasH: H,
+        }));
       } else {
         // Default t-shirt: EXACT DesignCanvas formula
         const maxBodyWidth = 32;
@@ -339,7 +361,8 @@ const MSPCard = React.forwardRef(function MSPCard({
     }
 
     // Draw artwork — SAME logic as DesignCanvas
-    if (artwork) {
+    // Helper to draw one artwork on this card's canvas
+    const drawOneArt = (artSrc, dims, pos, opacity = 1) => {
       const img = new Image();
       img.onload = () => {
         // Same pxPerInch as the shirt
@@ -348,12 +371,15 @@ const MSPCard = React.forwardRef(function MSPCard({
         // Print area — exact same as DesignCanvas
         const printAreaPxW = artworkAreaSettings.width * artPxPerInch;
         const printAreaPxH = artworkAreaSettings.height * artPxPerInch;
-        const printX = tshirtX + (tshirtW - printAreaPxW) / 2;
+        const printX = tshirtX + (tshirtW - printAreaPxW) / 2 + (artworkAreaSettings.sideOffset || 0) * artPxPerInch + (artworkAreaSettings.offsetX || 0);
         const printY = tshirtY + (artworkAreaSettings.topOffset * artPxPerInch);
 
-        // Artwork dimensions
-        const artworkPxW = sizeArtW * artPxPerInch;
-        const artworkPxH = sizeArtH * artPxPerInch;
+        // Artwork dimensions — scaled for this size
+        const scaledArtW = (sizeData.bodyWidth * activePercent) / 100;
+        const layerAspect = dims.height / dims.width;
+        const scaledArtH = scaledArtW * layerAspect;
+        const artworkPxW = scaledArtW * artPxPerInch;
+        const artworkPxH = scaledArtH * artPxPerInch;
 
         // Maintain aspect ratio — exact same as DesignCanvas
         const imgNatW = img.naturalWidth;
@@ -365,27 +391,41 @@ const MSPCard = React.forwardRef(function MSPCard({
         else { artH = artworkPxH; artW = artworkPxH * imgAR; }
 
         // Center horizontally, align to TOP of print area vertically
-        const drawX = printX + (printAreaPxW - artW) / 2 + artworkPosition.x;
-        const drawY = printY + artworkPosition.y;
+        const drawX = printX + (printAreaPxW - artW) / 2 + pos.x;
+        const drawY = printY + pos.y;
 
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
         // Clip artwork to shirt area so it doesn't overflow
         ctx.save();
+        ctx.globalAlpha = opacity;
         ctx.beginPath();
         ctx.rect(tshirtX, tshirtY, tshirtW, tshirtH);
         ctx.clip();
         ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, drawX, drawY, artW, artH);
         ctx.restore();
       };
-      img.src = artwork;
+      img.src = artSrc;
+    };
+
+    if (multiLayerEnabled && layers && layers.length > 0) {
+      // Multi-layer mode: draw all visible layers
+      layers.forEach(layer => {
+        if (!layer.visible || !layer.artwork) return;
+        drawOneArt(layer.artwork, layer.artworkDimensions, layer.artworkPosition, layer.opacity ?? 1);
+      });
+    } else if (artwork) {
+      drawOneArt(artwork, artworkDimensions, artworkPosition, 1);
     }
-  }, [artwork, size, selectedColor, artworkDimensions, artworkPosition, artworkScale, artworkAreaSettings, viewSide, tshirtImg, isCustomGarment, sizeArtW, sizeArtH]);
+  }, [artwork, size, selectedColor, artworkDimensions, artworkPosition, artworkScale, artworkAreaSettings, viewSide, tshirtImg, isCustomGarment, sizeArtW, sizeArtH, multiLayerEnabled, layers]);
 
   // Download single card — magenta background crop detection (works for white shirts)
   // ─── DOWNLOAD SINGLE CARD: Render fresh at high-res from original source ──────
   const handleDownloadSingle = () => {
-    if (!artwork) return;
+    const hasContent = multiLayerEnabled
+      ? (layers && layers.some(l => l.visible && l.artwork))
+      : !!artwork;
+    if (!hasContent) return;
 
     // Render at 2800x3400 (same as DesignCanvas 4x) for sharp output
     const RW = 2800, RH = 3400;
@@ -410,12 +450,14 @@ const MSPCard = React.forwardRef(function MSPCard({
 
     if (isCustomGarment) {
       const taggedG = garmentLibrary && garmentLibrary.find(g => g.size === realSize && (g.side || 'front') === viewSide);
-      const garmentBodyWidth = taggedG?.bodyMapping?.shirtWidthInches || sizeData.bodyWidth;
-      const garmentBodyHeight = taggedG?.bodyMapping?.shirtHeightInches || sizeData.bodyLength;
-      tshirtW = garmentBodyWidth * pxPerInch;
-      tshirtH = garmentBodyHeight * pxPerInch;
-      tshirtX = (RW - tshirtW) / 2;
-      tshirtY = (RH - tshirtH) / 2;
+      // Width from saved inches, height from the image aspect — never stretched
+      ({ pxPerInch, tshirtW, tshirtH, tshirtX, tshirtY } = customGarmentLayout({
+        imgW: garmentImg.naturalWidth || garmentImg.width,
+        imgH: garmentImg.naturalHeight || garmentImg.height,
+        shirtWidthInches: taggedG?.bodyMapping?.shirtWidthInches || sizeData.bodyWidth,
+        canvasW: RW,
+        canvasH: RH,
+      }));
     } else {
       tshirtW = sizeData.bodyWidth * pxPerInchW;
       tshirtH = sizeData.bodyLength * pxPerInchH;
@@ -429,27 +471,37 @@ const MSPCard = React.forwardRef(function MSPCard({
     else { const sp = 1.3; dw = tshirtW * sp; dh = dw / garImgAspect; dx = (RW - dw) / 2; dy = tshirtY - (dh - tshirtH) * 0.15; }
     drawRecoloredGarment(rCtx, garmentImg, dx, dy, dw, dh, selectedColor.hex, RW, RH);
 
-    // Draw artwork from original source
-    const artImg = new Image();
-    artImg.onload = () => {
+    // Helper to draw one artwork at high-res
+    const drawOneHiRes = (img, dims, pos, opacity = 1) => {
       const artPxPerInch = pxPerInch;
       const printAreaPxW = artworkAreaSettings.width * artPxPerInch;
       const printAreaPxH = artworkAreaSettings.height * artPxPerInch;
-      const printX = tshirtX + (tshirtW - printAreaPxW) / 2;
+      const printX = tshirtX + (tshirtW - printAreaPxW) / 2 + (artworkAreaSettings.sideOffset || 0) * artPxPerInch + (artworkAreaSettings.offsetX || 0) * (RW / 700);
       const printY = tshirtY + (artworkAreaSettings.topOffset * artPxPerInch);
-      const artworkPxW = sizeArtW * artPxPerInch;
-      const artworkPxH = sizeArtH * artPxPerInch;
-      const imgAR = artImg.naturalWidth / artImg.naturalHeight;
+
+      // Scale artwork dimensions for this size
+      const scaledArtW = (sizeData.bodyWidth * activePercent) / 100;
+      const layerAspect = dims.height / dims.width;
+      const scaledArtH = scaledArtW * layerAspect;
+      const artworkPxW = scaledArtW * artPxPerInch;
+      const artworkPxH = scaledArtH * artPxPerInch;
+
+      const imgAR = img.naturalWidth / img.naturalHeight;
       const boxAR = artworkPxW / artworkPxH;
       let artW, artH;
       if (imgAR > boxAR) { artW = artworkPxW; artH = artworkPxW / imgAR; }
       else { artH = artworkPxH; artW = artworkPxH * imgAR; }
       const scaleFactor = RW / 700;
-      const drawX = printX + (printAreaPxW - artW) / 2 + artworkPosition.x * scaleFactor;
-      const drawY = printY + artworkPosition.y * scaleFactor;
-      rCtx.drawImage(artImg, 0, 0, artImg.naturalWidth, artImg.naturalHeight, drawX, drawY, artW, artH);
+      const drawX = printX + (printAreaPxW - artW) / 2 + pos.x * scaleFactor;
+      const drawY = printY + pos.y * scaleFactor;
+      rCtx.save();
+      rCtx.globalAlpha = opacity;
+      rCtx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, drawX, drawY, artW, artH);
+      rCtx.restore();
+    };
 
-      // Crop and export
+    // Finish rendering and trigger download
+    const finishDownload = () => {
       const bounds = getContentBounds(renderCanvas);
       const cropW = bounds.w, cropH = bounds.h;
       const text = `Shirt Size: ${realSize} | Artwork Size: W ${sizeArtW.toFixed(1)}" x H ${sizeArtH.toFixed(1)}"`;
@@ -474,7 +526,47 @@ const MSPCard = React.forwardRef(function MSPCard({
       link.href = dlCanvas.toDataURL('image/jpeg', 0.95);
       document.body.appendChild(link); link.click(); document.body.removeChild(link);
     };
-    artImg.src = artwork;
+
+    // Draw artwork(s) then export
+    if (multiLayerEnabled && layers && layers.length > 0) {
+      // Load all visible layer images, then draw them in order
+      const visibleLayers = layers.filter(l => l.visible && l.artwork);
+      if (visibleLayers.length === 0) { finishDownload(); return; }
+      let loaded = 0;
+      const loadedImages = [];
+      visibleLayers.forEach((layer, idx) => {
+        const img = new Image();
+        img.onload = () => {
+          loadedImages[idx] = { img, layer };
+          loaded++;
+          if (loaded === visibleLayers.length) {
+            // All loaded — draw in order
+            loadedImages.forEach(({ img: lImg, layer: l }) => {
+              drawOneHiRes(lImg, l.artworkDimensions, l.artworkPosition, l.opacity ?? 1);
+            });
+            finishDownload();
+          }
+        };
+        img.onerror = () => {
+          loaded++;
+          if (loaded === visibleLayers.length) {
+            loadedImages.filter(Boolean).forEach(({ img: lImg, layer: l }) => {
+              drawOneHiRes(lImg, l.artworkDimensions, l.artworkPosition, l.opacity ?? 1);
+            });
+            finishDownload();
+          }
+        };
+        img.src = layer.artwork;
+      });
+    } else {
+      // Single artwork mode (original behavior)
+      const artImg = new Image();
+      artImg.onload = () => {
+        drawOneHiRes(artImg, artworkDimensions, artworkPosition, 1);
+        finishDownload();
+      };
+      artImg.src = artwork;
+    }
   };
 
   return (

@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import './GangSheet.css';
 import { detectApiBase } from '../utils/apiConfig';
 import { authFetch, apiError } from '../utils/authFetch';
-import { ALL_STRATEGIES } from '../utils/packingStrategies';
+import { packSheets } from '../utils/packingStrategies';
 
 const SHEET_WIDTH_INCHES = 22;
 const MAX_SHEET_HEIGHT = 108;
@@ -15,144 +15,13 @@ const COST_PER_FOOT = 5;
 const isUuid = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''));
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 2D RECTANGLE PACKING ENGINE (MaxRects BSSF/BAF)
-// Objective: Minimize sheet height → minimize material waste
-// Works in physical inches. Preview/export scale from this authoritative layout.
+// LAYOUT — uses the shared packing engine (utils/packingStrategies.js)
+// so the Gang Sheet and the Calculator ALWAYS produce identical results.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/**
- * MaxRects packing algorithm.
- * Places items into a fixed-width sheet, returns placed items and final height.
- * Uses Best Area Fit scoring: lowest Y, then tightest fit.
- */
-function maxRectsPack(items, sheetWidth, hGap, vGap, margins, maxHeight, allowRotation = true) {
-  const marg = margins || { top: 0, bottom: 0, left: 0, right: 0 };
-  const usableW = sheetWidth - marg.left - marg.right;
-  const usableH = (maxHeight || 9999) - marg.top - marg.bottom;
-
-  // Initial free rectangle = entire usable area
-  let freeRects = [{ x: marg.left, y: marg.top, w: usableW, h: usableH }];
-  const placed = [];
-
-  for (const item of items) {
-    let bestScore = Infinity;
-    let bestRect = null;
-    let bestRotated = false;
-
-    // Try placing in every free rectangle, both orientations
-    for (const rect of freeRects) {
-      // Normal orientation: can it fit?
-      if (item.w <= rect.w + 0.001 && item.h <= rect.h + 0.001) {
-        // Score: endY*10000 + x*10 + shortSideFit
-        // This prioritizes: lowest bottom edge > leftmost > tightest fit
-        const endY = rect.y + item.h;
-        const shortSide = Math.min(rect.w - item.w, rect.h - item.h);
-        const score = endY * 10000 + rect.x * 10 + shortSide;
-        if (score < bestScore) {
-          bestScore = score;
-          bestRect = rect;
-          bestRotated = false;
-        }
-      }
-      // Rotated orientation (only if different and allowed)
-      if (allowRotation && Math.abs(item.w - item.h) > 0.01) {
-        if (item.h <= rect.w + 0.001 && item.w <= rect.h + 0.001) {
-          const endY = rect.y + item.w;
-          const shortSide = Math.min(rect.w - item.h, rect.h - item.w);
-          const score = endY * 10000 + rect.x * 10 + shortSide;
-          if (score < bestScore) {
-            bestScore = score;
-            bestRect = rect;
-            bestRotated = true;
-          }
-        }
-      }
-    }
-
-    if (!bestRect) continue; // Skip — try smaller items that might fit
-
-    const pw = bestRotated ? item.h : item.w;
-    const ph = bestRotated ? item.w : item.h;
-    const px = bestRect.x;
-    const py = bestRect.y;
-
-    placed.push({ ...item, x: px, y: py, w: pw, h: ph, rotated: bestRotated });
-
-    // Occupied region including gaps (gap goes AFTER the item, not before)
-    const occW = pw + hGap;
-    const occH = ph + vGap;
-
-    // Split all free rects that overlap with the placed item
-    const newFree = [];
-    for (const fr of freeRects) {
-      // No intersection → keep
-      if (px >= fr.x + fr.w || px + occW <= fr.x || py >= fr.y + fr.h || py + occH <= fr.y) {
-        newFree.push(fr);
-        continue;
-      }
-      // Generate up to 4 remainders
-      // Right of placed item
-      if (px + occW < fr.x + fr.w) {
-        newFree.push({ x: px + occW, y: fr.y, w: fr.x + fr.w - px - occW, h: fr.h });
-      }
-      // Left of placed item
-      if (px > fr.x) {
-        newFree.push({ x: fr.x, y: fr.y, w: px - fr.x, h: fr.h });
-      }
-      // Below placed item
-      if (py + occH < fr.y + fr.h) {
-        newFree.push({ x: fr.x, y: py + occH, w: fr.w, h: fr.y + fr.h - py - occH });
-      }
-      // Above placed item
-      if (py > fr.y) {
-        newFree.push({ x: fr.x, y: fr.y, w: fr.w, h: py - fr.y });
-      }
-    }
-
-    // Prune: remove any free rect fully contained within another
-    freeRects = [];
-    for (let i = 0; i < newFree.length; i++) {
-      const a = newFree[i];
-      if (a.w < 0.1 || a.h < 0.1) continue;
-      let contained = false;
-      for (let j = 0; j < newFree.length; j++) {
-        if (i === j) continue;
-        const b = newFree[j];
-        if (a.x >= b.x - 0.001 && a.y >= b.y - 0.001 &&
-            a.x + a.w <= b.x + b.w + 0.001 && a.y + a.h <= b.y + b.h + 0.001) {
-          contained = true;
-          break;
-        }
-      }
-      if (!contained) freeRects.push(a);
-    }
-    // Safety cap
-    if (freeRects.length > 400) {
-      freeRects.sort((a, b) => (b.w * b.h) - (a.w * a.h));
-      freeRects = freeRects.slice(0, 200);
-    }
-  }
-
-  // Calculate actual used height from placed items
-  let maxBottom = marg.top;
-  for (const p of placed) {
-    const bottom = p.y + p.h;
-    if (bottom > maxBottom) maxBottom = bottom;
-  }
-  const totalHeight = maxBottom + marg.bottom;
-
-  return { placed, totalHeight };
-}
-
-/**
- * Main layout engine. Runs MaxRects with multiple sort orders, keeps best result.
- * Both tightPack ON and OFF use real 2D packing — tightPack ON adds rotation.
- */
 function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = false) {
   const marg = margins || { top: 0, bottom: 0, left: 0, right: 0 };
-  const allowRotation = true; // Always try rotation for optimal packing
 
-  // Step 1: Expand quantities into individual placement items
   const items = [];
   const dataUrlMap = {};
   for (const art of artworks) {
@@ -165,82 +34,12 @@ function calculateLayout(artworks, sheetWidth, hGap, vGap, margins, tightPack = 
 
   const enrichItems = (placedItems) => placedItems.map(item => ({ ...item, dataUrl: dataUrlMap[item.artworkId] }));
 
-  // Step 2: Try every sort order, pack into sheets, keep the best global result.
-  // The strategies are shared with the Calculator and the Optimizer so all three
-  // tools search the same space — see utils/packingStrategies.js.
-  let bestLayout = null;
-  let bestTotalHeight = Infinity;
-  let bestStrategy = null;
-
-  for (const strategy of ALL_STRATEGIES) {
-    // Run each strategy TWICE: once with original dimensions, once with all items pre-rotated.
-    // For pre-rotated items, disable per-item rotation so the packer respects the orientation.
-    const orientations = [
-      { items: [...items], disableRotation: false },
-      { items: items.map(item => ({ ...item, w: item.h, h: item.w, preRotated: true })), disableRotation: true },
-    ];
-
-    for (const { items: orientedItems, disableRotation } of orientations) {
-      const sortedItems = [...orientedItems].sort(strategy.compare);
-      const sheets = [];
-      let remaining = [...sortedItems];
-
-      while (remaining.length > 0) {
-        if (sheets.length >= 50) break;
-
-        // Key: pre-rotated pass uses allowRotation=false so items stay in rotated orientation
-        const result = maxRectsPack(remaining, sheetWidth, hGap, vGap, marg, MAX_SHEET_HEIGHT, !disableRotation);
-
-        if (result.placed.length === 0) {
-          const forced = remaining.shift();
-          sheets.push({
-            items: [{ ...forced, x: marg.left, y: marg.top, rotated: forced.preRotated || false }],
-            totalHeight: forced.h + marg.top + marg.bottom,
-          });
-          continue;
-        }
-
-        // Mark pre-rotated items correctly
-        const placedItems = result.placed.map(p => ({
-          ...p,
-          rotated: p.preRotated ? true : p.rotated, // pre-rotated items are always rotated relative to original
-        }));
-        sheets.push({ items: placedItems, totalHeight: result.totalHeight });
-
-        // Remove placed from remaining — use artworkId count (copies are interchangeable)
-        const placedCounts = new Map();
-        for (const p of result.placed) {
-          placedCounts.set(p.artworkId, (placedCounts.get(p.artworkId) || 0) + 1);
-        }
-        const nextRemaining = [];
-        for (const item of remaining) {
-          const count = placedCounts.get(item.artworkId) || 0;
-          if (count > 0) {
-            placedCounts.set(item.artworkId, count - 1);
-          } else {
-            nextRemaining.push(item);
-          }
-        }
-        remaining = nextRemaining;
-      }
-
-      const totalH = sheets.reduce((sum, s) => sum + s.totalHeight, 0);
-      if (totalH < bestTotalHeight) {
-        bestTotalHeight = totalH;
-        bestLayout = sheets;
-        bestStrategy = strategy;
-      }
-    }
-  }
-
-  if (!bestLayout || bestLayout.length === 0) {
-    return { sheets: [{ items: [], totalHeight: 0 }], totalSheets: 1 };
-  }
+  const result = packSheets(items, sheetWidth, hGap, vGap, marg, MAX_SHEET_HEIGHT);
 
   return {
-    sheets: bestLayout.map(s => ({ ...s, items: enrichItems(s.items) })),
-    totalSheets: bestLayout.length,
-    strategy: bestStrategy,
+    sheets: result.sheets.map(s => ({ ...s, items: enrichItems(s.items) })),
+    totalSheets: result.totalSheets,
+    strategy: result.strategy,
   };
 }
 
@@ -408,7 +207,7 @@ function GangSheet({ sharedArtwork, onRegisterExport }) {
       if (selectedOrder?.id) {
         const payload = {
           order_id: selectedOrder.id, total_height: totalHeight, total_sheets: layoutData.totalSheets,
-          total_quantity: totalItemCount, estimated_price: (Math.ceil(totalHeight) / 12) * COST_PER_FOOT,
+          total_quantity: totalItemCount, estimated_price: Math.ceil(totalHeight / 12) * COST_PER_FOOT,
           settings: { hGap, vGap, margins, arrangement, tightPack, showCutLines, includeHeader, headerTopMargin },
           artworks: artworks.map(a => ({ orderItemId:a.orderItemId,artworkId:a.artworkId,artworkNo:a.artworkNo,filename:a.filename,widthInches:a.widthInches,heightInches:a.heightInches,repetitions:a.repetitions })),
           layout: {
@@ -1308,7 +1107,7 @@ function GangSheet({ sharedArtwork, onRegisterExport }) {
             {layoutData.strategy && (
               <div className="gs-stat-row">
                 <label>Packing</label>
-                <span title={`${layoutData.strategy.note} — shortest of ${ALL_STRATEGIES.length} sort orders tried`}>
+                <span title={`${layoutData.strategy.note} — shortest sort order tried across both orientations`}>
                   {layoutData.strategy.name}
                 </span>
               </div>
@@ -1321,7 +1120,7 @@ function GangSheet({ sharedArtwork, onRegisterExport }) {
               <div className="gs-cost-title">💰 Cost Estimate</div>
               <div className="gs-cost-row">
                 <span>Total sheet length</span>
-                <span>{Math.ceil(totalHeight)}" ({(Math.ceil(totalHeight) / 12).toFixed(2)} ft)</span>
+                <span>{Math.ceil(totalHeight)}" ({(totalHeight / 12).toFixed(2)} ft → billed {Math.ceil(totalHeight / 12)} ft)</span>
               </div>
               <div className="gs-cost-row">
                 <span>Rate</span>
@@ -1330,7 +1129,7 @@ function GangSheet({ sharedArtwork, onRegisterExport }) {
               <div className="gs-cost-divider" />
               <div className="gs-cost-row gs-cost-total">
                 <span>Total</span>
-                <span>${((Math.ceil(totalHeight) / 12) * COST_PER_FOOT).toFixed(2)} USD</span>
+                <span>${(Math.ceil(totalHeight / 12) * COST_PER_FOOT).toFixed(2)} USD</span>
               </div>
             </div>
           )}

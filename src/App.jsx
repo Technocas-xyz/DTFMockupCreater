@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import Sidebar from './components/Sidebar';
 import Login from './components/Login';
 import DesignCanvas from './components/DesignCanvas';
@@ -16,8 +16,10 @@ import GarmentTypes from './components/GarmentTypes';
 import BatchProcessor from './components/BatchProcessor';
 import MockupEngineV2 from './components/MockupEngineV2';
 import Vault from './components/Vault';
+import TaskManager from './components/TaskManager';
 import GangSheetCalculator from './components/GangSheetCalculator';
 import GangSheetOptimizer from './components/GangSheetOptimizer';
+import LayerPanel from './components/LayerPanel';
 import { TSHIRT_SIZES, TSHIRT_COLORS, SIZE_ORDER } from './constants/tshirtSizes';
 import { GARMENTS_API, SERVE_IMAGE_URL, detectApiBase, getGarmentsUrl, getServeImageUrl } from './utils/apiConfig';
 import './App.css';
@@ -27,6 +29,10 @@ function App() {
   const [authUser, setAuthUser] = useState(null);
   const [authToken, setAuthToken] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  // True once the server (not the cache) has confirmed who this is and what they
+  // may open. The landing redirect waits for it, so a stale cached page list
+  // cannot bounce someone off the page they were meant to start on.
+  const [authVerified, setAuthVerified] = useState(false);
 
   // ─── APP STATE (must be declared before any early returns — React hooks rule) ──
   // The vault is where a job starts — pick the customer's file first, then take
@@ -42,7 +48,7 @@ function App() {
   const [viewSide, setViewSide] = useState('front');
   const [artworkPosition, setArtworkPosition] = useState({ x: 0, y: 0 });
   const artworkScale = 1;
-  const [artworkAreaSettings, setArtworkAreaSettings] = useState({ width: 18, height: 24, topOffset: 7 });
+  const [artworkAreaSettings, setArtworkAreaSettings] = useState({ width: 18, height: 24, topOffset: 7, sideOffset: 0, offsetX: 0, preset: null });
   const [selectedMockupSizes, setSelectedMockupSizes] = useState(
     SIZE_ORDER.reduce((acc, size) => ({ ...acc, [size]: false }), {})
   );
@@ -56,6 +62,149 @@ function App() {
   const [studioFileName, setStudioFileName] = useState('artwork.png');
   const [studioSaving, setStudioSaving] = useState(false);
   const [studioMessage, setStudioMessage] = useState('');
+
+  // Vault selection on its way to a new task, and the artwork a task is
+  // currently checking back out of the vault into the editor.
+  const [pendingTaskArtworks, setPendingTaskArtworks] = useState(null);
+  const [openingTaskArtwork, setOpeningTaskArtwork] = useState('');
+
+  // ─── MULTI-LAYER STATE ──────────────────────────────────────────────────────
+  // When multiLayerEnabled is false, the existing artwork/artworkDimensions/
+  // artworkPosition state drives everything as before (single-layer mode).
+  // When enabled, layers[] array takes over — each layer has its own artwork,
+  // dimensions, and position. The active layer's state is synced back to the
+  // original state variables so ControlPanel/DesignCanvas work without changes.
+  const [multiLayerEnabled, setMultiLayerEnabled] = useState(false);
+  const [layers, setLayers] = useState([]);
+  const [activeLayerId, setActiveLayerId] = useState(null);
+
+  const createLayer = useCallback((layerArtwork = null, layerDimensions = null, layerPosition = null, name = null) => {
+    const id = `layer-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    return {
+      id,
+      name: name || `Layer ${layers.length + 1}`,
+      artwork: layerArtwork,
+      artworkDimensions: layerDimensions || { width: 10.75, height: 10.75 },
+      artworkPosition: layerPosition || { x: 0, y: 0 },
+      lockProportion: true,
+      visible: true,
+      opacity: 1,
+    };
+  }, [layers.length]);
+
+  const enableMultiLayer = useCallback(() => {
+    if (multiLayerEnabled) return;
+    // Initialize with the current single artwork as layer 1
+    const firstLayer = {
+      id: `layer-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name: 'Layer 1',
+      artwork: artwork,
+      artworkDimensions: { ...artworkDimensions },
+      artworkPosition: { ...artworkPosition },
+      lockProportion: lockProportion,
+      visible: true,
+      opacity: 1,
+    };
+    setLayers([firstLayer]);
+    setActiveLayerId(firstLayer.id);
+    setMultiLayerEnabled(true);
+  }, [multiLayerEnabled, artwork, artworkDimensions, artworkPosition, lockProportion]);
+
+  const disableMultiLayer = useCallback(() => {
+    // Revert to single-layer: take the active layer's state back to the main state
+    if (layers.length > 0) {
+      const active = layers.find(l => l.id === activeLayerId) || layers[0];
+      setArtwork(active.artwork);
+      setArtworkDimensions(active.artworkDimensions);
+      setArtworkPosition(active.artworkPosition);
+      setLockProportion(active.lockProportion);
+    }
+    setMultiLayerEnabled(false);
+    setLayers([]);
+    setActiveLayerId(null);
+  }, [layers, activeLayerId]);
+
+  const addLayer = useCallback(() => {
+    const newLayer = createLayer();
+    setLayers(prev => [...prev, newLayer]);
+    setActiveLayerId(newLayer.id);
+    // Sync main state to the new (empty) layer
+    setArtwork(null);
+    setArtworkDimensions({ width: 10.75, height: 10.75 });
+    setArtworkPosition({ x: 0, y: 0 });
+    setLockProportion(true);
+  }, [createLayer]);
+
+  const removeLayer = useCallback((layerId) => {
+    setLayers(prev => {
+      const updated = prev.filter(l => l.id !== layerId);
+      if (updated.length === 0) {
+        // Last layer removed — disable multi-layer
+        setMultiLayerEnabled(false);
+        setActiveLayerId(null);
+        setArtwork(null);
+        setArtworkDimensions({ width: 10.75, height: 10.75 });
+        setArtworkPosition({ x: 0, y: 0 });
+        return [];
+      }
+      // If the removed layer was active, switch to the first remaining
+      if (layerId === activeLayerId) {
+        const newActive = updated[0];
+        setActiveLayerId(newActive.id);
+        setArtwork(newActive.artwork);
+        setArtworkDimensions(newActive.artworkDimensions);
+        setArtworkPosition(newActive.artworkPosition);
+        setLockProportion(newActive.lockProportion);
+      }
+      return updated;
+    });
+  }, [activeLayerId]);
+
+  const selectLayer = useCallback((layerId) => {
+    if (layerId === activeLayerId) return;
+    // Save current state into the current active layer before switching
+    setLayers(prev => prev.map(l =>
+      l.id === activeLayerId
+        ? { ...l, artwork, artworkDimensions, artworkPosition, lockProportion }
+        : l
+    ));
+    // Load the selected layer's state
+    const target = layers.find(l => l.id === layerId);
+    if (target) {
+      setActiveLayerId(layerId);
+      setArtwork(target.artwork);
+      setArtworkDimensions(target.artworkDimensions);
+      setArtworkPosition(target.artworkPosition);
+      setLockProportion(target.lockProportion);
+    }
+  }, [activeLayerId, artwork, artworkDimensions, artworkPosition, lockProportion, layers]);
+
+  const updateLayerVisibility = useCallback((layerId, visible) => {
+    setLayers(prev => prev.map(l => l.id === layerId ? { ...l, visible } : l));
+  }, []);
+
+  const updateLayerName = useCallback((layerId, name) => {
+    setLayers(prev => prev.map(l => l.id === layerId ? { ...l, name } : l));
+  }, []);
+
+  const reorderLayers = useCallback((fromIndex, toIndex) => {
+    setLayers(prev => {
+      const updated = [...prev];
+      const [moved] = updated.splice(fromIndex, 1);
+      updated.splice(toIndex, 0, moved);
+      return updated;
+    });
+  }, []);
+
+  // Keep the active layer in sync with main state changes (from ControlPanel interactions)
+  useEffect(() => {
+    if (!multiLayerEnabled || !activeLayerId) return;
+    setLayers(prev => prev.map(l =>
+      l.id === activeLayerId
+        ? { ...l, artwork, artworkDimensions, artworkPosition, lockProportion }
+        : l
+    ));
+  }, [artwork, artworkDimensions, artworkPosition, lockProportion, multiLayerEnabled, activeLayerId]);
 
   useEffect(() => {
     const handoff = new URLSearchParams(window.location.search).get('artwork');
@@ -164,13 +313,56 @@ function App() {
   useEffect(() => {
     let active = true;
     async function initializeAuth() {
+      // DEV BYPASS: Skip auth on localhost so the app is testable without the PHP backend
+      const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      if (isLocalDev) {
+        const devUser = {
+          id: 0,
+          username: 'dev',
+          email: 'dev@localhost',
+          full_name: 'Local Developer',
+          role: 'superadmin',
+          page_access: ['vault','bgremover','qa','orders','garments','gangsheet','gscalc','gsoptimize','contrast','ailab','users','mockupv2','batch','garment-types'],
+        };
+        if (active) { setAuthUser(devUser); setAuthToken('dev-token'); setAuthLoading(false); }
+        return;
+      }
+
+      // The cached user paints the app immediately, but it is only a cache: page
+      // access and role are granted on the server and used to change, so every
+      // load re-reads them. Without this an administrator's grant never reached
+      // anyone who was already signed in — their browser kept the old page list
+      // until the session expired.
       const token = localStorage.getItem('auth_token');
-      const user = localStorage.getItem('auth_user');
-      if (token && user) {
+      const cached = localStorage.getItem('auth_user');
+      if (token) {
+        let painted = false;
+        if (cached) {
+          try {
+            if (active) { setAuthUser(JSON.parse(cached)); setAuthToken(token); setAuthLoading(false); painted = true; }
+          } catch (e) { localStorage.removeItem('auth_user'); }
+        }
         try {
-          if (active) { setAuthUser(JSON.parse(user)); setAuthToken(token); setAuthLoading(false); }
-          return;
-        } catch (e) { localStorage.removeItem('auth_token'); localStorage.removeItem('auth_user'); }
+          const apiBase = await detectApiBase();
+          const res = await fetch(`${apiBase}/auth.php?action=validate`, { headers: { Authorization: `Bearer ${token}` } });
+          if (res.ok) {
+            const data = await res.json();
+            localStorage.setItem('auth_user', JSON.stringify(data.user));
+            if (active) { setAuthUser(data.user); setAuthToken(token); setAuthVerified(true); }
+            return;
+          }
+          if (res.status !== 401) {
+            // The server is unhappy for some other reason — a cached session is
+            // better than throwing the person back to a login screen.
+            if (painted) return;
+          } else {
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('auth_user');
+            if (active) { setAuthUser(null); setAuthToken(null); }
+          }
+        } catch (e) {
+          if (painted) return; // offline: keep working with what we have
+        }
       }
       try {
         const apiBase = await detectApiBase();
@@ -185,7 +377,7 @@ function App() {
         const data = await res.json();
         localStorage.setItem('auth_token', data.token);
         localStorage.setItem('auth_user', JSON.stringify(data.user));
-        if (active) { setAuthUser(data.user); setAuthToken(data.token); }
+        if (active) { setAuthUser(data.user); setAuthToken(data.token); setAuthVerified(true); }
       } catch {
         if (window.location.hostname.endsWith('.decoinkssuite.com')) {
           const rd = `${window.location.origin}${window.location.pathname}${window.location.search}`;
@@ -201,6 +393,7 @@ function App() {
   const handleLogin = (user, token) => {
     setAuthUser(user);
     setAuthToken(token);
+    setAuthVerified(true);
   };
 
   const handleLogout = () => {
@@ -216,6 +409,7 @@ function App() {
     localStorage.removeItem('auth_user');
     setAuthUser(null);
     setAuthToken(null);
+    setAuthVerified(false);
   };
 
   // Check page access
@@ -225,6 +419,18 @@ function App() {
     const access = authUser.page_access || [];
     return access.includes(page);
   };
+
+  // The app opens on the Vault, but not everyone has it — a designer who only has
+  // the editor and the task list used to land on "You don't have access to this
+  // page" with a perfectly usable sidebar beside it. Follow the sidebar's own
+  // order and open the first page this person is allowed to see.
+  const PAGE_ORDER = ['tasks', 'vault', 'bgremover', 'mockupv2', 'gangsheet', 'garments', 'batch', 'gscalc', 'gsoptimize', 'qa', 'contrast', 'ailab', 'orders', 'garment-types', 'users'];
+  useEffect(() => {
+    if (!authUser || !authVerified || hasPageAccess(currentPage)) return;
+    const landing = PAGE_ORDER.find(hasPageAccess);
+    if (landing) setCurrentPage(landing);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authUser, authVerified, currentPage]);
 
   // Load garment library from server API (shared for all users), fallback to localStorage
   const loadGarmentLibrary = async () => {
@@ -279,53 +485,83 @@ function App() {
   // Garment selection is handled by ControlPanel's useEffect (type+size matching)
   // handleGarmentChange is called from ControlPanel when type/size changes
 
+  // Print area saved for the selected garment in Garment Manager (inches).
+  // Falls back to the standard 18" x 24" area at 7" when there is no garment
+  // or nothing was saved for it.
+  const defaultArtworkArea = useMemo(() => {
+    const bm = customGarment?.bodyMapping;
+    return {
+      width: bm?.widthInches > 0 ? bm.widthInches : 18,
+      height: bm?.heightInches > 0 ? bm.heightInches : 24,
+      topOffset: bm && bm.topOffsetInches >= 0 ? bm.topOffsetInches : 7,
+      sideOffset: 0,
+      offsetX: 0,
+      preset: null,
+    };
+  }, [customGarment]);
+
+  // Proportionally fit artwork dimensions inside a print area (inches).
+  const fitDimsToArea = (dims, area) => {
+    if (!dims || !(dims.width > 0) || !(dims.height > 0)) return dims;
+    const aspect = dims.width / dims.height;
+    if (area.width / area.height > aspect) {
+      return { width: parseFloat((area.height * aspect).toFixed(2)), height: parseFloat(area.height.toFixed(2)) };
+    }
+    return { width: parseFloat(area.width.toFixed(2)), height: parseFloat((area.width / aspect).toFixed(2)) };
+  };
+
+  // When the garment changes, load its saved print area and auto-fit the
+  // artwork into it. A chest placement (shifted off-center) is kept so
+  // switching sizes doesn't undo the preset.
+  useEffect(() => {
+    const keepChest = artworkAreaSettings.preset === 'chest';
+    const nextArea = keepChest ? artworkAreaSettings : defaultArtworkArea;
+    if (!keepChest) setArtworkAreaSettings(nextArea);
+    if (artwork) {
+      setArtworkDimensions(prev => fitDimsToArea(prev, nextArea));
+      setArtworkPosition({ x: 0, y: 0 });
+    }
+  }, [defaultArtworkArea]);
+
+  // Every new artwork starts fresh: the print area goes back to the
+  // garment's saved (centered) area, the position resets to center, and the
+  // artwork is sized from its 300 DPI physical size, then kept inside the area.
+  const applyNewArtworkSizing = (dataUrl) => {
+    const area = defaultArtworkArea;
+    setArtworkAreaSettings(area);
+    setArtworkPosition({ x: 0, y: 0 });
+
+    const img = new Image();
+    img.onload = () => {
+      const DPI = 300;
+      const imgAspect = img.naturalWidth / img.naturalHeight;
+      let w = img.naturalWidth / DPI;
+      let h = img.naturalHeight / DPI;
+
+      // Small artwork: scale the longer side up to 10.75"
+      const MIN_SIZE = 10.75;
+      if (w < MIN_SIZE && h < MIN_SIZE) {
+        if (imgAspect >= 1) { w = MIN_SIZE; h = MIN_SIZE / imgAspect; }
+        else { h = MIN_SIZE; w = MIN_SIZE * imgAspect; }
+      }
+
+      // Never larger than the print area (proportional)
+      const f = Math.min(1, area.width / w, area.height / h);
+      setArtworkDimensions({
+        width: parseFloat((w * f).toFixed(2)),
+        height: parseFloat((h * f).toFixed(2)),
+      });
+    };
+    img.src = dataUrl;
+  };
+
   const handleArtworkUpload = (file) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       setArtwork(e.target.result);
       setArtworkFile(file);
 
-      // Auto-set artwork dimensions based on actual image DPI size
-      const img = new Image();
-      img.onload = () => {
-        const DPI = 300;
-        // Calculate actual physical size at 300 DPI
-        let actualW = parseFloat((img.naturalWidth / DPI).toFixed(2));
-        let actualH = parseFloat((img.naturalHeight / DPI).toFixed(2));
-        const imgAspect = img.naturalWidth / img.naturalHeight;
-        const maxW = artworkAreaSettings.width;
-        const maxH = artworkAreaSettings.height;
-
-        // Only scale down if the actual size exceeds the print area
-        if (actualW <= maxW && actualH <= maxH) {
-          // If both dimensions are smaller than 10.75", scale up the larger one to 10.75"
-          const MIN_SIZE = 10.75;
-          if (actualW < MIN_SIZE && actualH < MIN_SIZE) {
-            if (imgAspect >= 1) {
-              // wider — set width to 10.75
-              actualW = MIN_SIZE;
-              actualH = parseFloat((MIN_SIZE / imgAspect).toFixed(2));
-            } else {
-              // taller — set height to 10.75
-              actualH = MIN_SIZE;
-              actualW = parseFloat((MIN_SIZE * imgAspect).toFixed(2));
-            }
-          }
-          setArtworkDimensions({ width: actualW, height: actualH });
-        } else {
-          // Too large — scale down to fit within print area maintaining aspect ratio
-          let newW, newH;
-          if (imgAspect > maxW / maxH) {
-            newW = maxW;
-            newH = parseFloat((maxW / imgAspect).toFixed(2));
-          } else {
-            newH = maxH;
-            newW = parseFloat((maxH * imgAspect).toFixed(2));
-          }
-          setArtworkDimensions({ width: newW, height: newH });
-        }
-      };
-      img.src = e.target.result;
+      applyNewArtworkSizing(e.target.result);
     };
     reader.readAsDataURL(file);
   };
@@ -349,42 +585,7 @@ function App() {
     // Also load into the design canvas artwork
     setArtwork(imageDataUrl);
 
-    // Auto-set dimensions from image at 300 DPI (same as handleArtworkUpload)
-    const img = new Image();
-    img.onload = () => {
-      const DPI = 300;
-      let actualW = parseFloat((img.naturalWidth / DPI).toFixed(2));
-      let actualH = parseFloat((img.naturalHeight / DPI).toFixed(2));
-      const imgAspect = img.naturalWidth / img.naturalHeight;
-      const maxW = artworkAreaSettings.width;
-      const maxH = artworkAreaSettings.height;
-
-      if (actualW <= maxW && actualH <= maxH) {
-        // If both dimensions are smaller than 10.75", scale up the larger one to 10.75"
-        const MIN_SIZE = 10.75;
-        if (actualW < MIN_SIZE && actualH < MIN_SIZE) {
-          if (imgAspect >= 1) {
-            actualW = MIN_SIZE;
-            actualH = parseFloat((MIN_SIZE / imgAspect).toFixed(2));
-          } else {
-            actualH = MIN_SIZE;
-            actualW = parseFloat((MIN_SIZE * imgAspect).toFixed(2));
-          }
-        }
-        setArtworkDimensions({ width: actualW, height: actualH });
-      } else {
-        let newW, newH;
-        if (imgAspect > maxW / maxH) {
-          newW = maxW;
-          newH = parseFloat((maxW / imgAspect).toFixed(2));
-        } else {
-          newH = maxH;
-          newW = parseFloat((maxH * imgAspect).toFixed(2));
-        }
-        setArtworkDimensions({ width: newW, height: newH });
-      }
-    };
-    img.src = imageDataUrl;
+    applyNewArtworkSizing(imageDataUrl);
 
     setCurrentPage('mockupv2');
   };
@@ -412,6 +613,52 @@ function App() {
     setCurrentPage(target);
   };
 
+  // Vault → Task Manager. The files stay selected as vault assets: previews and
+  // the payload are built on the task page, so a big selection does not block
+  // the grid the person is still working in.
+  // Stable identity: the task page uses this in an effect, and a new function on
+  // every App render would re-run that effect mid-preparation.
+  const clearPendingTaskArtworks = useCallback(() => setPendingTaskArtworks(null), []);
+
+  const sendVaultSelectionToTasks = (assets) => {
+    if (!assets?.length) return;
+    setPendingTaskArtworks(assets);
+    setCurrentPage('tasks');
+  };
+
+  // The other direction: an artwork attached to a task, opened into the editor.
+  // Only the vault asset id was stored, so the file is checked out here exactly
+  // as the Vault page does it — which is what gives the editor a save token.
+  const openTaskArtwork = async (artwork) => {
+    if (!artwork?.assetId || openingTaskArtwork) return;
+    setOpeningTaskArtwork(artwork.assetId);
+    try {
+      const apiBase = await detectApiBase();
+      const handoffRes = await fetch(`${apiBase}/central-artwork.php?action=handoff&id=${encodeURIComponent(artwork.assetId)}`);
+      const handoff = await handoffRes.json();
+      if (!handoffRes.ok || !handoff.data?.token) throw new Error(handoff.message || 'Could not check out this artwork');
+      const contentRes = await fetch(`${apiBase}/central-artwork.php?action=content&token=${encodeURIComponent(handoff.data.token)}`);
+      if (!contentRes.ok) throw new Error('Artwork content could not be downloaded');
+      const blob = await contentRes.blob();
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('Artwork could not be read'));
+        reader.readAsDataURL(blob);
+      });
+      openVaultAsset('bgremover', dataUrl, {
+        id: artwork.assetId,
+        file_name: handoff.data.file_name || artwork.fileName,
+        entity_name: artwork.customerName || null,
+        studio_token: handoff.data.token,
+      });
+    } catch (error) {
+      setStudioMessage(error.message || 'This artwork could not be opened');
+    } finally {
+      setOpeningTaskArtwork('');
+    }
+  };
+
   const sendToBGRemover = (imageDataUrl) => {
     setSharedArtwork({ dataUrl: imageDataUrl, filename: 'artwork.png' });
     setCurrentPage('bgremover');
@@ -430,7 +677,18 @@ function App() {
     }
 
     if (currentPage === 'vault') {
-      return <Vault onOpenAsset={openVaultAsset} />;
+      return <Vault onOpenAsset={openVaultAsset} onSendToTasks={sendVaultSelectionToTasks} />;
+    }
+
+    if (currentPage === 'tasks') {
+      return (
+        <TaskManager
+          pendingArtworks={pendingTaskArtworks}
+          onPendingArtworksHandled={clearPendingTaskArtworks}
+          onOpenArtwork={openTaskArtwork}
+          openingArtwork={openingTaskArtwork}
+        />
+      );
     }
 
     if (currentPage === 'contrast') {
@@ -529,6 +787,9 @@ function App() {
                   onPositionChange={handlePositionChange}
                   customGarment={customGarment}
                   onRegisterExport={registerMockupCanvasExport}
+                  multiLayerEnabled={multiLayerEnabled}
+                  layers={layers}
+                  activeLayerId={activeLayerId}
                 />
                 {comparisonSizes.length > 0 && (
                   <MultiSizePreview
@@ -544,11 +805,27 @@ function App() {
                     scalingMode={scalingMode}
                     baseSize={selectedSize}
                     customGarment={customGarment}
+                    multiLayerEnabled={multiLayerEnabled}
+                    layers={layers}
+                    activeLayerId={activeLayerId}
                   />
                 )}
               </div>
             </div>
             <div className="controls-section">
+              <LayerPanel
+                multiLayerEnabled={multiLayerEnabled}
+                layers={layers}
+                activeLayerId={activeLayerId}
+                onEnableMultiLayer={enableMultiLayer}
+                onDisableMultiLayer={disableMultiLayer}
+                onAddLayer={addLayer}
+                onRemoveLayer={removeLayer}
+                onSelectLayer={selectLayer}
+                onToggleVisibility={updateLayerVisibility}
+                onRenameLayer={updateLayerName}
+                onReorderLayers={reorderLayers}
+              />
               <ControlPanel
                 selectedSize={selectedSize}
                 onSizeChange={setSelectedSize}
@@ -566,6 +843,7 @@ function App() {
                 onReset={resetPosition}
                 artworkAreaSettings={artworkAreaSettings}
                 onArtworkAreaSettingsChange={setArtworkAreaSettings}
+                defaultArtworkArea={defaultArtworkArea}
                 selectedMockupSizes={selectedMockupSizes}
                 onMockupSizeToggle={(size) => setSelectedMockupSizes((prev) => ({ ...prev, [size]: !prev[size] }))}
                 onGenerateMockups={() => setShowMockups(true)}
@@ -577,6 +855,8 @@ function App() {
                 scalingMode={scalingMode}
                 onScalingModeChange={setScalingMode}
                 viewSide={viewSide}
+                multiLayerEnabled={multiLayerEnabled}
+                activeLayerName={multiLayerEnabled && layers.find(l => l.id === activeLayerId)?.name}
               />
             </div>
           </div>
@@ -592,6 +872,8 @@ function App() {
               viewSide={viewSide}
               garmentLibrary={garmentLibrary}
               onRegisterExport={registerMockupHiResExport}
+              selectedGarment={customGarment}
+              defaultArtworkArea={defaultArtworkArea}
             />
           )}
         </>
@@ -642,6 +924,9 @@ function App() {
                 onPositionChange={handlePositionChange}
                 customGarment={customGarment}
                 onRegisterExport={registerMockupCanvasExport}
+                multiLayerEnabled={multiLayerEnabled}
+                layers={layers}
+                activeLayerId={activeLayerId}
               />
               {comparisonSizes.length > 0 && (
                 <MultiSizePreview
@@ -657,6 +942,9 @@ function App() {
                   scalingMode={scalingMode}
                   baseSize={selectedSize}
                   customGarment={customGarment}
+                  multiLayerEnabled={multiLayerEnabled}
+                  layers={layers}
+                  activeLayerId={activeLayerId}
                 />
               )}
             </div>
@@ -680,6 +968,7 @@ function App() {
               onReset={resetPosition}
               artworkAreaSettings={artworkAreaSettings}
               onArtworkAreaSettingsChange={setArtworkAreaSettings}
+              defaultArtworkArea={defaultArtworkArea}
               selectedMockupSizes={selectedMockupSizes}
               onMockupSizeToggle={(size) =>
                 setSelectedMockupSizes((prev) => ({ ...prev, [size]: !prev[size] }))
@@ -697,6 +986,8 @@ function App() {
               scalingMode={scalingMode}
               onScalingModeChange={setScalingMode}
               viewSide={viewSide}
+              multiLayerEnabled={multiLayerEnabled}
+              activeLayerName={multiLayerEnabled && layers.find(l => l.id === activeLayerId)?.name}
             />
           </div>
         </div>
@@ -713,6 +1004,8 @@ function App() {
             viewSide={viewSide}
             garmentLibrary={garmentLibrary}
             onRegisterExport={registerMockupHiResExport}
+            selectedGarment={customGarment}
+            defaultArtworkArea={defaultArtworkArea}
           />
         )}
       </>
