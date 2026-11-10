@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { TSHIRT_COLORS, ARTWORK_SIZES, SIZE_ORDER, TSHIRT_SIZES } from '../constants/tshirtSizes';
 import { detectApiBase } from '../utils/apiConfig';
+import { findLatestGarment } from '../utils/garmentPick';
 import './ControlPanel.css';
 
 const GARMENT_TYPES_FILTER = ['T-Shirt', 'Hoodie', 'Women T-Shirt', 'Sweatshirt', 'Long Sleeve T-Shirt', 'Tank Top', 'Shorts', 'Bob Marley', 'Other'];
@@ -172,7 +173,9 @@ function ControlPanel({
         if (selFit === 'kids') {
           return gFit === 'kids' || KIDS_SIZES.includes(g.size);
         }
-        return gFit === selFit || gFit === 'all';
+        // Unisex is listed too, so the dropdown can show it when it is used as
+        // the fallback garment (instead of wrongly showing "Default").
+        return gFit === selFit || gFit === 'all' || gFit === 'unisex';
       });
     }
     // Apply search filter
@@ -194,6 +197,9 @@ function ControlPanel({
 
   // Does a garment match the currently selected fit (Men/Women/Unisex/Kids)?
   // Unisex ('all'/'unisex') garments always match. Kids matches by gender or a kids size.
+  // Does a garment match the currently selected fit (Men/Women/Unisex/Kids)?
+  // Unisex ('all'/'unisex') garments also match, but only as a fallback — see
+  // strictFit below. Kids matches by gender or a kids size.
   const matchesFit = (g) => {
     if (selectedFit === 'All') return true;
     const gFit = (g.gender || g.fit || 'Men').toLowerCase();
@@ -202,23 +208,53 @@ function ControlPanel({
     return gFit === selFit || gFit === 'all' || gFit === 'unisex';
   };
 
+  // Exactly the selected fit: "Men" means a Men garment, never a Unisex one.
+  const strictFit = (g) => {
+    if (selectedFit === 'All') return true;
+    const gFit = (g.gender || g.fit || 'Men').toLowerCase();
+    const selFit = selectedFit.toLowerCase();
+    if (selFit === 'kids') return gFit === 'kids' || KIDS_SIZES.includes(g.size);
+    return gFit === selFit;
+  };
+
   // Auto-select garment when fit, category, size, or view side changes.
-  // Fit (Men/Women) is matched first so a "Men + Tank Top" selection never
-  // lands on a ladies' tank top just because it appears first in the library.
+  // The selected fit is matched exactly first, so "Men + T-Shirt + L" uses the
+  // Men garment and its saved print area — a Unisex L garment is only used when
+  // there is no Men garment for that size and side.
   useEffect(() => {
     if (!garmentLibrary || garmentLibrary.length === 0) return;
     const side = viewSide || 'front';
+    const sameSlot = (g) => g.type === selectedCategory && g.size === selectedSize && (g.side || 'front') === side;
+    const exactStrict = (g) => strictFit(g) && sameSlot(g);
+    const exactLoose = (g) => matchesFit(g) && sameSlot(g);
+    const hasStrict = garmentLibrary.some(exactStrict);
 
-    // Preferred: exact fit + category + size + side
-    let match = garmentLibrary.find(g => matchesFit(g) && g.type === selectedCategory && g.size === selectedSize && (g.side || 'front') === side);
-    // Then: exact fit + category + size, any side
-    if (!match) match = garmentLibrary.find(g => matchesFit(g) && g.type === selectedCategory && g.size === selectedSize);
-    // Then: exact fit + category, any size/side
-    if (!match) match = garmentLibrary.find(g => matchesFit(g) && g.type === selectedCategory);
+    // Keep the garment that is already selected (including one picked by hand
+    // in "Select Garment") as long as it still matches — a library reload must
+    // not swap it for a different copy. A Unisex garment is only kept when no
+    // garment of the exact selected fit exists for this slot.
+    const current = selectedGarmentId && garmentLibrary.find(g => g.id === selectedGarmentId);
+    if (current && (exactStrict(current) || (!hasStrict && exactLoose(current)))) {
+      onGarmentChange(current.id);
+      return;
+    }
+
+    // Otherwise take the most recently saved match, so the latest Garment
+    // Manager edit wins over any older copy of the same garment.
+    // Preferred: exact selected fit + category + size + side
+    let match = findLatestGarment(garmentLibrary, exactStrict);
+    // Then: Unisex/All fallback for the same category + size + side
+    if (!match) match = findLatestGarment(garmentLibrary, exactLoose);
+    // Then: same fit + category + size, any side
+    if (!match) match = findLatestGarment(garmentLibrary, g => strictFit(g) && g.type === selectedCategory && g.size === selectedSize);
+    if (!match) match = findLatestGarment(garmentLibrary, g => matchesFit(g) && g.type === selectedCategory && g.size === selectedSize);
+    // Then: same fit + category, any size/side
+    if (!match) match = findLatestGarment(garmentLibrary, g => strictFit(g) && g.type === selectedCategory);
+    if (!match) match = findLatestGarment(garmentLibrary, g => matchesFit(g) && g.type === selectedCategory);
     // Fallbacks that ignore fit (only when no fit-matching garment exists at all)
-    if (!match) match = garmentLibrary.find(g => g.type === selectedCategory && g.size === selectedSize && (g.side || 'front') === side);
-    if (!match) match = garmentLibrary.find(g => g.type === selectedCategory && g.size === selectedSize);
-    if (!match) match = garmentLibrary.find(g => g.type === selectedCategory);
+    if (!match) match = findLatestGarment(garmentLibrary, g => g.type === selectedCategory && g.size === selectedSize && (g.side || 'front') === side);
+    if (!match) match = findLatestGarment(garmentLibrary, g => g.type === selectedCategory && g.size === selectedSize);
+    if (!match) match = findLatestGarment(garmentLibrary, g => g.type === selectedCategory);
 
     onGarmentChange(match ? match.id : null);
   }, [selectedFit, selectedCategory, selectedSize, garmentLibrary, viewSide]);

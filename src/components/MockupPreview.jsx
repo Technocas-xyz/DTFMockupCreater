@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { TSHIRT_SIZES, SIZE_ORDER } from '../constants/tshirtSizes';
+import { findLatestGarment } from '../utils/garmentPick';
 import './MockupPreview.css';
 
 const sameArea = (a, b) =>
@@ -21,19 +22,25 @@ function resolveSizeSetup({ size, viewSide, garmentLibrary, selectedGarment, art
   const lib = garmentLibrary || [];
   const onSide = (g) => g.size === size && (g.side || 'front') === side;
 
+  // For the selected garment's own size and side, use that exact record so
+  // the mockup shows exactly what Garment Manager saved for it.
   let garment = null;
-  if (selectedGarment) {
+  if (selectedGarment && onSide(selectedGarment)) garment = selectedGarment;
+  // Other sizes: the most recently saved matching record (never an old copy).
+  if (!garment && selectedGarment) {
     garment =
-      lib.find(g => onSide(g) && g.type === selectedGarment.type && fitOf(g) === fitOf(selectedGarment)) ||
-      lib.find(g => onSide(g) && g.type === selectedGarment.type) ||
-      null;
+      findLatestGarment(lib, g => onSide(g) && g.type === selectedGarment.type && fitOf(g) === fitOf(selectedGarment)) ||
+      findLatestGarment(lib, g => onSide(g) && g.type === selectedGarment.type);
   }
-  if (!garment) garment = lib.find(onSide) || null;
+  if (!garment) garment = findLatestGarment(lib, onSide);
 
+  // This size's saved print area, exactly as stored (read as numbers only).
   const bm = garment?.bodyMapping;
+  const num = (v) => (v === '' || v === null || v === undefined ? NaN : Number(v));
+  const bmW = num(bm?.widthInches), bmH = num(bm?.heightInches), bmT = num(bm?.topOffsetInches);
   const userChangedArea = defaultArtworkArea && !sameArea(artworkAreaSettings, defaultArtworkArea);
-  const area = (!userChangedArea && bm?.widthInches > 0 && bm?.heightInches > 0)
-    ? { width: bm.widthInches, height: bm.heightInches, topOffset: bm.topOffsetInches >= 0 ? bm.topOffsetInches : artworkAreaSettings.topOffset, sideOffset: 0, offsetX: 0 }
+  const area = (!userChangedArea && bmW > 0 && bmH > 0)
+    ? { width: bmW, height: bmH, topOffset: bmT >= 0 ? bmT : artworkAreaSettings.topOffset, sideOffset: 0, offsetX: 0 }
     : artworkAreaSettings;
 
   const w = artworkDimensions.width * artworkScale;

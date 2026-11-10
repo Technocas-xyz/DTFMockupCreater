@@ -425,7 +425,8 @@ function GarmentManager({ onUseAsMockup }) {
       shirtHeightInches: garment.bodyMapping?.shirtHeightInches || 29,
       widthInches: garment.bodyMapping?.widthInches || 13,
       heightInches: garment.bodyMapping?.heightInches || 14.5,
-      topOffsetInches: garment.bodyMapping?.topOffsetInches || 3,
+      // ?? (not ||) so a saved 0" offset is shown as 0, not replaced by 3
+      topOffsetInches: garment.bodyMapping?.topOffsetInches ?? 3,
     });
     setShowAddModal(true);
   };

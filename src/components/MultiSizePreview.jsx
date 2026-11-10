@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { TSHIRT_SIZES, SIZE_ORDER } from '../constants/tshirtSizes';
 import { drawRecoloredGarment } from '../utils/garmentTintEngine';
 import { customGarmentLayout } from '../utils/garmentLayout';
+import { findLatestGarment } from '../utils/garmentPick';
 import './MultiSizePreview.css';
 
 // ─── CROP UTILITY: Find non-white/non-transparent content bounds ──────────────
@@ -255,7 +256,7 @@ const MSPCard = React.forwardRef(function MSPCard({
       // so each size card shows its own correctly-sized garment image.
       const custType = customGarment.type;
       const custFit = (customGarment.gender || customGarment.fit || '').toLowerCase();
-      const sameKindThisSize = garmentLibrary && garmentLibrary.find((g) =>
+      const sameKindThisSize = findLatestGarment(garmentLibrary, (g) =>
         g.type === custType &&
         (custFit ? (g.gender || g.fit || '').toLowerCase() === custFit : true) &&
         g.size === realSize &&
@@ -268,7 +269,8 @@ const MSPCard = React.forwardRef(function MSPCard({
     }
 
     // No garment selected — plain size+side match, then default tshirt vector.
-    const taggedGarment = garmentLibrary && garmentLibrary.find(
+    const taggedGarment = findLatestGarment(
+      garmentLibrary,
       (g) => g.size === realSize && (g.side || 'front') === viewSide && g.dataUrl
     );
     if (taggedGarment && taggedGarment.dataUrl) {
@@ -299,7 +301,7 @@ const MSPCard = React.forwardRef(function MSPCard({
     if (tshirtImg) {
 
       if (isCustomGarment) {
-        const taggedG = garmentLibrary && garmentLibrary.find(g => g.size === realSize && (g.side || 'front') === viewSide);
+        const taggedG = findLatestGarment(garmentLibrary, g => g.size === realSize && (g.side || 'front') === viewSide);
         // Width from saved inches, height from the image aspect — never stretched
         ({ pxPerInch, tshirtW, tshirtH, tshirtX, tshirtY } = customGarmentLayout({
           imgW: tshirtImg.naturalWidth || tshirtImg.width,
@@ -449,7 +451,7 @@ const MSPCard = React.forwardRef(function MSPCard({
     pxPerInch = Math.min(pxPerInchW, pxPerInchH);
 
     if (isCustomGarment) {
-      const taggedG = garmentLibrary && garmentLibrary.find(g => g.size === realSize && (g.side || 'front') === viewSide);
+      const taggedG = findLatestGarment(garmentLibrary, g => g.size === realSize && (g.side || 'front') === viewSide);
       // Width from saved inches, height from the image aspect — never stretched
       ({ pxPerInch, tshirtW, tshirtH, tshirtX, tshirtY } = customGarmentLayout({
         imgW: garmentImg.naturalWidth || garmentImg.width,

@@ -497,11 +497,17 @@ function App() {
   const liveBmKey = liveBm ? `${liveBm.widthInches}|${liveBm.heightInches}|${liveBm.topOffsetInches}` : '';
 
   const defaultArtworkArea = useMemo(() => {
-    const bm = liveBm;
+    // Exactly what Garment Manager saved — no calculation. Values are only
+    // read as numbers (older records may hold "7" as text). The fallbacks
+    // apply only when the garment has nothing saved for that field.
+    const num = (v) => (v === '' || v === null || v === undefined ? NaN : Number(v));
+    const w = num(liveBm?.widthInches);
+    const h = num(liveBm?.heightInches);
+    const t = num(liveBm?.topOffsetInches);
     return {
-      width: bm?.widthInches > 0 ? bm.widthInches : 18,
-      height: bm?.heightInches > 0 ? bm.heightInches : 24,
-      topOffset: bm && bm.topOffsetInches >= 0 ? bm.topOffsetInches : 7,
+      width: w > 0 ? w : 18,
+      height: h > 0 ? h : 24,
+      topOffset: t >= 0 ? t : 7,
       sideOffset: 0,
       offsetX: 0,
       preset: null,
