@@ -206,9 +206,16 @@ export function packSheets(items, sheetWidth, hGap, vGap, margins, maxHeight, ma
   let bestLayout = null;
   let bestTotalHeight = Infinity;
   let bestStrategy = null;
+  let bestIsValid = false;
+
+  const usableWidth = sheetWidth - marg.left - marg.right;
 
   for (const strategy of ALL_STRATEGIES) {
     for (const { items: orientedItems } of orientationSets) {
+      // An orientation where any item is wider than the roll can only be "packed"
+      // by force-placing it past the edge (it prints cut off). Such a run looks
+      // shorter, so it must never beat a layout that really fits.
+      const isValid = orientedItems.every(i => i.w <= usableWidth + 0.001);
       const sortedItems = [...orientedItems].sort(strategy.compare);
       const sheets = [];
       let remaining = [...sortedItems];
@@ -231,7 +238,8 @@ export function packSheets(items, sheetWidth, hGap, vGap, margins, maxHeight, ma
       }
 
       const totalH = sheets.reduce((sum, s) => sum + s.totalHeight, 0);
-      if (totalH < bestTotalHeight) { bestTotalHeight = totalH; bestLayout = sheets; bestStrategy = strategy; }
+      const better = (isValid && !bestIsValid) || (isValid === bestIsValid && totalH < bestTotalHeight);
+      if (better) { bestTotalHeight = totalH; bestLayout = sheets; bestStrategy = strategy; bestIsValid = isValid; }
     }
   }
 
